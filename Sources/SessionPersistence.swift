@@ -1799,7 +1799,17 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var hasUnreadIndicator: Bool? = nil
     var notifications: [SessionNotificationSnapshot]? = nil
     var terminalScrollBarHidden: Bool?
+    var currentDirectory: String
+    var focusedPanelId: UUID?
+    var layout: SessionWorkspaceLayoutSnapshot
+    var panels: [SessionPanelSnapshot]
+    var statusEntries: [SessionStatusEntrySnapshot]
+    var logEntries: [SessionLogEntrySnapshot]
+    var progress: SessionProgressSnapshot?
+    var gitBranch: SessionGitBranchSnapshot?
+    var remote: SessionRemoteWorkspaceSnapshot?
     // Chat-room model (all optional; old snapshots decode as nil → migrated on restore).
+    // Kept last so the synthesized memberwise-init argument order matches `Workspace.sessionSnapshot()`.
     /// `WorkspaceRole.rawValue`; nil/absent ⇒ legacy ⇒ treated as `.agent`.
     var workspaceRoleRaw: String? = nil
     /// Stable room id for a `.chatRoom` workspace.
@@ -1810,15 +1820,6 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var roomID: UUID? = nil
     /// `AgentKind.rawValue` for a `.agent` workspace; nil ⇒ unsupported/legacy.
     var agentKindRaw: String? = nil
-    var currentDirectory: String
-    var focusedPanelId: UUID?
-    var layout: SessionWorkspaceLayoutSnapshot
-    var panels: [SessionPanelSnapshot]
-    var statusEntries: [SessionStatusEntrySnapshot]
-    var logEntries: [SessionLogEntrySnapshot]
-    var progress: SessionProgressSnapshot?
-    var gitBranch: SessionGitBranchSnapshot?
-    var remote: SessionRemoteWorkspaceSnapshot?
 }
 
 struct SessionWorkspaceGroupSnapshot: Codable, Sendable, Equatable {
