@@ -86,6 +86,10 @@ extension TabManager {
         ws.roomID = nil
         ws.agentKindRaw = nil
         ws.setCustomTitle(name)
+        // Give each room a distinct color so the top sidebar section reads like Slack channels.
+        let palette = ["#7B5CFF", "#43B0C9", "#C98F43", "#5EC27B", "#C0392B", "#9B59B6", "#2E86DE"]
+        let existingRoomCount = chatRoomWorkspaces.filter { $0.id != ws.id }.count
+        ws.setCustomColor(palette[existingRoomCount % palette.count])
         return chatRoomID
     }
 
