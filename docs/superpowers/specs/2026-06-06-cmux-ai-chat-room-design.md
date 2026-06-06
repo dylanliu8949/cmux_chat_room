@@ -198,9 +198,11 @@ public struct ChatRoom: Sendable, Codable, Identifiable {
 }
 
 public enum AgentKind: String, Sendable, Codable { case claudeCode, codex, cursor }
-// v1 supports exactly these three. The lifecycle store admits ~16 agent-name strings and the hook
-// table has more (grok/gemini/kiro/…). Roster derivation maps an unknown agent name to `nil` kind →
-// the tab is treated as "unsupported": not @-mentionable, no crash (see §4.3 identifier mapping).
+// v1 supports exactly these three. An `.agent` workspace stores **`AgentKind?`** (optional): a known
+// supported CLI → its case; an unknown/unsupported agent or a **legacy terminal with no agent
+// metadata** (`SessionTerminalPanelSnapshot.agent` is optional) → `nil`. `roomID` stays non-optional
+// (every `.agent` belongs to a room), but `nil` kind ⇒ "unsupported": shown in its room's section,
+// **excluded from `@`/`@all`**, never dropped or crashed (see Roster rule §4.7 and migration §4.11).
 
 public struct AgentIdentitySnapshot: Sendable, Codable, Hashable {
     public let agentID: AgentID
@@ -312,7 +314,7 @@ The seam performs the identifier mapping from §4.3: for an agent tab it resolve
 /// Read seam: rooms + active room, derived from the live `.chatRoom` workspaces (app-implemented).
 public protocol RoomWorkspaceReading: Sendable {
     func rooms() async -> [ChatRoom]            // from live .chatRoom workspaces (id = persisted chatRoomID)
-    func activeRoomID() async -> ChatRoomID?    // from TabManager.selectedTabId
+    func activeRoomID() async -> ChatRoomID?    // selected .chatRoom → its chatRoomID; selected .agent → its roomID; none → nil
     var changes: AsyncStream<Void> { get }      // rooms/selection changed
 }
 /// Mutation seam: room CRUD + membership, performed on app-owned workspaces (app-implemented).
@@ -376,10 +378,10 @@ The marker makes binding independent of prompt text, so a byte-identical direct 
 
 ### 4.8 Two-section sidebar + rooms (app target — NEW renderer, not `WorkspaceGroup`)
 **Rooms are workspaces; membership is `roomID`; `WorkspaceGroup` is not used here.** This sidesteps the anchor/contiguity/empty-group/ungroup constraints that make `WorkspaceGroup` unfit (§2 table).
-- **Room = `.chatRoom` workspace.** It lives in `tabs[]` like any workspace (so it reuses tab selection, content-area hosting, and session persistence), carries `WorkspaceRole.chatRoom` and its `ChatRoomID` (== its workspace id), and is **rendered in the top section, never the agent section**. Rooms are creatable / renameable / closable (keep ≥1).
-- **Active room = the selected `.chatRoom` workspace.** There is no separate global `activeRoom` flag — selecting the room workspace (existing selection machinery) shows its `ChatRoomView` in the content area and scopes the bottom section. (Resolves the "N panels show the same room?" ambiguity: exactly the selected room's channel is shown.)
+- **Room = `.chatRoom` workspace.** It lives in `tabs[]` like any workspace (so it reuses tab selection, content-area hosting, and session persistence), carries `WorkspaceRole.chatRoom` + a **stable persisted `chatRoomID`**, and is **rendered in the top section, never the agent section**. Its `Workspace.id` is only the live tab identity (re-minted on restore); the `ChatRoomID` is the durable one. Rooms are creatable / renameable / closable (keep ≥1).
+- **Active room = derived from selection (`activeRoomID()`):** the selected workspace is a **`.chatRoom`** → its `chatRoomID`; the selected workspace is an **`.agent`** → that agent's `roomID` (so working in an agent tab keeps *its* room active for autocomplete / new-agent / notifications); **nothing selected** → `nil` (room-scoped actions disabled). No separate `activeRoom` flag. The selected `.chatRoom` shows its `ChatRoomView` in the content area.
 - **New section-aware renderer** (`SidebarWorkspaceRenderItem` today emits one flat list): split into top (`.chatRoom`) and bottom (`.agent`, grouped under their `roomID`'s room header). This is **net-new** (section-aware ordering + drag), not reuse of the group renderer.
-- **Agent tab:** `WorkspaceRole.agent` + `AgentKind` + non-optional `roomID`; auto-named; three-line layout + lifecycle badge. **Drag between rooms** rewrites `roomID` (§4.6 move rule).
+- **Agent tab:** `WorkspaceRole.agent` + non-optional `roomID` + **optional `AgentKind`** (nil ⇒ unsupported/legacy → excluded from `@`, §4.3); auto-named; three-line layout + lifecycle badge. **Drag between rooms** rewrites `roomID` (§4.6 move rule).
 - **Disable the existing ungroup paths for chat-room agents** so an agent can never become room-less: the creation policy (§4.9) always sets `roomID`, and `WorkspaceGroup`-era `groupId = nil` paths (`ungroupWorkspaceGroup`, `dissolveGroupsAnchoredBy`, etc.) don't apply because we don't use groups. Audited in Step 0.
 - **Snapshot boundary (CLAUDE.md #2586):** the top-section room rows, per-room unread badges, and active-room highlight are **value snapshots + closures** — the `RoomsCoordinator` is never referenced below the rooms `ForEach` (same rule already applied to agent rows).
 - `ChatRoomPanel: Panel` — `Panel` requires `ObservableObject`, so this is a **thin legacy shell** holding the `@Observable` `RoomsCoordinator` and forwarding; intentional adapter until `Panel` is modernized.
@@ -424,11 +426,11 @@ A tab in a **non-cmux-created** directory has no id → close only, **touch no f
 `ChatHistoryStore` (actor-backed repository, JSON under Application Support). Stores all exchanges/replies with embedded `AgentIdentitySnapshot`; supports **paged reads** for "Load earlier" (§3.9) and bounded initial load.
 **History keys off the stable `ChatRoomID`** — persisted on the `.chatRoom` workspace, distinct from the re-minted `Workspace.id`, so room history reconnects after restart. Each room's history file is keyed by its `ChatRoomID`.
 Session snapshots gain explicit fields (migration defaults for old data). **Rooms are NOT persisted as a separate list** (that could diverge from the workspaces) — they are **derived from the persisted `.chatRoom` workspaces**, mirroring how lifecycle/roster derive from the authoritative store:
-- `SessionWorkspaceSnapshot.role: WorkspaceRole` (default `.agent`; `.chatRoom` for a room workspace). On a `.chatRoom`: a **stable `chatRoomID`** + the room **name**. On an `.agent`: its **`roomID`** (→ a room's `chatRoomID`) and **`AgentKind`**. (`roomID` replaces any reliance on `groupId`.)
+- `SessionWorkspaceSnapshot.role: WorkspaceRole` (default `.agent`; `.chatRoom` for a room workspace). On a `.chatRoom`: a **stable `chatRoomID`** + the room **name**. On an `.agent`: non-optional **`roomID`** (→ a room's `chatRoomID`) and **optional `AgentKind?`**. (`roomID` replaces any reliance on `groupId`.)
 - **Selected room** is the existing persisted selected-tab pointer (the selected `.chatRoom` workspace) — no separate active-room field.
 - **Worktree registry** — persisted **top-level on `AppSessionSnapshot`** (`SessionPersistence.swift:1859`), keyed by **path** (branch + referencing tab ids). Each `.agent` snapshot persists its **`cmuxCreatedWorktreeID`** (or none).
 - **Restore the refcount from the persisted ids, NOT live cwd** (`currentDirectory` is OSC-7-mutable, `Workspace.swift:12205`).
-Migration: a pre-rooms session gets one default `.chatRoom` workspace (fresh stable `chatRoomID`); existing agent tabs are stamped with that `roomID`. On restore: derive rooms from restored `.chatRoom` workspaces; derive each room's roster from restored `.agent` `roomID`s; reconnect history by `ChatRoomID`; rebuild the worktree registry from persisted ids. Without role/chatRoomID/roomID/kind, restored tabs lose their room binding — required.
+Migration: a pre-rooms session gets one default `.chatRoom` workspace (fresh stable `chatRoomID`); existing terminal tabs become `.agent` stamped with that `roomID` and **`AgentKind = nil`** (legacy/unsupported — kept and usable, just excluded from `@` until relaunched as a known agent). Nothing is dropped. On restore: derive rooms from restored `.chatRoom` workspaces; derive each room's roster from restored `.agent` `roomID`s; reconnect history by `ChatRoomID`; rebuild the worktree registry from persisted ids. Without role/chatRoomID/roomID/kind, restored tabs lose their room binding — required.
 
 ### 4.12 Data flow
 
@@ -519,6 +521,8 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 - **Rooms are derived, not owned:** the coordinator's room list + active room come from the `RoomWorkspaceReading` fake; `createRoom`/`closeRoom`/`renameRoom`/move forward to the `RoomWorkspaceManaging` fake (assert the calls) — no shadow room state.
 - **Restart stability (id decoupling):** with re-minted workspace ids on restore (fake assigns new `Workspace.id`s), room history still reconnects by the stable `ChatRoomID`, and agents' persisted `roomID` still resolves to their room.
 - **Creation policy (fail-closed):** a creation with no explicit room → stamped with the active room; with no active room → **rejected** (no role-less/room-less workspace); per public surface (route/disable) behaves per the acceptance matrix.
+- **`activeRoomID()` resolution:** selected `.chatRoom` → its `chatRoomID`; selected `.agent` → that agent's `roomID`; nothing selected → `nil` (room-scoped actions disabled).
+- **Legacy/unsupported agent:** a `.agent` with `AgentKind == nil` is kept and shown in its room, but **excluded from `@`/`@all`**; migration of a pre-rooms terminal yields `.agent` + default `roomID` + `nil` kind (not dropped).
 
 **Worktree cleanup** (through the async `WorktreeService` seam — fakeable, no real git): closing the **last** tab referencing a **clean** cmux-created worktree id triggers remove; a worktree id **shared by 2 tabs** → remove only after **both** close, never on the first; **dirty/unpushed** → remove NOT called, prompted, default keep; a tab with **no** worktree id → remove never called (no filesystem touch); cleanup runs **off the sync close mutator** (preview→confirm→commit). **Cancel/refuse leaves the registry unchanged** — the preview phase mutates nothing; referrer decrement happens only after the close commits. A room close batches its confirmations.
 
@@ -581,7 +585,7 @@ Consistent with §4–§6. **New packages** (each added to `.github/workflows/ci
 
 | File | Change |
 |---|---|
-| `Sources/Workspace.swift` | add `WorkspaceRole`; on `.chatRoom` a stable persisted `chatRoomID` + room `name`; on `.agent` non-optional `roomID` + `AgentKind` + `cmuxCreatedWorktreeID` |
+| `Sources/Workspace.swift` | add `WorkspaceRole`; on `.chatRoom` a stable persisted `chatRoomID` + room `name`; on `.agent` non-optional `roomID` + optional `AgentKind?` + `cmuxCreatedWorktreeID` |
 | `Sources/TabManager.swift` | impl `RoomWorkspaceReading`/`RoomWorkspaceManaging` (owns room list + selection); `closeWorkspace(force:)` + result; central fail-closed creation policy at the `addWorkspace` funnel; `closeRoom` flow; two-section ordering data |
 | `Sources/SidebarWorkspaceRenderItem.swift` | section-aware renderer (top `.chatRoom`, bottom `.agent` by `roomID`) + section-aware drag — **net-new** |
 | `Sources/ContentView.swift` | two-section sidebar wiring; snapshot-fed room rows + badges; agent-tab three-line layout + lifecycle badge |
