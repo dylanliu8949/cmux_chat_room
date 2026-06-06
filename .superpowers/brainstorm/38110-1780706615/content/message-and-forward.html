@@ -1,0 +1,31 @@
+<h2>Message labeling + forward format</h2>
+<p class="subtitle">Every reply is stamped with the origin agent's name + its two subtitles</p>
+
+<div style="display:flex; gap:18px; font-family:-apple-system,sans-serif; color:#eee;">
+
+  <!-- chat message -->
+  <div style="flex:1; background:#161618; border:1px solid #333; border-radius:8px; padding:14px;">
+    <div class="label">CHANNEL MESSAGE</div>
+    <div style="background:#1d1f22; border-radius:8px; padding:12px; margin-top:8px;">
+      <div style="display:flex; align-items:baseline; gap:8px;">
+        <b style="color:#5ec27b;">codex review</b>
+        <span style="font-size:11px; opacity:.5; font-family:ui-monospace,monospace;">/Users/d/work/cmux · feat/chat-room</span>
+      </div>
+      <div style="font-size:11px; opacity:.4; margin:2px 0 8px;">in reply to your "@codex-review review the auth refactor"</div>
+      <div style="font-size:13px; line-height:1.6; opacity:.9;">Found 3 issues:<br>1. token refresh never scheduled<br>2. race in <code style="background:#000;padding:1px 4px;border-radius:3px;">refresh()</code><br>3. missing error path test</div>
+      <div style="margin-top:10px;"><button class="mock-button" style="font-size:12px;">forward →</button></div>
+    </div>
+  </div>
+
+  <!-- forward composer -->
+  <div style="flex:1; background:#161618; border:1px solid #7b5cff; border-radius:8px; padding:14px;">
+    <div class="label" style="color:#cbb6ff;">FORWARD COMPOSER</div>
+    <div style="font-size:12px; opacity:.6; margin:8px 0 4px;">to: <span style="color:#7b5cff;">@claude-code-1</span></div>
+    <div style="background:#1d1f22; border-radius:8px; padding:12px; font-size:13px; line-height:1.6;">
+      <span style="opacity:.85;">"Found 3 issues:<br>1. token refresh never scheduled<br>2. race in refresh()<br>3. missing error path test"</span>
+      <div style="margin-top:8px; color:#9fe3b5;">Please fix all three and add the missing test.</div>
+    </div>
+    <div style="font-size:11px; opacity:.45; margin-top:8px;">original quoted verbatim · your note appended after</div>
+  </div>
+
+</div>

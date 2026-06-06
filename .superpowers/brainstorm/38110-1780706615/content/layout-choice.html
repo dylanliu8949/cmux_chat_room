@@ -1,0 +1,43 @@
+<h2>Channel layout: timeline vs threaded</h2>
+<p class="subtitle">How do fan-out replies (e.g. @all → 3 agents) get organized?</p>
+
+<div class="options" data-multiselect style="display:none"></div>
+
+<div style="display:flex; gap:18px; font-family:-apple-system,sans-serif; color:#eee;">
+
+  <!-- A: timeline -->
+  <div class="option" data-choice="timeline" onclick="toggleSelect(this)" style="flex:1; cursor:pointer; background:#161618; border:1px solid #333; border-radius:10px; padding:14px;">
+    <div style="display:flex; align-items:center; gap:8px;"><div class="letter">A</div><h3 style="margin:0;">Timeline (Slack channel)</h3></div>
+    <p style="font-size:12px; opacity:.6;">Strict time order. Replies marked "in reply to …". Simple, predictable scroll.</p>
+    <div style="background:#1d1f22; border-radius:8px; padding:10px; font-size:12px; line-height:1.7;">
+      <div><b>you</b> → <span style="color:#7b5cff;">@all</span> "review auth"</div>
+      <div style="opacity:.4; font-size:11px;">— you typed in claude tab (dropped) —</div>
+      <div><b style="color:#5ec27b;">codex review</b> <span style="opacity:.4;">↳ re: review auth</span><br>3 issues found…</div>
+      <div><b style="color:#5ec27b;">cursor 1</b> <span style="opacity:.4;">↳ re: review auth</span><br>looks ok, 1 nit…</div>
+      <div><b style="color:#5ec27b;">claude code 1</b> <span style="opacity:.4;">↳ re: review auth</span><br>found a race…</div>
+    </div>
+    <p style="font-size:11px; opacity:.45; margin-top:8px;">Replies interleave by finish time; you scan the "re:" tags to regroup.</p>
+  </div>
+
+  <!-- B: threaded -->
+  <div class="option" data-choice="threaded" onclick="toggleSelect(this)" style="flex:1; cursor:pointer; background:#161618; border:1px solid #333; border-radius:10px; padding:14px;">
+    <div style="display:flex; align-items:center; gap:8px;"><div class="letter">B</div><h3 style="margin:0;">Threaded (grouped)</h3></div>
+    <p style="font-size:12px; opacity:.6;">Each prompt is a parent; its replies nest under it. Fan-out stays grouped.</p>
+    <div style="background:#1d1f22; border-radius:8px; padding:10px; font-size:12px; line-height:1.7;">
+      <div><b>you</b> → <span style="color:#7b5cff;">@all</span> "review auth"</div>
+      <div style="border-left:2px solid #5ec27b; margin-left:6px; padding-left:8px; margin-top:4px;">
+        <div><b style="color:#5ec27b;">claude code 1</b> found a race…</div>
+        <div><b style="color:#5ec27b;">codex review</b> 3 issues found…</div>
+        <div><b style="color:#5ec27b;">cursor 1</b> looks ok, 1 nit…</div>
+      </div>
+      <div style="margin-top:8px;"><b>you</b> → <span style="color:#7b5cff;">@claude-1</span> "fix the race"</div>
+      <div style="border-left:2px solid #5ec27b; margin-left:6px; padding-left:8px; margin-top:4px;">
+        <div><b style="color:#5ec27b;">claude code 1</b> fixed + test added…</div>
+      </div>
+    </div>
+    <p style="font-size:11px; opacity:.45; margin-top:8px;">Channel ordered by thread, not strictly by time. Great for fan-out/fan-in.</p>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:14px;">Trade-off: A is simpler to build &amp; matches "Slack channel"; B groups parallel reviews beautifully but adds threading + forwarding-into-thread complexity.</p>

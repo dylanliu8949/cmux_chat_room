@@ -1,0 +1,32 @@
+<h2>Routing rule: chat-origin replies only</h2>
+<p class="subtitle">An agent's final message returns to chat <b>only</b> if the prompt came from chat</p>
+
+<div style="display:flex; gap:18px; font-family:-apple-system,sans-serif; color:#eee;">
+
+  <!-- chat origin -->
+  <div style="flex:1; background:#161618; border:1px solid #5ec27b; border-radius:8px; padding:14px;">
+    <div style="color:#9fe3b5; font-weight:700; margin-bottom:8px;">✔ chat-originated</div>
+    <div style="font-size:13px; line-height:1.7;">
+      chat room: <span style="color:#7b5cff;">@claude-1</span> "fix the bug"<br>
+      <span style="opacity:.5;">↓ inject prompt, tag agent = owes 1 reply</span><br>
+      agent works… finishes turn<br>
+      <span style="opacity:.5;">↓ hook fires, tag is set →</span><br>
+      <b style="color:#5ec27b;">final message posted to chat ✔</b>
+    </div>
+  </div>
+
+  <!-- direct -->
+  <div style="flex:1; background:#161618; border:1px solid #555; border-radius:8px; padding:14px;">
+    <div style="opacity:.7; font-weight:700; margin-bottom:8px;">✘ typed directly in tab</div>
+    <div style="font-size:13px; line-height:1.7;">
+      you (in agent tab): "what's this file?"<br>
+      <span style="opacity:.5;">↓ no chat tag set</span><br>
+      agent works… finishes turn<br>
+      <span style="opacity:.5;">↓ hook fires, no tag →</span><br>
+      <b style="opacity:.7;">dropped — stays in the tab ✘</b>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:14px;">Edge case noted for later: typing directly <i>while</i> a chat prompt is in flight can race for the tag.</p>

@@ -1,0 +1,14 @@
+{"type":"server-started","port":50163,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:50163","screen_dir":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content","state_dir":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/state"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/intro.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/tab-types.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/routing-rule.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/two-types.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/message-and-forward.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/layout-choice.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/waiting.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/exchange-status.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/sidebar-status.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/sidebar-v2.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/rename.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/38110-1780706615/content/done.html"}
+{"type":"server-stopped","reason":"idle timeout"}

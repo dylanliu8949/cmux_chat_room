@@ -10337,6 +10337,15 @@ class TerminalController {
         }
 
         CmuxEventBus.shared.publishWorkstreamEvent(event, phase: "received")
+        // Bridge the raw (pre-redaction) event to the chat room. Uses a string-named notification so
+        // this file gains no chat-room symbol dependency (keeps the CLI target free of the package).
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: Notification.Name("cmux.chatRoom.rawFeedEvent"),
+                object: nil,
+                userInfo: ["event": event]
+            )
+        }
         v2ApplyIMessageModeSideEffects(for: event)
 
         let result = FeedCoordinator.shared.ingestBlocking(

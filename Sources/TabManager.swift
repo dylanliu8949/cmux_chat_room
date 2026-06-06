@@ -9729,6 +9729,9 @@ extension TabManager {
                 userInfo: [GhosttyNotificationKey.tabId: selectedTabId]
             )
         }
+        // Chat-room migration: ensure ≥1 room exists and every restored agent has a roomID
+        // (legacy/pre-rooms sessions get a synthesized default room).
+        ensureDefaultRoomExists()
         return restoredPanelIdsByWorkspaceIndex
     }
 

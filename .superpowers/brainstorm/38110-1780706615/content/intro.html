@@ -1,0 +1,38 @@
+<h2>cmux → AI Chat Room</h2>
+<p class="subtitle">A pinned chat-room tab orchestrating agent terminal tabs via @mentions</p>
+
+<div class="mockup">
+  <div class="mockup-header">Concept sketch</div>
+  <div class="mockup-body">
+    <div style="display:flex; gap:0; min-height:320px; font-family:-apple-system,sans-serif;">
+      <!-- sidebar -->
+      <div style="width:210px; background:#1e1e22; color:#ddd; padding:10px; border-radius:8px 0 0 8px;">
+        <div style="background:#3b2d5e; border:1px solid #7b5cff; padding:8px 10px; border-radius:6px; margin-bottom:10px;">
+          <div style="font-weight:600; color:#cbb6ff;"># chat-room</div>
+          <div style="font-size:11px; opacity:.7;">pinned • always on top</div>
+        </div>
+        <div style="font-size:11px; opacity:.5; margin:8px 4px;">AGENTS</div>
+        <div style="padding:7px 10px; border-radius:6px; background:#2a2a30; margin-bottom:6px;">
+          <div style="font-weight:600;">claude code 1</div>
+          <div style="font-size:11px; opacity:.6;">cmux · feat/chat-room</div>
+        </div>
+        <div style="padding:7px 10px; border-radius:6px; margin-bottom:6px;">
+          <div style="font-weight:600;">codex review</div>
+          <div style="font-size:11px; opacity:.6;">cmux · feat/chat-room</div>
+        </div>
+        <div style="padding:7px 10px; border-radius:6px;">
+          <div style="font-weight:600;">gemini 1</div>
+          <div style="font-size:11px; opacity:.6;">cmux · main</div>
+        </div>
+      </div>
+      <!-- chat panel -->
+      <div style="flex:1; background:#161618; color:#eee; padding:14px; border-radius:0 8px 8px 0;">
+        <div style="margin-bottom:12px;"><b>you</b> → <span style="color:#7b5cff;">@claude-code-1 @codex-review</span><br><span style="opacity:.85;">Review the auth refactor on this branch.</span></div>
+        <div style="margin-bottom:12px;"><b style="color:#5ec27b;">codex review</b> <span style="font-size:11px; opacity:.5;">final summary</span><br><span style="opacity:.85;">Found 3 issues: missing token refresh, …</span> <button class="mock-button" style="font-size:11px;">forward →</button></div>
+        <div style="opacity:.4;">claude code 1 is working…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">The real design questions are in the terminal — let's work through them there.</p>

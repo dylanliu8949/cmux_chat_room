@@ -253,7 +253,12 @@ extension Workspace {
             logEntries: logSnapshots,
             progress: progressSnapshot,
             gitBranch: gitBranchSnapshot,
-            remote: remoteConfiguration?.sessionSnapshot()
+            remote: remoteConfiguration?.sessionSnapshot(),
+            workspaceRoleRaw: workspaceRole.rawValue,
+            chatRoomID: chatRoomID,
+            roomName: roomName,
+            roomID: roomID,
+            agentKindRaw: agentKindRaw
         )
     }
 
@@ -323,6 +328,14 @@ extension Workspace {
         setCustomColor(snapshot.customColor)
         isPinned = snapshot.isPinned
         groupId = snapshot.groupId
+
+        // Chat-room model. Absent role (legacy snapshot) ⇒ `.agent`. roomID is reconnected
+        // by TabManager after all tabs restore (it may need a synthesized default room).
+        workspaceRole = snapshot.workspaceRoleRaw.flatMap(WorkspaceRole.init(rawValue:)) ?? .agent
+        chatRoomID = snapshot.chatRoomID
+        roomName = snapshot.roomName
+        roomID = snapshot.roomID
+        agentKindRaw = snapshot.agentKindRaw
 
         // Status entries and agent PIDs are ephemeral runtime state tied to running
         // processes (e.g. claude_code "Running"). Don't restore them across app
@@ -10299,6 +10312,27 @@ final class Workspace: Identifiable, ObservableObject {
     /// The group entity itself lives in `TabManager.workspaceGroups`.
     @Published var groupId: UUID?
     @Published var customColor: String?  // hex string, e.g. "#C0392B"
+
+    // MARK: Chat room model
+    // The chat-room feature layers on top of workspaces: a workspace is either an
+    // agent tab (`.agent`, the default — every legacy/terminal workspace) or a chat
+    // room (`.chatRoom`). See docs/superpowers/specs/2026-06-06-cmux-ai-chat-room-design.md.
+    /// Role of this workspace in the chat-room model. Defaults to `.agent` so every
+    /// pre-existing/legacy workspace migrates to an agent tab.
+    @Published var workspaceRole: WorkspaceRole = .agent
+    /// Stable, persisted room identity (only for `.chatRoom`). Distinct from `id`,
+    /// which is re-minted on restore; room history and agents' `roomID` key off this.
+    @Published var chatRoomID: UUID?
+    /// Room display name (only for `.chatRoom`).
+    @Published var roomName: String?
+    /// Membership: the `chatRoomID` of the room this agent belongs to (only for `.agent`).
+    @Published var roomID: UUID?
+    /// Raw value of the agent CLI kind (only for `.agent`; nil = unsupported/legacy).
+    /// Matches `CmuxChatRoomCore.AgentKind.rawValue` ("claudeCode"/"codex"/"cursor").
+    @Published var agentKindRaw: String?
+    /// True when this workspace is a chat room (rendered in the top sidebar section).
+    var isChatRoom: Bool { workspaceRole == .chatRoom }
+
     // Legacy in-memory state for old helpers/tests. Product UI, rendering, and
     // session persistence no longer honor per-workspace scrollbar overrides.
     @Published private(set) var terminalScrollBarHidden: Bool = false
@@ -12290,6 +12324,12 @@ final class Workspace: Identifiable, ObservableObject {
         guard let targetPanelId, panels[targetPanelId] != nil else { return }
         agentLifecycleStatesByPanelId[targetPanelId, default: [:]][key] = lifecycle
         recordAgentLifecycleChange(panelId: targetPanelId)
+        // Notify the chat-room bridge (string-named to avoid a package dependency here).
+        NotificationCenter.default.post(
+            name: Notification.Name("cmux.chatRoom.lifecycleChanged"),
+            object: nil,
+            userInfo: ["workspaceId": id]
+        )
     }
 
     @discardableResult

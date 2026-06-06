@@ -2110,22 +2110,28 @@ struct ContentView: View {
                     // delay handoff completion and make browser returns feel laggy.
                     let isInputActive = isSelectedWorkspace
                     let portalPriority = isSelectedWorkspace ? 2 : (isRetiringWorkspace ? 1 : 0)
-                    WorkspaceContentView(
-                        workspace: tab,
-                        isWorkspaceVisible: presentation.isPanelVisible,
-                        isWorkspaceInputActive: isInputActive,
-                        isFullScreen: isFullScreen,
-                        workspacePortalPriority: portalPriority,
-                        onThemeRefreshRequest: { reason, eventId, source, payloadHex in
-                            scheduleTitlebarThemeRefreshFromWorkspace(
-                                workspaceId: tab.id,
-                                reason: reason,
-                                backgroundEventId: eventId,
-                                backgroundSource: source,
-                                notificationPayloadHex: payloadHex
+                    Group {
+                        if tab.isChatRoom {
+                            ChatRoomHostView(workspace: tab, tabManager: tabManager)
+                        } else {
+                            WorkspaceContentView(
+                                workspace: tab,
+                                isWorkspaceVisible: presentation.isPanelVisible,
+                                isWorkspaceInputActive: isInputActive,
+                                isFullScreen: isFullScreen,
+                                workspacePortalPriority: portalPriority,
+                                onThemeRefreshRequest: { reason, eventId, source, payloadHex in
+                                    scheduleTitlebarThemeRefreshFromWorkspace(
+                                        workspaceId: tab.id,
+                                        reason: reason,
+                                        backgroundEventId: eventId,
+                                        backgroundSource: source,
+                                        notificationPayloadHex: payloadHex
+                                    )
+                                }
                             )
                         }
-                    )
+                    }
                     .opacity(presentation.renderOpacity)
                     .allowsHitTesting(isSelectedWorkspace)
                     .accessibilityHidden(!presentation.isRenderedVisible)
@@ -12314,11 +12320,25 @@ struct VerticalTabsSidebar: View {
         .frame(minHeight: minHeight, alignment: .top)
     }
 
+    /// The `+` action for a chat-room sidebar section header, or nil if the header has no add control.
+    private func chatRoomSidebarAddAction(
+        for title: String,
+        renderContext: WorkspaceListRenderContext
+    ) -> (() -> Void)? {
+        if title == String(localized: "sidebar.section.chatRooms", defaultValue: "Chat rooms") {
+            return { ChatRoomController.shared?.promptNewRoom() }
+        }
+        if let room = tabManager.chatRoomWorkspaces.first(where: { ($0.roomName ?? $0.title) == title }),
+           let rid = room.chatRoomID {
+            return { ChatRoomController.shared?.promptNewAgent(roomID: rid) }
+        }
+        return nil
+    }
+
     @ViewBuilder
     private func workspaceRows(renderContext: WorkspaceListRenderContext) -> some View {
-        let renderItems = SidebarWorkspaceRenderItem.renderItems(
-            tabs: renderContext.tabs,
-            groupsById: renderContext.workspaceGroupById
+        let renderItems = SidebarWorkspaceRenderItem.chatRoomRenderItems(
+            tabs: renderContext.tabs
         )
         let shouldCollectWorkspaceDropTargets = SidebarDropPlanner.shouldCollectWorkspaceDropTargets(
             draggedTabId: dragState.draggedTabId,
@@ -12343,6 +12363,11 @@ struct VerticalTabsSidebar: View {
                         tab,
                         renderContext: renderContext,
                         shouldCollectWorkspaceDropTargets: shouldCollectWorkspaceDropTargets
+                    )
+                case .sectionHeader(let title):
+                    ChatRoomSidebarSectionHeader(
+                        title: title,
+                        onAdd: chatRoomSidebarAddAction(for: title, renderContext: renderContext)
                     )
                 }
             }

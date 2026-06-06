@@ -1,0 +1,5 @@
+{"type":"server-started","port":60425,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:60425","screen_dir":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/49999-1780717240/content","state_dir":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/49999-1780717240/state"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/49999-1780717240/content/two-section-sidebar.html"}
+{"type":"screen-added","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/49999-1780717240/content/group-room-correspondence.html"}
+{"type":"screen-updated","file":"/Users/dylanliu/work/cmux_chat_room/.superpowers/brainstorm/49999-1780717240/content/group-room-correspondence.html"}
+{"type":"server-stopped","reason":"idle timeout"}

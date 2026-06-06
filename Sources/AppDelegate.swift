@@ -1224,6 +1224,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
         AppIconLaunchState.markDidFinishLaunching()
         AppearanceSettingsUserDefaultsObserver.shared.startObserving()
+        // Ensure the chat room has at least one room once launch (and any session restore) settles.
+        DispatchQueue.main.async {
+            ChatRoomController.shared?.bootstrapDefaultRoom()
+        }
         if isRunningUnderXCTest {
             NSApp.setActivationPolicy(.regular)
         } else {

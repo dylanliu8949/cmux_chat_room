@@ -79,6 +79,10 @@
 		C0DE49870000000000000001 /* BrowserWebContentProcessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE49870000000000000002 /* BrowserWebContentProcessTests.swift */; };
 		A5001534 /* BrowserWindowPortal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001533 /* BrowserWindowPortal.swift */; };
 		C0DE35530000000000000101 /* BundledCLILinkageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE35530000000000000102 /* BundledCLILinkageTests.swift */; };
+		C4A710030000000000000001 /* ChatRoomController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710030000000000000002 /* ChatRoomController.swift */; };
+		C4A710050000000000000001 /* ChatRoomHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710050000000000000002 /* ChatRoomHostView.swift */; };
+		C4A710040000000000000001 /* ChatRoomSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710040000000000000002 /* ChatRoomSeams.swift */; };
+		C4A710010000000000000001 /* ChatRoomWorkspaceRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710010000000000000002 /* ChatRoomWorkspaceRole.swift */; };
 		F3000000A1B2C3D4E5F60718 /* CJKIMEInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */; };
 		D3571002A1B2C3D4E5F60718 /* CJKIMEMarkedSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3571003A1B2C3D4E5F60718 /* CJKIMEMarkedSelectionTests.swift */; };
 		C1ADE00002A1B2C3D4E5F719 /* claude in Copy CLI */ = {isa = PBXBuildFile; fileRef = C1ADE00001A1B2C3D4E5F719 /* claude */; };
@@ -114,6 +118,9 @@
 		D35110010000000000000001 /* CmuxApplicationSupportDirectories.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35110010000000000000002 /* CmuxApplicationSupportDirectories.swift */; };
 		D35110010000000000000003 /* CmuxApplicationSupportDirectories.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35110010000000000000002 /* CmuxApplicationSupportDirectories.swift */; };
 		5EDB6027B346C46521A93C74 /* CMUXAuthCore in Frameworks */ = {isa = PBXBuildFile; productRef = 29813FE5A6CBC1019289A251 /* CMUXAuthCore */; };
+		C4A700020000000000000001 /* CmuxChatRoom in Frameworks */ = {isa = PBXBuildFile; productRef = C4A700020000000000000002 /* CmuxChatRoom */; };
+		C4A700010000000000000001 /* CmuxChatRoomCore in Frameworks */ = {isa = PBXBuildFile; productRef = C4A700010000000000000002 /* CmuxChatRoomCore */; };
+		C4A700030000000000000001 /* CmuxChatRoomUI in Frameworks */ = {isa = PBXBuildFile; productRef = C4A700030000000000000002 /* CmuxChatRoomUI */; };
 		B9000063A1B2C3D4E5F60719 /* CMUXCLI+AgentHookDefinitions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000062A1B2C3D4E5F60719 /* CMUXCLI+AgentHookDefinitions.swift */; };
 		B9000068A1B2C3D4E5F60719 /* CMUXCLI+AmpExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000069A1B2C3D4E5F60719 /* CMUXCLI+AmpExtension.swift */; };
 		B9000050A1B2C3D4E5F60719 /* CMUXCLI+Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000051A1B2C3D4E5F60719 /* CMUXCLI+Config.swift */; };
@@ -524,6 +531,7 @@
 		D35B71010000000000000001 /* StartupBreadcrumbLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35B71010000000000000002 /* StartupBreadcrumbLog.swift */; };
 		A5001303 /* SurfaceSearchOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5001301 /* SurfaceSearchOverlay.swift */; };
 		C9A5720BC9A5720BC9A5720B /* TabItemView+WorkspaceGroups.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9A5720CC9A5720CC9A5720C /* TabItemView+WorkspaceGroups.swift */; };
+		C4A710020000000000000001 /* TabManager+ChatRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710020000000000000002 /* TabManager+ChatRoom.swift */; };
 		C3677003000000000000001 /* TabManager+CompatibilityTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3677003000000000000002 /* TabManager+CompatibilityTypes.swift */; };
 		D7AB00000000000000000013 /* TabManager+DetachedWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7AB00000000000000000014 /* TabManager+DetachedWorkspace.swift */; };
 		E3309A03 /* TabManager+EqualizeSplits.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3309A04 /* TabManager+EqualizeSplits.swift */; };
@@ -790,6 +798,10 @@
 		C0DE49870000000000000002 /* BrowserWebContentProcessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWebContentProcessTests.swift; sourceTree = "<group>"; };
 		A5001533 /* BrowserWindowPortal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserWindowPortal.swift; sourceTree = "<group>"; };
 		C0DE35530000000000000102 /* BundledCLILinkageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledCLILinkageTests.swift; sourceTree = "<group>"; };
+		C4A710030000000000000002 /* ChatRoomController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomController.swift; sourceTree = "<group>"; };
+		C4A710050000000000000002 /* ChatRoomHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomHostView.swift; sourceTree = "<group>"; };
+		C4A710040000000000000002 /* ChatRoomSeams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomSeams.swift; sourceTree = "<group>"; };
+		C4A710010000000000000002 /* ChatRoomWorkspaceRole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomWorkspaceRole.swift; sourceTree = "<group>"; };
 		F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CJKIMEInputTests.swift; sourceTree = "<group>"; };
 		D3571003A1B2C3D4E5F60718 /* CJKIMEMarkedSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CJKIMEMarkedSelectionTests.swift; sourceTree = "<group>"; };
 		C1ADE00001A1B2C3D4E5F719 /* claude */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = Resources/bin/claude; sourceTree = SOURCE_ROOT; };
@@ -1191,6 +1203,7 @@
 		D35B71010000000000000002 /* StartupBreadcrumbLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/StartupBreadcrumbLog.swift; sourceTree = "<group>"; };
 		A5001301 /* SurfaceSearchOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Find/SurfaceSearchOverlay.swift; sourceTree = "<group>"; };
 		C9A5720CC9A5720CC9A5720C /* TabItemView+WorkspaceGroups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabItemView+WorkspaceGroups.swift"; sourceTree = "<group>"; };
+		C4A710020000000000000002 /* TabManager+ChatRoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+ChatRoom.swift"; sourceTree = "<group>"; };
 		C3677003000000000000002 /* TabManager+CompatibilityTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+CompatibilityTypes.swift"; sourceTree = "<group>"; };
 		D7AB00000000000000000014 /* TabManager+DetachedWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+DetachedWorkspace.swift"; sourceTree = "<group>"; };
 		E3309A04 /* TabManager+EqualizeSplits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabManager+EqualizeSplits.swift"; sourceTree = "<group>"; };
@@ -1324,6 +1337,9 @@
 				A5B00003A1B2C3D4E5F60718 /* CMUXAgentLaunch in Frameworks */,
 				F53000A0A1B2C3D4E5F60718 /* CMUXAgentVault in Frameworks */,
 				5EDB6027B346C46521A93C74 /* CMUXAuthCore in Frameworks */,
+				C4A700020000000000000001 /* CmuxChatRoom in Frameworks */,
+				C4A700010000000000000001 /* CmuxChatRoomCore in Frameworks */,
+				C4A700030000000000000001 /* CmuxChatRoomUI in Frameworks */,
 				C750100000000000000000A3 /* CmuxControlSocket in Frameworks */,
 				C0DE46000000000000000001 /* CMUXExtensionHostSupport in Frameworks */,
 				C0DE45000000000000000001 /* CmuxExtensionKit in Frameworks */,
@@ -1632,6 +1648,11 @@
 				C0DEF0B10000000000000002 /* JSONCParser.swift */,
 				A50012F4 /* KeyboardLayout.swift */,
 				A5001013 /* TabManager.swift */,
+				C4A710010000000000000002 /* ChatRoomWorkspaceRole.swift */,
+				C4A710020000000000000002 /* TabManager+ChatRoom.swift */,
+				C4A710030000000000000002 /* ChatRoomController.swift */,
+				C4A710040000000000000002 /* ChatRoomSeams.swift */,
+				C4A710050000000000000002 /* ChatRoomHostView.swift */,
 				F0C05170000000000000001 /* FocusHistory.swift */,
 				C0DEFB100000000000000002 /* FocusSurfaceBroadcaster.swift */,
 				C10D51700000000000000001 /* ClosedItemHistory.swift */,
@@ -2125,6 +2146,9 @@
 				F53000A2A1B2C3D4E5F60718 /* CMUXAgentVault */,
 				A5B00002A1B2C3D4E5F60718 /* CMUXAgentLaunch */,
 				A5354305A5354305A5354305 /* CmuxSocketControl */,
+				C4A700010000000000000002 /* CmuxChatRoomCore */,
+				C4A700020000000000000002 /* CmuxChatRoom */,
+				C4A700030000000000000002 /* CmuxChatRoomUI */,
 				C52830000000000000000004 /* CmuxTerminalCopyMode */,
 				C5A1FED000000000000000C3 /* CmuxSwiftRender */,
 				C5A1FED100000000000000D3 /* CmuxSwiftRenderUI */,
@@ -2285,6 +2309,9 @@
 				A5B00001A1B2C3D4E5F60718 /* XCLocalSwiftPackageReference "CMUXAgentLaunch" */,
 				A500D012A1B2C3D4E5F60718 /* XCLocalSwiftPackageReference "CMUXDebugLog" */,
 				A5354304A5354304A5354304 /* XCLocalSwiftPackageReference "CmuxSocketControl" */,
+				C4A700010000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoomCore" */,
+				C4A700020000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoom" */,
+				C4A700030000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoomUI" */,
 				C52830000000000000000003 /* XCLocalSwiftPackageReference "CmuxTerminalCopyMode" */,
 				C5A1FED000000000000000C4 /* XCLocalSwiftPackageReference "CmuxSwiftRender" */,
 				C5A1FED100000000000000D4 /* XCLocalSwiftPackageReference "CmuxSwiftRenderUI" */,
@@ -2487,6 +2514,10 @@
 				A5008371 /* BrowserSearchOverlay.swift in Sources */,
 				A5007422 /* BrowserWebAuthnSupport.swift in Sources */,
 				A5001534 /* BrowserWindowPortal.swift in Sources */,
+				C4A710030000000000000001 /* ChatRoomController.swift in Sources */,
+				C4A710050000000000000001 /* ChatRoomHostView.swift in Sources */,
+				C4A710040000000000000001 /* ChatRoomSeams.swift in Sources */,
+				C4A710010000000000000001 /* ChatRoomWorkspaceRole.swift in Sources */,
 				C46790000000000000000003 /* CLIForwardingLaunchRouter.swift in Sources */,
 				C10D51700000000000000002 /* ClosedItemHistory.swift in Sources */,
 				C10D00010000000000000001 /* CloudVMActionLauncher.swift in Sources */,
@@ -2718,6 +2749,7 @@
 				D35B71010000000000000001 /* StartupBreadcrumbLog.swift in Sources */,
 				A5001303 /* SurfaceSearchOverlay.swift in Sources */,
 				C9A5720BC9A5720BC9A5720B /* TabItemView+WorkspaceGroups.swift in Sources */,
+				C4A710020000000000000001 /* TabManager+ChatRoom.swift in Sources */,
 				C3677003000000000000001 /* TabManager+CompatibilityTypes.swift in Sources */,
 				D7AB00000000000000000013 /* TabManager+DetachedWorkspace.swift in Sources */,
 				E3309A03 /* TabManager+EqualizeSplits.swift in Sources */,
@@ -3474,6 +3506,18 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CmuxSocketControl;
 		};
+		C4A700010000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoomCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/CmuxChatRoomCore;
+		};
+		C4A700020000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoom" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/CmuxChatRoom;
+		};
+		C4A700030000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoomUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/CmuxChatRoomUI;
+		};
 		A5B00001A1B2C3D4E5F60718 /* XCLocalSwiftPackageReference "CMUXAgentLaunch" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/CMUXAgentLaunch;
@@ -3655,6 +3699,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A5354304A5354304A5354304 /* XCLocalSwiftPackageReference "CmuxSocketControl" */;
 			productName = CmuxSocketControl;
+		};
+		C4A700010000000000000002 /* CmuxChatRoomCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C4A700010000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoomCore" */;
+			productName = CmuxChatRoomCore;
+		};
+		C4A700020000000000000002 /* CmuxChatRoom */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C4A700020000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoom" */;
+			productName = CmuxChatRoom;
+		};
+		C4A700030000000000000002 /* CmuxChatRoomUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C4A700030000000000000003 /* XCLocalSwiftPackageReference "CmuxChatRoomUI" */;
+			productName = CmuxChatRoomUI;
 		};
 		C52830000000000000000004 /* CmuxTerminalCopyMode */ = {
 			isa = XCSwiftPackageProductDependency;

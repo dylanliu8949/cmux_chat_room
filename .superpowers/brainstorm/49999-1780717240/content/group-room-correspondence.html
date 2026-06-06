@@ -1,0 +1,68 @@
+<style>
+  *{box-sizing:border-box;}
+  .wrap{font-family:-apple-system,sans-serif;color:#e8e8ea;display:flex;gap:20px;align-items:flex-start;}
+  .bar{width:248px;background:#1e1e22;border-radius:10px;padding:10px;flex:none;}
+  .sec{font-size:10px;letter-spacing:.08em;color:#8a8a92;text-transform:uppercase;margin:4px 4px 8px;}
+  .room{padding:8px 10px;border-radius:6px;margin-bottom:6px;font-weight:600;display:flex;align-items:center;gap:8px;border-left:3px solid transparent;}
+  .grp{margin:10px 4px 5px;font-size:11px;color:#9a9aa2;display:flex;align-items:center;gap:6px;border-left:3px solid transparent;padding-left:6px;}
+  .agent{padding:6px 10px 6px 20px;border-radius:6px;margin-bottom:4px;font-size:13px;display:flex;align-items:center;gap:8px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);flex:none;}
+  .run{background:#5ec27b;}
+  .hr{height:1px;background:#333;margin:12px 4px;}
+  /* accent pairs */
+  .a-auth{--c:#7b5cff;} .a-db{--c:#43b0c9;} .a-scratch{--c:#c98f43;}
+  .room.sel{background:color-mix(in srgb, var(--c) 28%, #1e1e22);border-left-color:var(--c);color:#fff;}
+  .room.dim{opacity:.5;}
+  .grp.sel{color:#fff;border-left-color:var(--c);}
+  .grp.dim{opacity:.4;}
+  .agent.dim{opacity:.4;}
+  .link{font-size:10px;color:var(--c);margin-left:auto;font-weight:600;}
+  .panel{flex:1;max-width:430px;background:#161618;border:1px solid #333;border-radius:10px;padding:14px;}
+  .chip{display:inline-block;background:#2a2540;color:#cbb6ff;border:1px solid #7b5cff;border-radius:20px;padding:1px 9px;font-size:12px;}
+</style>
+
+<h2>Each agent group ⟷ one chat room</h2>
+<p class="subtitle">Selecting a room scopes <code>@</code>/<code>@all</code> to its group. Here <b># feature-auth</b> is active.</p>
+
+<div class="wrap">
+
+  <div class="bar">
+    <div class="sec">Chat rooms</div>
+    <div class="room sel a-auth"># feature-auth <span class="link">↓ its group</span></div>
+    <div class="room dim a-db"># refactor-db</div>
+    <div class="room dim a-scratch"># scratch</div>
+
+    <div class="hr"></div>
+    <div class="sec">Agents</div>
+
+    <div class="grp sel a-auth">▾ feature-auth · ~/wt/auth</div>
+    <div class="agent"><span class="dot run"></span> claude code 1</div>
+    <div class="agent"><span class="dot"></span> codex review</div>
+
+    <div class="grp dim a-db">▾ refactor-db · ~/wt/db</div>
+    <div class="agent dim"><span class="dot run"></span> claude code 2</div>
+    <div class="agent dim"><span class="dot"></span> cursor 1</div>
+
+    <div class="grp dim a-scratch">▾ scratch · ~/wt/main</div>
+    <div class="agent dim"><span class="dot"></span> gemini scratch</div>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a30;padding-bottom:8px;margin-bottom:10px;">
+      <b style="color:#cbb6ff;"># feature-auth</b>
+      <span style="font-size:11px;opacity:.5;">2 agents</span>
+    </div>
+    <div style="font-size:13px;line-height:1.7;">
+      <div><b>you</b> → <span class="chip" style="--c:#7b5cff;">@all</span></div>
+      <div style="font-size:11px;opacity:.55;margin:2px 0 8px;">@all here = this room's group only → claude code 1, codex review</div>
+      <div style="opacity:.85;">"review the auth refactor"</div>
+      <div style="margin-top:10px;border-left:2px solid #5ec27b;padding-left:8px;">
+        <div><b style="color:#5ec27b;">codex review</b> <span style="opacity:.45;font-size:11px;">~/wt/auth · feat/auth</span><br>3 issues found…</div>
+        <div style="opacity:.5;margin-top:6px;">⟳ claude code 1 working…</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;font-size:11px;opacity:.55;">refactor-db &amp; scratch agents are untouched — isolation by construction.</div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:14px;">Open questions this raises (terminal): can an agent belong to 2 rooms? new room = new empty group? move an agent between groups?</p>

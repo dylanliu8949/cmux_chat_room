@@ -1799,6 +1799,17 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var hasUnreadIndicator: Bool? = nil
     var notifications: [SessionNotificationSnapshot]? = nil
     var terminalScrollBarHidden: Bool?
+    // Chat-room model (all optional; old snapshots decode as nil → migrated on restore).
+    /// `WorkspaceRole.rawValue`; nil/absent ⇒ legacy ⇒ treated as `.agent`.
+    var workspaceRoleRaw: String? = nil
+    /// Stable room id for a `.chatRoom` workspace.
+    var chatRoomID: UUID? = nil
+    /// Room display name for a `.chatRoom` workspace.
+    var roomName: String? = nil
+    /// The `chatRoomID` of the room a `.agent` workspace belongs to.
+    var roomID: UUID? = nil
+    /// `AgentKind.rawValue` for a `.agent` workspace; nil ⇒ unsupported/legacy.
+    var agentKindRaw: String? = nil
     var currentDirectory: String
     var focusedPanelId: UUID?
     var layout: SessionWorkspaceLayoutSnapshot

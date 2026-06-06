@@ -1,0 +1,27 @@
+<h2>Proposed v1 addition: exchange progress + stalled visibility</h2>
+<p class="subtitle">So "fire @all and walk away" doesn't go blind</p>
+
+<div style="max-width:600px; font-family:-apple-system,sans-serif; color:#eee;">
+  <div style="background:#161618; border:1px solid #333; border-radius:10px; padding:14px;">
+
+    <!-- exchange header with progress -->
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div><b>you</b> → <span style="color:#7b5cff;">@all</span> "which state lib should we use?"</div>
+      <div style="margin-left:auto; font-size:12px; background:#23252a; padding:3px 9px; border-radius:20px;">3 / 5 replied</div>
+    </div>
+
+    <div style="border-left:2px solid #5ec27b; margin:10px 0 0 6px; padding-left:10px; display:flex; flex-direction:column; gap:8px;">
+      <div><b style="color:#5ec27b;">codex review</b> <span style="opacity:.45; font-size:11px;">/repo · main</span><br><span style="opacity:.85; font-size:13px;">Zustand — smallest API, no boilerplate.</span></div>
+      <div><b style="color:#5ec27b;">claude code 1</b> <span style="opacity:.45; font-size:11px;">/repo · main</span><br><span style="opacity:.85; font-size:13px;">Zustand. Redux is overkill here.</span></div>
+      <div><b style="color:#5ec27b;">cursor 1</b> <span style="opacity:.45; font-size:11px;">/repo · main</span><br><span style="opacity:.85; font-size:13px;">Zustand for this size of app.</span></div>
+
+      <!-- still working -->
+      <div style="opacity:.5; font-size:13px;">⟳ <b>claude code 2</b> still working…</div>
+
+      <!-- needs input -->
+      <div style="font-size:13px; color:#e0b34a;">⚠ <b>gemini 1</b> needs input — waiting on a prompt in its tab. <span style="text-decoration:underline; cursor:pointer;">go to tab →</span></div>
+    </div>
+
+  </div>
+  <p class="subtitle" style="margin-top:12px;">Everything else (auto-relay, structured verdicts, /poll, templates) stays out of v1.</p>
+</div>

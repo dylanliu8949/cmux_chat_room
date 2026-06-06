@@ -1,0 +1,57 @@
+<h2>Per-agent lifecycle badges + split notifications</h2>
+<p class="subtitle">Glanceable status in the sidebar; completion → chat, needs-input → the tab</p>
+
+<div style="display:flex; gap:18px; font-family:-apple-system,sans-serif; color:#eee;">
+
+  <!-- sidebar -->
+  <div style="width:240px; background:#1e1e22; border-radius:10px; padding:10px;">
+    <div style="background:#3b2d5e; border:1px solid #7b5cff; padding:8px 10px; border-radius:6px; margin-bottom:12px; display:flex; align-items:center;">
+      <div>
+        <div style="font-weight:700; color:#cbb6ff;"># chat-room</div>
+        <div style="font-size:11px; opacity:.6;">pinned</div>
+      </div>
+      <div style="margin-left:auto; background:#e0533a; color:#fff; font-size:11px; font-weight:700; border-radius:20px; padding:1px 7px;">2</div>
+    </div>
+
+    <div style="font-size:11px; opacity:.5; margin:0 4px 6px;">AGENTS</div>
+
+    <!-- running -->
+    <div style="padding:8px 10px; border-radius:6px; background:#2a2a30; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+      <span style="color:#5ec27b;">⟳</span>
+      <div><div style="font-weight:600;">claude code 1</div><div style="font-size:11px; opacity:.55; font-family:ui-monospace,monospace;">/work/cmux · feat/x</div></div>
+    </div>
+
+    <!-- idle/done -->
+    <div style="padding:8px 10px; border-radius:6px; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
+      <span style="opacity:.4;">●</span>
+      <div><div style="font-weight:600;">codex review</div><div style="font-size:11px; opacity:.55; font-family:ui-monospace,monospace;">/work/cmux · feat/x</div></div>
+    </div>
+
+    <!-- needs input -->
+    <div style="padding:8px 10px; border-radius:6px; margin-bottom:6px; display:flex; align-items:center; gap:8px; background:#3a2f1a;">
+      <span style="color:#e0b34a;">⚠</span>
+      <div><div style="font-weight:600;">gemini 1</div><div style="font-size:11px; color:#e0b34a;">needs input</div></div>
+      <div style="margin-left:auto; background:#e0b34a; color:#000; font-size:11px; font-weight:700; border-radius:20px; padding:1px 7px;">!</div>
+    </div>
+
+    <!-- idle -->
+    <div style="padding:8px 10px; border-radius:6px; display:flex; align-items:center; gap:8px;">
+      <span style="opacity:.4;">●</span>
+      <div><div style="font-weight:600;">cursor 1</div><div style="font-size:11px; opacity:.55; font-family:ui-monospace,monospace;">/work/api · main</div></div>
+    </div>
+  </div>
+
+  <!-- legend -->
+  <div style="flex:1;">
+    <div style="font-size:13px; line-height:2;">
+      <div><span style="color:#5ec27b;">⟳</span> &nbsp;<b>running</b> — working on a turn</div>
+      <div><span style="opacity:.4;">●</span> &nbsp;<b>idle</b> — stopped / done</div>
+      <div><span style="color:#e0b34a;">⚠</span> &nbsp;<b>needs input</b> — blocked, notifies <i>this tab</i></div>
+    </div>
+    <div style="margin-top:16px; font-size:13px; line-height:1.8; opacity:.85;">
+      <div><b style="color:#e0533a;">chat-room badge (2)</b> = new replies posted while you're away → notifies the <i>chat tab</i>.</div>
+      <div style="margin-top:8px;">Disjoint events → never a double ring. Each notice points to where you must act.</div>
+    </div>
+  </div>
+
+</div>

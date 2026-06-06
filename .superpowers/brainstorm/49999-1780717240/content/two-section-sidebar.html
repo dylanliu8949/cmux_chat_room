@@ -1,0 +1,54 @@
+<style>
+  .col{font-family:-apple-system,sans-serif;color:#e8e8ea;}
+  .bar{width:250px;background:#1e1e22;border-radius:10px;padding:10px;}
+  .sec{font-size:10px;letter-spacing:.08em;color:#8a8a92;text-transform:uppercase;margin:4px 4px 6px;}
+  .room{padding:7px 10px;border-radius:6px;margin-bottom:5px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .room.active{background:#3b2d5e;border:1px solid #7b5cff;color:#cbb6ff;}
+  .grp{font-size:11px;color:#8a8a92;margin:8px 4px 4px;display:flex;align-items:center;gap:6px;}
+  .agent{padding:6px 10px 6px 18px;border-radius:6px;margin-bottom:4px;font-size:13px;display:flex;align-items:center;gap:7px;}
+  .dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.3);flex:none;}
+  .run{background:#5ec27b;}
+  .hr{height:1px;background:#333;margin:12px 4px;}
+</style>
+<h2>Proposed: two-section sidebar</h2>
+<p class="subtitle">Top = chat rooms (multiple, renameable) · Bottom = agent tabs (grouped)</p>
+
+<div style="display:flex;gap:22px;align-items:flex-start;">
+
+  <div class="col bar">
+    <div class="sec">Chat rooms</div>
+    <div class="room active"># feature-auth</div>
+    <div class="room"># refactor-db</div>
+    <div class="room"># scratch</div>
+    <div class="hr"></div>
+    <div class="sec">Agents</div>
+
+    <div class="grp">▾ feature-auth · ~/wt/auth</div>
+    <div class="agent"><span class="dot run"></span> claude code 1</div>
+    <div class="agent"><span class="dot"></span> codex review</div>
+
+    <div class="grp">▾ refactor-db · ~/wt/db</div>
+    <div class="agent"><span class="dot run"></span> claude code 2</div>
+    <div class="agent"><span class="dot"></span> cursor 1</div>
+
+    <div class="grp">▾ ungrouped</div>
+    <div class="agent"><span class="dot"></span> gemini scratch</div>
+  </div>
+
+  <div class="col" style="flex:1;max-width:520px;">
+    <div class="label">THE DECISION: what can a chat room @ ?</div>
+    <div style="background:#161618;border:1px solid #5ec27b;border-radius:8px;padding:12px;margin:10px 0;">
+      <b style="color:#9fe3b5;">A · Room is bound to a group (1:1)</b>
+      <div style="font-size:13px;opacity:.85;line-height:1.6;margin-top:6px;">
+        Each chat room owns an agent group. Selecting <b>#feature-auth</b> scopes <code>@</code>/<code>@all</code> to <i>that group only</i> (claude code 1, codex review). Worktree contexts stay isolated by construction — your original "don't let them interfere" goal. The bottom groups <i>are</i> the rooms' memberships.
+      </div>
+    </div>
+    <div style="background:#161618;border:1px solid #555;border-radius:8px;padding:12px;">
+      <b>C · Flat roster, groups are visual only</b>
+      <div style="font-size:13px;opacity:.85;line-height:1.6;margin-top:6px;">
+        Any room can <code>@</code> any agent; groups just tidy the list. <code>@all</code> would hit <i>every</i> agent across worktrees unless you hand-pick. Most flexible, but isolation is on you, and <code>@all</code> loses its "this room's agents" meaning.
+      </div>
+    </div>
+    <p class="subtitle" style="margin-top:12px;">(A hybrid is possible: bound by default, but you can still <code>@</code> an agent from another group explicitly.)</p>
+  </div>
+</div>
