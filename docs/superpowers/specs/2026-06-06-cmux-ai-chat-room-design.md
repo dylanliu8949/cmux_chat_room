@@ -1,6 +1,6 @@
 # cmux AI Chat Room — Design & Implementation Plan
 
-> Status: **Draft for review (rev 7)** · Author: Dylan (with Claude) · Date: 2026-06-06
+> Status: **Draft for review (rev 8)** · Author: Dylan (with Claude) · Date: 2026-06-06
 > Review loop: Codex reviews this doc → Claude addresses comments → repeat to convergence → execution.
 
 ### Revision history
@@ -8,6 +8,7 @@
 - **rev 1** — initial spec.
 - **rev 2** — incorporates Codex review round 1 (3 independent reviewers, all "Not Ready") after verifying every claim against the code. Major changes: (a) reuse the **existing** cmux agent pipeline — hooks (`CLI/CMUXCLI+AgentHookDefinitions.swift`), launch (`Packages/CMUXAgentLaunch`), lifecycle (`Workspace.agentLifecycleStatesByPanelId`), and the `stop` hook's existing `last_assistant_message` payload — instead of building parallel infrastructure; (b) token-based correlation; (c) fix package layering with a low `CmuxChatRoomCore`; (d) single source of truth for lifecycle; (e) central `WorkspaceRole`-aware close policy; (f) explicit persistence/migration; (g) correct CI test gating; (h) "Step 0" infra audit; (i) UX: richer `@`-autocomplete rows, full (non-collapsed) messages, channel windowing + "load earlier", new-agent failure states, accessibility/reduced-motion.
 - **rev 3** — incorporates Codex review round 2 (3 reviewers), verified against code. Major changes: (a) **`surface_id` carried end-to-end** — `WorkstreamEvent`/feed schema extended with `surface_id` (hook layer already has it; `CLI/cmux.swift:205`), and the chat bridge consumes **raw decoded events before EventBus redaction** (`CmuxEventPublishing.swift:451` nulls `tool_input`); per-surface FIFO now works with multiple agent panels per workspace. (b) **Hidden `ChatRequestID` marker** correlation (chosen over exact-text): a non-displayed token is injected with the prompt, round-trips via the raw `toolInputJSON` (`WorkstreamEvent.swift:17`, **not** the whitespace-collapsing `submittedPromptMessage` at `WorkspacePromptSubmit.swift:133`), binds the turn, and is stripped before channel display/forward; FIFO still pairs the bound `prompt-submit` to its `stop`. (c) **Close gate at the lowest mutator** — guard inside `TabManager.closeWorkspace` (`:5205`, which today has only a `guard tabs.count > 1`, no role/can-close guard) with an explicit internal force flag, since AppleScript (`AppleScriptSupport.swift:473`) and config (`CmuxConfigExecutor.swift:508`) call it directly. (d) **needs-input hold** — `send_text` injects raw terminal bytes (`TerminalController.swift:8653`), so prompts to a `needsInput` target are held (not blind-injected into a permission prompt) and delivered when it leaves `needsInput`; running/idle still pipe through immediately. (e) UX: per-message **copy** + **quote-into-composer**.
+- **rev 8** — incorporates Codex review round 4 (4 reviewers, all flagging the same blocker), verified against code. **Architecture correction: rooms no longer reuse `WorkspaceGroup`.** Verified that `WorkspaceGroup` is anchor-based (mandatory `anchorWorkspaceId`, created fresh, rendered as header, contiguous runs, dissolves on anchor close, optional `groupId` with many ungroup paths) — incompatible with empty rooms, the two-section layout, and "no ungrouped agents." New model: **a room is a `.chatRoom` workspace; membership is an explicit `roomID` on each agent workspace** (no group binding; `ChatRoomID` == the room workspace id; the old `groupId`/`ChatRoomID` contradiction is gone). The two-section sidebar is a **new section-aware renderer** (rooms top, agents grouped by `roomID` bottom) — net-new work, not reuse. Other fixes: marker round-trip is a **hard per-agent support gate** (degraded FIFO fallback removed — unsupported agents are excluded from `@`, not leaked); **central workspace-creation policy** (every agent workspace gets role+kind+roomID; audit `addWorkspace` paths); **dedicated `closeRoom` flow** (not `deleteWorkspaceGroup`), close = **archive** (history retained by `ChatRoomID`, no reopen UI in v1); worktree cleanup is **two-phase async** off the `@MainActor` close mutator; **"unpushed" detection is net-new CmuxGit plumbing** (`rev-list --count @{u}..HEAD`) — prereq or v1 scopes to dirty-only-with-warning; worktree refcount restored from a **persisted per-tab `cmuxCreatedWorktreeID`**, never live cwd (OSC-7-mutable); move-agent-mid-flight rule (in-flight stays bound to originating room); roster rule (only `.agent`+supported+chat-supported); snapshot-boundary applies to the new room rows; isolation reworded to **mention-scope** (rev-7 rooms can span worktrees).
 - **rev 7** — **usage-fit clarifications (Dylan).** (a) A room's membership is **arbitrary** — the common case is room ≈ one worktree, but a room may hold agents from **different branches, worktrees, or even repos** (e.g. a large-scale cross-repo migration room). A group is a user-chosen set of agents; each agent tab carries its own pwd/branch; a room can mix them. The room↔group 1:1 binding is unchanged — only the assumption "group = a single worktree" is dropped. (b) A worktree may be **shared by multiple agent tabs** (e.g. Claude + Codex on the same feature branch), so close-time worktree removal is **refcounted** — remove a cmux-created worktree only when the *last* tab using it closes (fixes a rev-6 bug). (c) Expected pattern: each repo's primary checkout stays on `main`; feature work happens in worktrees.
 - **rev 6** — **worktree cleanup on close (Dylan).** An agent tab that cmux launched in a **cmux-created worktree** removes that worktree when the tab closes (`git worktree remove`); a tab launched in an **existing pwd/branch** closes without touching the filesystem. Closing a chat room cascades to its agent group, applying this per tab. Safety: removal is guarded against **uncommitted/unpushed** state (confirm + offer to keep), never a silent nuke. The "owns a cmux-created worktree" flag (+ path/branch) is persisted so cleanup survives restart.
 - **rev 5** — **structural pivot (Dylan): multiple chat rooms in one window**, replacing the single pinned chat room. Sidebar splits into two sections — **top: chat rooms** (multiple, renameable), **bottom: agent tabs grouped by `WorkspaceGroup`**. Each chat room corresponds **1:1 to an agent group** (`groupId`); `@`/`@all` scope to *that room's group* (worktree isolation by construction). Motivation: Dylan currently uses one macOS desktop per worktree and switches between them — this collapses that into one cmux instance. Reuses the **existing** cmux group system (`WorkspaceGroup`, `TabManager.swift:1006`; `Workspace.groupId:10300`; group `+`/rename/placement). Consequences: chat rooms are now normal creatable/renameable/closable entities (keep ≥1); **history keys off `ChatRoomID`** (the old "window/session id" open item is resolved); `@all` and isolation are now per-room.
@@ -67,7 +68,10 @@ The chat room is an **adjudication and coordination surface** — not a consensu
 | Tab **is** a Workspace | `Sources/TabManager.swift:16` | `typealias Tab = Workspace` |
 | Tab presentation fields | `Sources/Workspace.swift:10293-10301` | `customTitle`, `customDescription`, `isPinned`, `customColor`, `groupId` exist |
 | Sidebar tab row | `Sources/ContentView.swift:15048` | `TabItemView` (Equatable, snapshot-fed) |
-| **Existing sidebar groups** | `Sources/TabManager.swift:1006` (`WorkspaceGroup`); `Sources/Workspace.swift:10300` (`groupId`) | named, collapsible groups; group `+`-button (`workspace.group.new_workspace`), placement settings, group rename, anchor-close — **reuse as the agent-group / chat-room binding** |
+| **Existing sidebar groups (NOT reused for rooms)** | `Sources/TabManager.swift:1006` (`WorkspaceGroup`, mandatory `anchorWorkspaceId`); `Sources/Workspace.swift:10300` (`groupId: UUID?`) | anchor-based, contiguous, can't be empty, dissolves on anchor close; **incompatible with the room model** — rooms use an explicit `roomID` on agent workspaces instead (§4.3/§4.8). Flat renderer: `Sources/SidebarWorkspaceRenderItem.swift:17` |
+| Generic workspace creation | `Sources/TabManager.swift:2605` (`addWorkspace`), `:4414` (`deleteWorkspaceGroup` closes members) | many entrypoints create plain terminal workspaces — need a central creation policy (§4.9) |
+| Git metadata (dirty only) | `Packages/CmuxGit/Sources/CmuxGit/GitMetadataService.swift:57` (`isDirty`) | **no ahead/behind/upstream** — "unpushed" detection is net-new (§4.10) |
+| cwd is mutable | `Sources/Workspace.swift:12205` (`updatePanelDirectory`, OSC-7-driven) | do NOT key the worktree refcount off live `currentDirectory` (§4.11) |
 | **Existing agent lifecycle** | `Sources/Workspace.swift:10559` | `agentLifecycleStatesByPanelId: [UUID:[String:AgentHibernationLifecycleState]]` |
 | Lifecycle states | `Sources/AgentHibernation/AgentHibernationLifecycleState.swift:3` | `unknown / running / idle / needsInput` |
 | Lifecycle mutation + CLI | `Sources/Workspace.swift:12287`; `Sources/TerminalController.swift:19378` | `setAgentLifecycle(...)`, `set_agent_lifecycle` CLI |
@@ -92,20 +96,20 @@ The chat room is an **adjudication and coordination surface** — not a consensu
 
 > Mockups are the brainstorm artifacts rendered to PNG. Interactive HTML originals live under `.superpowers/brainstorm/` (gitignored). Note: mockups predate two later decisions — `~`-abbreviated paths, and richer `@`-autocomplete rows (§3.10).
 
-### 3.1 Two-section sidebar: chat rooms over grouped agents
-The sidebar has two sections:
-- **Top — Chat rooms:** N chat rooms (each colored, renameable). One is "active" (its channel is shown). Creatable/closable; keep ≥1.
-- **Bottom — Agents:** agent tabs organized into **groups** (reusing cmux `WorkspaceGroup`). **Each group corresponds 1:1 to a chat room.** The **agent tab is the only non-chat-room tab type** — there are no plain bash tabs. An agent tab is a real terminal, so run shell commands via the agent's `!` (no separate terminal needed). A tab "launched in an existing directory" is still an agent tab, just not in a cmux-created worktree.
+### 3.1 Two-section sidebar: chat rooms over their agents
+The sidebar has two sections (a **new section-aware renderer**, not the existing flat/`WorkspaceGroup` one):
+- **Top — Chat rooms:** N rooms (each colored, renameable). Selecting one makes it **active** (its channel shows in the content area). Creatable/closable; keep ≥1.
+- **Bottom — Agents:** agent tabs grouped under their room. Membership is an explicit **`roomID` on each agent** (not `WorkspaceGroup`). The **agent tab is the only non-chat-room tab type** — no plain bash tabs; run shell via the agent's `!`. A tab "launched in an existing directory" is still an agent tab, just not in a cmux-created worktree.
 
-**Room ⟷ group correspondence (the core structure):** selecting a chat room scopes everything to its group. `@` autocomplete and `@all` resolve to **that room's group only**; agents in other rooms are untouched. This makes worktree isolation *structural* rather than manual — a room per worktree/feature, `@all` never crosses contexts.
+**Room ⟷ membership (the core structure):** selecting a room scopes everything to its agents. `@` autocomplete and `@all` resolve to **that room's agents only** (agents whose `roomID` == the active room); other rooms' agents are unreachable from here. So **mention-scoping is structural** — `@all` never crosses rooms. (Note: a room may *contain* agents from different worktrees/repos (rev 7), so this is **mention-scope isolation**, not "worktree isolation" — the latter is only the common case.)
 
-- **Membership:** an agent tab belongs to **exactly one** group/room (one agent → one room). No "ungrouped" agents. A group's agents may be **heterogeneous** — different branches, worktrees, or even repos in one room (e.g. a cross-repo migration room). "Room ≈ one worktree" is the common case, not a constraint; each agent carries its own pwd/branch.
-- **Creation:** a new chat room creates a new (empty) group; the group header's `+` creates an agent tab **into the active room**. Agent creation (kind + worktree, §4.9) targets the active room's group.
-- **Moving:** drag an agent tab between groups to reassign it to another room.
+- **Membership:** an agent belongs to **exactly one** room (`roomID`, non-optional). No "ungrouped" agents — see the creation policy (§4.9) and the disabling of existing ungroup paths (§4.8). A room's agents may be **heterogeneous** (different branches/worktrees/repos — e.g. a cross-repo migration room).
+- **Creation:** a new room is created empty (trivially — it's just a room entity with no agents yet). Creating an agent (kind + worktree, §4.9) assigns it the **active room's `roomID`**.
+- **Moving:** drag an agent between rooms to reassign its `roomID` (in-flight turns stay bound to the originating room, §4.6).
 
-![Two-section sidebar: each agent group ⟷ one chat room](assets/2026-06-06-chat-room/two-section-rooms.png)
+![Two-section sidebar: each room over its agents](assets/2026-06-06-chat-room/two-section-rooms.png)
 
-*(Selecting `#feature-auth` lights its group and scopes `@all` to it; `refactor-db`/`scratch` agents are untouched. Earlier single-room mockups under `assets/` predate this pivot.)*
+*(Selecting `#feature-auth` shows its agents and scopes `@all` to them; `refactor-db`/`scratch` agents are untouched. The mockup labels groups by worktree for the common case; membership is by `roomID`, not worktree. Earlier single-room mockups under `assets/` predate the multi-room pivot.)*
 
 ### 3.2 Sidebar — agent tabs (three lines + live status)
 Editable title (auto-named "claude code 1"), then **~pwd**, then **branch on its own line**. Live lifecycle badge from the **existing** `agentLifecycleStatesByPanelId`: rotating green spinner = `running`, dim dot = `idle`, pulsing amber + `!` = `needsInput`.
@@ -147,7 +151,7 @@ Channel messages and the forward/quote preview **always render in full** — no 
 For very long histories the channel keeps a **bounded recent window** scrollable (e.g. the most recent N exchanges). Scrolling to the top reveals a **"Load earlier"** button that pages older exchanges in from the persisted store on demand. Individual messages are never truncated; only the *count* of rendered exchanges is bounded for performance.
 
 ### 3.10 Mention targeting
-You type/match the **name** (`@`), but each autocomplete **dropdown row shows name + kind + ~cwd + branch** so duplicate/renamed titles and "same repo, different branch" are distinguishable. Selection stores a **stable `AgentID`**, never the display string. The dropdown is **rebuilt fresh each time it opens** and is **scoped to the active room's group** — only that room's live agents appear; `@all` = that group. (Agents in other rooms are deliberately unreachable from here — isolation by construction.)
+You type/match the **name** (`@`), but each autocomplete **dropdown row shows name + kind + ~cwd + branch** so duplicate/renamed titles and "same repo, different branch" are distinguishable. Selection stores a **stable `AgentID`**, never the display string. The dropdown is **rebuilt fresh each time it opens** and is **scoped to the active room** — only that room's live agents appear; `@all` = that set. (Agents in other rooms are deliberately unreachable from here — mention-scope isolation.)
 
 ### 3.11 Sending vs. agent state
 Prompts inject **raw terminal input** (not a semantic queue), so state matters:
@@ -189,16 +193,16 @@ Dependency direction is strictly downward: `CmuxChatRoomUI → CmuxChatRoom → 
 ```swift
 public struct AgentID: Hashable, Sendable, Codable { public let raw: UUID }      // = agent workspace/tab id
 public struct SurfaceID: Hashable, Sendable, Codable { public let raw: UUID }    // agent's terminal surface
-public struct ChatRoomID: Hashable, Sendable, Codable { public let raw: UUID }   // a chat room (= its WorkspaceGroup)
+public struct ChatRoomID: Hashable, Sendable, Codable { public let raw: UUID }   // == the room workspace's id
 public struct ChatRequestID: Hashable, Sendable, Codable { public let raw: UUID } // correlation token
 public struct MessageID: Hashable, Sendable, Codable { public let raw: UUID }
 public struct ExchangeID: Hashable, Sendable, Codable { public let raw: UUID }
 
-/// A chat room: a named channel bound 1:1 to an agent group (`WorkspaceGroup`).
+/// A chat room: a named channel. Backed by a `.chatRoom` workspace (its `id` == that workspace's id).
+/// Membership is NOT a WorkspaceGroup — it's the set of agent workspaces whose `roomID == this.id`.
 public struct ChatRoom: Sendable, Codable, Identifiable {
-    public let id: ChatRoomID
+    public let id: ChatRoomID        // == the backing .chatRoom workspace id
     public var name: String          // renameable
-    public let groupId: UUID         // the bound cmux WorkspaceGroup; its members are this room's agents
 }
 
 public enum AgentKind: String, Sendable, Codable { case claudeCode, codex, cursor }
@@ -224,7 +228,7 @@ public struct OutgoingPrompt: Sendable, Codable {
     public let roomID: ChatRoomID      // which room this exchange lives in
     public let origin: PromptOrigin
     public let bodyText: String        // forward: "\"<quoted>\"\n<note>"
-    public let targets: [AgentIdentitySnapshot]   // resolved from this room's group only
+    public let targets: [AgentIdentitySnapshot]   // resolved from this room's agents only
     public let sentAt: Date
 }
 
@@ -268,15 +272,15 @@ public enum ChatPromptMarker {
 
 | Coordinate | Type | Meaning | Owner |
 |---|---|---|---|
-| `ChatRoomID` | `UUID` | a chat room | `RoomsCoordinator` (§4.6) |
-| `groupId` | `UUID` | the cmux `WorkspaceGroup` a room is bound to; its members are the room's agents | `TabManager` |
-| `AgentID` | `UUID` | the agent **tab/workspace** id (belongs to exactly one `groupId`) | `TabManager` |
+| `ChatRoomID` | `UUID` | a chat room; **== the backing `.chatRoom` workspace id** | `RoomsCoordinator` (§4.6) + `TabManager` |
+| `AgentID` | `UUID` | the agent **tab/workspace** id | `TabManager` |
+| `roomID` | `ChatRoomID` | **non-optional** on each `.agent` workspace — its room membership | `Workspace` (new field) |
 | `SurfaceID` | `UUID` | the agent's **terminal surface** (= cmux `panelId`) | `Workspace.panels` |
 | `panelId` | `UUID` | key of the existing lifecycle store | `Workspace.agentLifecycleStatesByPanelId` |
-| `agentName` | `String` | inner key of the lifecycle store (`"claude_code"`, `"codex"`, …); a panel may hold several | the agent CLI / hook |
+| `agentName` | `String` | inner key of the lifecycle store (`"claude_code"`, …); a panel may hold several | the agent CLI / hook |
 
-**Room ↔ group:** `ChatRoom.groupId` is the binding; a room's agents = the live workspaces with that `groupId`. An agent's room is `agent.groupId → ChatRoomID` (each `groupId` maps to exactly one room).
-**v1 constraints:** one agent per agent-tab (so `SurfaceID == panelId`; lifecycle lookup `agentLifecycleStatesByPanelId[panelId][agentName]`), and one agent → one group/room. The `AgentRosterProviding`/`AgentLifecycleReading` seams (app target) own the `AgentID ↔ (panelId, agentName)` map and the `groupId ↔ ChatRoomID` map, exposing only `AgentID`/`SurfaceID`/`ChatRoomID` to the coordinator; a panel reporting multiple agent names → tab flagged unsupported, not guessed.
+**Room ↔ membership:** a room's agents = live `.agent` workspaces with `roomID == room.id`. **No `WorkspaceGroup`, no separate `groupId`** — this removes the rev-7 `ChatRoomID`/`groupId` contradiction. The `.chatRoom` workspace's id *is* the `ChatRoomID`.
+**v1 constraints:** one agent per agent-tab (so `SurfaceID == panelId`; lifecycle lookup `agentLifecycleStatesByPanelId[panelId][agentName]`), and one agent → one room (`roomID` non-optional). The `AgentRosterProviding`/`AgentLifecycleReading` seams own the `AgentID ↔ (panelId, agentName)` map; a panel reporting multiple agent names → tab flagged unsupported, not guessed.
 
 ### 4.4 Reuse the existing hook pipeline (no new transport)
 
@@ -323,7 +327,7 @@ public final class RoomsCoordinator {
     private var pendingByRequest: [ChatRequestID: PendingInjection] = [:]
     private var heldForNeedsInput: [AgentID: [HeldPrompt]] = [:]   // §3.11 safety hold
 
-    private let roster: any AgentRosterProviding   // resolves a room's group → live agents
+    private let roster: any AgentRosterProviding   // resolves a room → its live agents (by roomID)
     private let lifecycle: any AgentLifecycleReading
     private let injector: any PromptInjecting
     private let notifier: any ChatNotifying
@@ -349,72 +353,79 @@ enum TurnBinding { case chatOrigin(ChatRequestID, ExchangeID, ChatRoomID); case 
 
 **Correlation invariant (the core of the routing rule) — marker-based, room-scoped:**
 
-1. `send(in: room, …)`: resolve mentions **against `room`'s group only** → live `AgentID`/`SurfaceID` at send time (mentions outside the group are not offered; dead → `.failedToDispatch`). Create one `Exchange` with `roomID = room`. For each target: mint a `ChatRequestID` (recorded with its `roomID`), build `bodyWithMarker = ChatPromptMarker.inject(id, into: body)`, mark outcome `.pending`. **If the target is `needsInput`**, hold (§3.11); **otherwise** record `pendingByRequest[id]` and inject `bodyWithMarker`. Persist to that room's history.
+1. `send(in: room, …)`: resolve mentions **against `room`'s agents only** (role `.agent` + `roomID==room` + chat-supported) → live `AgentID`/`SurfaceID` at send time (mentions outside the room are not offered; dead → `.failedToDispatch`). Create one `Exchange` with `roomID = room`. For each target: mint a `ChatRequestID` (recorded with its `roomID`), build `bodyWithMarker = ChatPromptMarker.inject(id, into: body)`, mark outcome `.pending`. **If the target is `needsInput`**, hold (§3.11); **otherwise** record `pendingByRequest[id]` and inject `bodyWithMarker`. Persist to that room's history.
 2. `handle(.promptSubmitted(surface, rawPromptText))`: `let (id, _) = ChatPromptMarker.extract(from: rawPromptText)`. If `id` is present **and** in `pendingByRequest` → remove it, append `.chatOrigin(id, exchangeID, roomID)` to `turnQueueBySurface[surface]`. Else append `.direct`. (Binding requires the marker — a direct turn, even byte-identical, has no marker and is never chat-origin.)
 3. `handle(.turnCompleted(surface, finalMessage))`: pop the **front** of `turnQueueBySurface[surface]` (agents process turns in order). `.chatOrigin` → attach `finalMessage` to that exchange/target **in its `roomID`'s channel**, persist, notify that room (if it isn't the active/focused room). `.direct` → **drop**.
 4. `onLifecycleChange(agent, state)`: when an agent leaves `needsInput`, flush `heldForNeedsInput[agent]` — for each held prompt, record `pendingByRequest` and inject `bodyWithMarker`.
 5. Tab closed: `.pending`/held outcomes for that agent → `.tabClosed`; clear its queues/holds.
+6. **Agent moved to another room** (`roomID` change): in-flight `pending`/`held`/queued turns **stay bound to their originating room** (each binding already carries its `roomID`/`exchangeID`), so a reply in flight still lands in the room it was sent from. Only *future* `@`-sends use the new room. Moving an agent never reroutes or drops in-flight chat work.
 
 The marker makes binding independent of prompt text, so a byte-identical direct prompt while a chat prompt is pending can no longer mis-bind (it carries no marker). A direct turn that completes first is bound `.direct` and dropped. No marker ⇒ no chat binding ⇒ no leak.
 
-> **The marker is the only correlation mechanism in v1.** There is no exact-text matching path in the design (exact-text is broken anyway — `submittedPromptMessage` collapses whitespace, `WorkspacePromptSubmit.swift:133`). **Marker design constraints** (encoding fixed in Step 0): the token must (a) survive verbatim in `toolInputJSON`, (b) strip reliably before any channel display/forward, (c) not derail the agent. Candidate: a single trailing line the agent treats as inert metadata. If a specific agent cannot carry the marker cleanly, that agent is handled by a **documented, explicitly-degraded per-adapter fallback** (per-surface FIFO + raw `toolInputJSON` match, with the byte-identical-same-surface collision called out and tested) — a contained per-agent exception, never the default path.
+> **The marker is the only correlation mechanism, and a hard per-agent support gate.** There is no exact-text path (exact-text is broken anyway — `submittedPromptMessage` collapses whitespace, `WorkspacePromptSubmit.swift:133`) and **no degraded FIFO fallback** (it would reopen the byte-identical-direct-prompt leak the routing rule rejects). **Marker constraints** (encoding fixed in Step 0): the token must (a) survive verbatim in `toolInputJSON`, (b) strip reliably before any channel display/forward, (c) not derail the agent. Candidate: a single trailing line treated as inert metadata. **An agent for which the marker cannot round-trip (or whose final message can't be captured, G1) is "not chat-supported": it is excluded from `@`/`@all`** (you can still use its tab directly). No agent ships with weaker routing semantics.
 
 ### 4.7 Live roster (no parallel registry), per room
-`AgentRosterProviding` is implemented over `TabManager`, exposing `current(inGroup:)` + an `AsyncStream` of changes; a room's mentionable set is *derived* from live workspaces whose `groupId` == the room's group. `@all` = that group's live agents at send instant. The autocomplete dropdown calls `current(inGroup:)` for the active room on open (§3.10). No parallel registry — the groups *are* the membership.
+`AgentRosterProviding` is implemented over `TabManager`, exposing `current(inRoom:)` + an `AsyncStream` of changes. **Roster rule (explicit):** a room's mentionable set = live workspaces where `role == .agent` **and** `roomID == room.id` **and** the agent is **chat-supported** (supported `AgentKind` whose marker round-trips, §4.6). This excludes the `.chatRoom` workspaces themselves and any unsupported/unknown agent. `@all` = that set at send instant. The dropdown calls `current(inRoom:)` for the active room on open (§3.10). No parallel registry — `roomID` membership *is* the source of truth.
 
-### 4.8 Two-section sidebar + chat-room panels (app target)
-- **Top section (chat rooms):** rendered from `RoomsCoordinator.rooms`; each row colored + renameable (reuse `customTitle`-style rename), with an unread badge (§3.12). Selecting one sets `activeRoom`.
-- **Bottom section (agents):** the existing cmux grouped sidebar (`WorkspaceGroup`), where **each group is a room's membership** (`ChatRoom.groupId`). Reuse the group header `+` (creates an agent into that group/room), group rename, collapse, and drag-to-reorder/move (moving across groups reassigns the agent's room).
-- Chat-room workspace: `WorkspaceRole` (`.chatRoom` / `.agent`); a `.chatRoom` carries its `ChatRoomID` and bound `groupId`. Rooms are **creatable / renameable / closable** (keep ≥1) — *not* a single pinned home base anymore.
-- Agent tab: `WorkspaceRole.agent` + `AgentKind` + its `groupId`; auto-named; sidebar three-line layout + lifecycle badge (snapshot-fed row — coordinator never injected into the row).
-- `ChatRoomPanel: Panel` — because `Panel` requires `ObservableObject`, this is a **thin legacy shell** in the app target; real state lives in the `@Observable` `RoomsCoordinator` (package), which the shell holds and forwards to. Intentional adapter until `Panel` is modernized.
-- `ChatRoomView` (`CmuxChatRoomUI`): renders the **active room's** channel — exchange list (windowed, snapshot-fed rows + "Load earlier"), composer with group-scoped `@` autocomplete (§3.10), per-message actions **forward / quote-into-composer / copy / go-to-tab** (§3.7), full messages (§3.8), progress + needs-input/held status, markdown rendering.
+### 4.8 Two-section sidebar + rooms (app target — NEW renderer, not `WorkspaceGroup`)
+**Rooms are workspaces; membership is `roomID`; `WorkspaceGroup` is not used here.** This sidesteps the anchor/contiguity/empty-group/ungroup constraints that make `WorkspaceGroup` unfit (§2 table).
+- **Room = `.chatRoom` workspace.** It lives in `tabs[]` like any workspace (so it reuses tab selection, content-area hosting, and session persistence), carries `WorkspaceRole.chatRoom` and its `ChatRoomID` (== its workspace id), and is **rendered in the top section, never the agent section**. Rooms are creatable / renameable / closable (keep ≥1).
+- **Active room = the selected `.chatRoom` workspace.** There is no separate global `activeRoom` flag — selecting the room workspace (existing selection machinery) shows its `ChatRoomView` in the content area and scopes the bottom section. (Resolves the "N panels show the same room?" ambiguity: exactly the selected room's channel is shown.)
+- **New section-aware renderer** (`SidebarWorkspaceRenderItem` today emits one flat list): split into top (`.chatRoom`) and bottom (`.agent`, grouped under their `roomID`'s room header). This is **net-new** (section-aware ordering + drag), not reuse of the group renderer.
+- **Agent tab:** `WorkspaceRole.agent` + `AgentKind` + non-optional `roomID`; auto-named; three-line layout + lifecycle badge. **Drag between rooms** rewrites `roomID` (§4.6 move rule).
+- **Disable the existing ungroup paths for chat-room agents** so an agent can never become room-less: the creation policy (§4.9) always sets `roomID`, and `WorkspaceGroup`-era `groupId = nil` paths (`ungroupWorkspaceGroup`, `dissolveGroupsAnchoredBy`, etc.) don't apply because we don't use groups. Audited in Step 0.
+- **Snapshot boundary (CLAUDE.md #2586):** the top-section room rows, per-room unread badges, and active-room highlight are **value snapshots + closures** — the `RoomsCoordinator` is never referenced below the rooms `ForEach` (same rule already applied to agent rows).
+- `ChatRoomPanel: Panel` — `Panel` requires `ObservableObject`, so this is a **thin legacy shell** holding the `@Observable` `RoomsCoordinator` and forwarding; intentional adapter until `Panel` is modernized.
+- `ChatRoomView` (`CmuxChatRoomUI`): renders the selected room's channel — windowed snapshot-fed exchanges + "Load earlier", room-scoped `@` autocomplete (§3.10), per-message **forward / quote-into-composer / copy / go-to-tab** (§3.7), full messages (§3.8), progress + needs-input/held status, markdown.
 
 ### 4.9 Create-agent + worktree sub-flow (with failure states)
-"New agent" sheet: (1) kind; (2) location — *current pwd/branch* or *new worktree* (base branch + new branch + parent dir → `git worktree add <path> -b <branch> <base>`); then launch via `CMUXAgentLaunch`, auto-name, add to the active room's group.
-**Track cmux-created worktrees by path (refcounted), not by single owner.** cmux maintains a set of worktrees it created (path + branch), each with the set of agent tabs currently living in it. The *new worktree* path registers the worktree and adds the new tab as a referrer. A later agent launched into that **same** worktree (via *current pwd/branch* pointing at it, or "add agent here") becomes an additional referrer — multiple tabs (e.g. Claude + Codex on one feature branch) share one worktree. A tab launched in an **existing, non-cmux-created** directory registers **no worktree** — cmux didn't create it and must never remove it. This registry drives close-time cleanup (§4.10) and is persisted (§4.11).
+**Central creation policy (one path).** All agent-workspace creation goes through a single policy that stamps **`role = .agent`, `AgentKind`, and `roomID` (the active room)** — no workspace is created without them. The generic `addWorkspace` entrypoints (`TabManager.swift:2605`, audited in Step 0) are routed through this policy (or disabled) in chat-room builds, so there are no role-less / room-less / bash workspaces. The `.chatRoom` workspace has its own creation path.
+
+"New agent" sheet: (1) kind; (2) location — *current pwd/branch* or *new worktree* (base branch + new branch + parent dir → `git worktree add <path> -b <branch> <base>`); then launch via `CMUXAgentLaunch`, auto-name, assign the active room's `roomID`.
+**Track cmux-created worktrees, refcounted, via a persisted id.** cmux maintains a registry of worktrees it created (keyed by path: branch + referrer set). Each agent tab persists a **`cmuxCreatedWorktreeID`** when launched into one (the *new worktree* path registers it; a later agent launched into the same worktree references the same id). A tab in an **existing, non-cmux-created** directory carries **no** id — never removed. Refcount = number of tabs referencing a worktree id; cleanup at zero (§4.10). The id is the durable link (NOT live cwd, which OSC-7 mutates).
 **Failure/validation (inline, recoverable):** path or branch collision; dirty/missing base repo; missing CLI binary; unsupported/uninstalled hook for that agent; `git worktree add` failure; partial launch (surface created but agent didn't start → offer retry/close). Each surfaces an inline error in the sheet; nothing half-creates silently.
 
-### 4.10 Close policy (gate at the lowest mutator)
-Rooms are normal closable entities now, but two invariants still need a gate at the **destructive funnel**: **keep ≥1 room**, and a room-close cleans up its group. Verified: `TabManager.closeWorkspace` (`:5205`) today has only `guard tabs.count > 1 else { return }` (no role/can-close guard) and is called **directly** by many paths that bypass the UI's `canCloseWorkspace`. So:
+### 4.10 Close policy
+**Two distinct close flows.** Agent-tab close goes through the low-level mutator; room close is a dedicated higher-level flow (NOT `deleteWorkspaceGroup`, whose anchor-dissolve semantics don't match).
 
-- Add a required `WorkspaceRole` to `Workspace`; change `closeWorkspace` to take `force: Bool = false` and return a result (closed / refused). It **refuses closing the *last* `.chatRoom`** (keep ≥1) unless `force` (app teardown). `canCloseWorkspace` remains a **UI affordance only**.
-- **Closing a chat room** (not the last): confirm if any of its agents are `running`; then close the room and, by the one-agent-one-room rule, **close its group's agent tabs too** (each as below). History for that room is retained in the store (re-openable later by id) unless the user explicitly purges.
-- **Execution must audit and label every direct `closeWorkspace` caller** as force or non-force (Step 0 re-greps; not exhaustive):
+**Low-level gate (agent tabs + the room workspace).** `TabManager.closeWorkspace` (`:5205`, today only `guard tabs.count > 1`) gains a `force: Bool = false` param and a return result (closed/refused); it **refuses closing the last `.chatRoom`** unless `force`. It is **synchronous and runs no git/filesystem** (see two-phase cleanup below). `canCloseWorkspace` stays a UI affordance only. Audit every direct caller as force/non-force:
 
   | Caller | Path | Default |
   |---|---|---|
-  | `TerminalController:18104` | socket `close_workspace` | non-force |
-  | `TerminalController:1450,4426` | socket dispatch | non-force |
+  | `TerminalController:18104,1450,4426` | socket | non-force |
   | `TerminalController:6810` | `workspace.unpin.related_workspaces` | non-force |
   | `AppleScriptSupport:473,624` | AppleScript | non-force |
-  | `CmuxConfigExecutor:508` | config replace | **force** (bootstrap/replace) |
+  | `CmuxConfigExecutor:508` | config replace | **force** |
   | `TabManager:5337,5343` | `closeTab` / `closeCurrentWorkspace` | non-force |
-  | `TabManager:4430,5498,5744` | group delete / post-confirm batch | non-force; group delete = close that room |
+  | `TabManager:4430,5498,5744` | (legacy group delete / batch — N/A, rooms don't use groups) | n/a |
   | `TabManager:6040,7812,7816` | internal cleanup / teardown | **force** |
 
-- **`tabs.count > 1` interaction:** the keep-≥1-room invariant means a window always retains one chat room, so the guard never strands the last *agent* tab. **Close-all / window-teardown `force`-closes rooms last.** Reuse the existing **group-delete** path (`TabManager:4430`) as "close room": deleting a group = closing its room.
-- Agent tabs: confirm-on-close when `running`; pending/held outcomes → `.tabClosed`; removed from roster. Closing an agent never erases its past messages (identity snapshots persist).
-- **Worktree cleanup (refcounted, §4.9 registry):**
-  - On closing a tab, drop it from its worktree's referrer set. **Only when that set becomes empty** (last tab on a cmux-created worktree) consider removal — so closing one of several agents sharing a worktree never pulls it out from under the others.
-  - When it does empty: `git worktree remove` (prune the branch only if cmux-created and merged/empty). **Guard first:** uncommitted changes or unpushed commits → do **not** auto-remove; confirm and default to *keep* (surface the dirty/unpushed state). Clean → remove (standard close confirm).
-  - A tab in a **non-cmux-created** directory has no registry entry → close the tab only; **touch no files**.
-  - Closing a **chat room** cascades to its group; apply the above per tab, and **batch** the resulting worktree confirmations (one summary listing dirty/unpushed worktrees) rather than N dialogs.
+**`closeRoom(id)` flow (dedicated):** enforce keep-≥1-room **before** any mutation; resolve the room's agent members up front (snapshot the set); run the **two-phase worktree cleanup** (below) for those agents; close each agent member; then close the room workspace (`force`). Close-all / window-teardown `force`-closes rooms last. **Close = archive:** the room's history file is retained on disk keyed by `ChatRoomID`; **v1 has no reopen UI** (retained for a future feature — there is *no* "re-openable by id" promise in v1, so nothing dangles). Confirm if any member agent is `running`.
+
+**Two-phase, async worktree cleanup (git off the `@MainActor` mutator).** Removal must never run inside the synchronous close mutator. A `WorktreeService` (`actor`, async) does the git work; close is request→confirm→commit:
+1. **Request (off-mutator):** for each closing agent, drop it from its `cmuxCreatedWorktreeID` referrer set; collect worktrees whose refcount hit zero.
+2. **Inspect + confirm:** the service checks each zero-refcount worktree for **uncommitted** (`isDirty`, exists in CmuxGit) and **unpushed** (`git rev-list --count @{u}..HEAD` + no-upstream handling — **net-new CmuxGit plumbing**, §2). Dirty/unpushed → **do not remove**, surface state, default *keep*. Clean → confirm (batched into one summary when a whole room closes).
+3. **Commit (async):** `git worktree remove` the confirmed-clean worktrees; the tab/room close itself already completed synchronously.
+A tab in a **non-cmux-created** directory has no id → close only, **touch no files**. Pending/held outcomes for a closing agent → `.tabClosed`; past messages persist.
+
+> **v1 scope note (gate):** if the `@{u}..HEAD` ahead/behind plumbing slips, v1 cleanup is **dirty-only** with an explicit "unpushed not checked yet" warning in the confirm — never a silent degrade.
+  - Closing a **chat room** cascades to its member agents; apply the above per tab, and **batch** the resulting worktree confirmations (one summary listing dirty/unpushed worktrees) rather than N dialogs.
 
 ### 4.11 Persistence + migration
 `ChatHistoryStore` (actor-backed repository, JSON under Application Support). Stores all exchanges/replies with embedded `AgentIdentitySnapshot`; supports **paged reads** for "Load earlier" (§3.9) and bounded initial load.
 **History keys off `ChatRoomID`** — the room is a first-class, persisted entity with its own stable id, so the old "what id survives restore?" problem is gone. Each room's history file is keyed by its `ChatRoomID`.
 Session snapshots gain explicit fields (migration defaults for old data):
-- **Rooms list** — the set of `ChatRoom`s (`id`, `name`, `groupId`) and which is active, persisted with the window/session. (Migration: an existing session with no rooms gets one default room whose group is a new group containing its agent tabs.)
-- `SessionWorkspaceSnapshot.role: WorkspaceRole?` (default: `.chatRoom` if it was the room workspace, else `.agent`) and the agent **kind** on the panel/agent snapshot (`SessionTerminalPanelSnapshot.agent` extended or sibling). `groupId` is already persisted (`SessionWorkspaceSnapshot.groupId`).
-- **Worktree registry** (§4.9/§4.10): persist the set of cmux-created worktrees (path + branch) and which agent tabs reference each, so the refcounted cleanup survives restart. A tab with no registry entry ⇒ no cleanup (safe default for migrated/legacy tabs). On restore, rebuild referrer sets from restored tabs' cwds.
-On restore: rebuild rooms from the persisted list; bind each to its `groupId`; re-derive each room's roster from restored agent workspaces' `groupId`; reconnect each room's history by `ChatRoomID`. Without role/kind, restored agent tabs would lose kind/badges and their room binding — required, not optional.
+- **Rooms list** — the `ChatRoom`s (`id`, `name`) + which is selected, persisted with the window/session. (Migration: a pre-rooms session gets one default room; its existing agent tabs are stamped with that room's `id`.)
+- `SessionWorkspaceSnapshot.role: WorkspaceRole` (default `.agent`; `.chatRoom` for the room workspace) and, on `.agent`, the **`roomID`** and **`AgentKind`**. (`roomID` replaces any reliance on the existing `groupId`.)
+- **Worktree registry** — persisted **top-level on `AppSessionSnapshot`** (`SessionPersistence.swift:1859`), keyed by **path** (branch + the set of referencing tab ids), matching the refcount's path-keyed shape (not duplicated per workspace). Each `.agent` snapshot persists its **`cmuxCreatedWorktreeID`** (or none).
+- **Restore the refcount from the persisted ids, NOT live cwd.** `currentDirectory` is OSC-7-mutable (`Workspace.swift:12205`) and unreliable; rebuilding referrer sets from cwd would under/over-count and remove a still-used worktree. Rebuild strictly from each tab's persisted `cmuxCreatedWorktreeID`.
+On restore: rebuild rooms from the persisted list; re-derive each room's roster from restored `.agent` workspaces' `roomID`; reconnect each room's history by `ChatRoomID`; rebuild the worktree registry from persisted ids. Without role/kind/roomID, restored agent tabs would lose their room binding and badges — required, not optional.
 
 ### 4.12 Data flow
 
 ```mermaid
 flowchart LR
-  U[Human in active room] -- "@mention / forward / quote (scoped to room group)" --> CO[RoomsCoordinator]
+  U[Human in active room] -- "@mention / forward / quote (scoped to room agents)" --> CO[RoomsCoordinator]
   CO -- "inject body + hidden ChatRequestID marker (held if needsInput)" --> SURF[Agent terminal surface]
   SURF --> AG[Agent CLI]
   AG -- "existing hooks: prompt-submit(raw toolInputJSON) / stop(last_assistant_message)" --> HK[cmux hooks route]
@@ -437,29 +448,32 @@ Vertical slice: Claude Code end-to-end *before* Codex/Cursor. Two-commit red/gre
 
 0. **Existing-infra audit + gates (no code).** Produce a findings note that confirms/adjusts §4.3–§4.11 and resolves these before any code:
    - **Gate G1 (go/no-go): can codex and cursor return their final message?** Confirm `stop` carries it, or that it's recoverable from `RestorableAgentSession.transcriptPath`. **Size the transcript fallback** (locate/tail transcript, parse last assistant turn, map session→surface); if needed it becomes its own step before that agent ships. An agent that can do neither is **out of v1** (explicit).
-   - **Marker encoding** — fix a concrete token that round-trips through `toolInputJSON` and that Claude/codex/cursor each tolerate (test all three); per-agent degraded fallback (§4.6) where it can't.
+   - **Marker encoding (hard gate, no fallback)** — fix a concrete token that round-trips through `toolInputJSON` and that Claude/codex/cursor each tolerate (test all three). An agent where it can't round-trip is **not chat-supported** (excluded from `@`), not degraded (§4.6).
    - **`surface_id` threading** — where it's available at the hook layer (`CLI/cmux.swift:205`) and how to add it to `WorkstreamEvent`/`feed.push` without breaking existing consumers.
-   - **Identifier mapping** — confirm one-agent-per-tab, the `AgentID ↔ (panelId, agentName)` resolution, and the `groupId ↔ ChatRoomID` binding (§4.3).
-   - **Existing group API** — confirm `WorkspaceGroup` supports programmatic create/rename/move-member/delete and exposes membership + ordering for the bottom section + room binding (§4.8).
+   - **Identifier mapping** — confirm one-agent-per-tab and `AgentID ↔ (panelId, agentName)`; `roomID` is a new non-optional field on `.agent` workspaces (§4.3).
+   - **Design the two-section sidebar split** — `SidebarWorkspaceRenderItem` is flat today; design the section-aware renderer (top `.chatRoom`, bottom `.agent` grouped by `roomID`) + section-aware drag. This is **net-new work**, not group reuse (§4.8).
+   - **Workspace-creation policy audit** — enumerate every `addWorkspace`/workspace-creation entrypoint (`TabManager.swift:2605`, …); route all through the policy that stamps role+kind+roomID, or disable in chat-room mode (§4.9).
+   - **`git` ahead/behind plumbing** — size `rev-list --count @{u}..HEAD` (+ no-upstream) in CmuxGit (net-new); decide prereq-step vs v1 dirty-only-with-warning (§4.10).
+   - **Close-caller audit** — re-grep every direct `closeWorkspace` caller; label force/non-force; confirm `closeRoom` is a dedicated flow (NOT `deleteWorkspaceGroup`) (§4.10).
    - **Hook-install mechanisms** — Claude/OMP (self-managed) vs `AgentHookDef` table (codex/cursor); the bridge handles both.
-   - **Close-caller audit** — re-grep every direct `closeWorkspace` caller; label force/non-force; confirm group-delete (`TabManager:4430`) is the "close room" path (§4.10).
-   - Plus: that `prompt-submit` fires for *injected* input per agent, and the CI package-test list. (History key is now `ChatRoomID` — resolved, no longer a gate.)
+   - Plus: that `prompt-submit` fires for *injected* input per agent, and the CI package-test list. (History key is now `ChatRoomID` — resolved.)
 1. **Scaffold packages.** `CmuxChatRoomCore`, `CmuxChatRoom`, `CmuxChatRoomUI` (+ Swift Testing targets). Add all three to `.github/workflows/ci.yml` `PACKAGES`. Wire any app-target test files into `project.pbxproj`; run `normalize-pbxproj.py` + `check-pbxproj.sh`.
 2. **Core model.** §4.3 DTOs + `ChatPromptMarker` + protocol seams in `CmuxChatRoomCore`. Unit-test `ChatPromptMarker.inject`/`extract` round-trip incl. multiline/forward bodies.
-3. **`RoomsCoordinator` + correlation (pure).** Implement §4.6 against fakes (multi-room). **Correlation tests first (red/green):** direct turn dropped; direct completes-first while chat pending; **byte-identical direct prompt (no marker) does not bind**; marker bind/strip; FIFO pairing per surface; **completion routes to the originating room (not the active room)**; **`@all` resolves only the active room's group**; **needs-input hold then flush**; forward/quote; resolve-at-send-time.
+3. **`RoomsCoordinator` + correlation (pure).** Implement §4.6 against fakes (multi-room). **Correlation tests first (red/green):** direct turn dropped; direct completes-first while chat pending; **byte-identical direct prompt (no marker) does not bind**; marker bind/strip; FIFO pairing per surface; **completion routes to the originating room (not the active room)**; **`@all` resolves only the active room's agents** (role+roomID+chat-supported); **agent moved mid-flight → reply still lands in originating room**; **needs-input hold then flush**; forward/quote; resolve-at-send-time.
 4. **Persistence.** `ChatHistoryStore` actor + JSON + paged reads; round-trip + migration tests (injected temp dir).
 5. **`surface_id` + raw-event hook bridge.** Extend `WorkstreamEvent`/`feed.push` with `surface_id`; tap **raw decoded events before EventBus redaction**; map `prompt-submit`(raw `toolInputJSON`)/`stop` → `AgentTurnEvent`. Lifecycle read-only seam over `agentLifecycleStatesByPanelId`; injection seam over `surface.send_text` (multi-line safe, non-focus-stealing).
 6. **Claude Code end-to-end** via `CMUXAgentLaunch`: create agent tab → `@` → inject body + marker → bound via marker at `prompt-submit` → `stop` final message → channel reply. Verify marker is stripped from the displayed reply path.
-7. **Two-section sidebar + rooms (§4.8).** Top chat-rooms section over the existing grouped agents section; `WorkspaceRole`; room create/rename/select bound to `WorkspaceGroup` create/rename; active-room selection; drag-to-move agent between groups = reassign room.
-8. **Chat-room panel + UI.** `ChatRoomPanel` shell + `ChatRoomView` for the active room (windowed snapshot-fed exchanges, "Load earlier", group-scoped `@` autocomplete §3.10, forward composer, **quote-into-composer + copy** §3.7, full messages, progress + needs-input/held status, jump-to-tab, a11y/reduced-motion).
-9. **Agent tab UX.** `AgentKind`; auto-name; three-line sidebar + lifecycle badge; inline rename via existing `customTitle` action.
-10. **Create-agent + worktree sheet** with failure states (§4.9); creates into the active room's group.
-11. **Close policy (§4.10)** — `force:` flag in `TabManager.closeWorkspace`; keep-≥1-room; group-delete = close room (+ its agents); verify via direct call, AppleScript, config replace, socket, palette/menu, bulk.
-12. **Notifications** split (completion→originating room badge, needs-input→agent tab).
-13. **Persistence/restore (§4.11)** — rooms list + room↔group binding + role/kind migration; per-room history by `ChatRoomID`; roster re-derivation by `groupId`.
-14. **Codex adapter** — **blocked on gate G1**; wire `stop`→final-message (or the sized transcript fallback if G1 requires it); degrade gracefully. Codex is the reviewer half of the core use case, so this is the first non-Claude milestone with real product value.
-15. **Cursor adapter** — same; subject to G1; document limitations.
-16. **Localization + audit**; **DocC** on public symbols; package READMEs.
+7. **Two-section sidebar renderer + rooms (§4.8) — net-new.** Section-aware renderer (top `.chatRoom`, bottom `.agent` grouped by `roomID`); `WorkspaceRole` + non-optional `roomID`; room create/rename; **room = selected `.chatRoom` workspace** (reuse tab selection); section-aware drag-to-move = rewrite `roomID`; disable legacy ungroup paths; snapshot-fed room rows.
+8. **Chat-room panel + UI.** `ChatRoomPanel` shell + `ChatRoomView` for the selected room (windowed snapshot-fed exchanges, "Load earlier", room-scoped `@` autocomplete §3.10, forward composer, **quote-into-composer + copy** §3.7, full messages, progress + needs-input/held status, jump-to-tab, a11y/reduced-motion).
+9. **Agent tab UX + creation policy (§4.9).** Central creation policy stamping role+kind+roomID over all `addWorkspace` paths; `AgentKind`; auto-name; three-line sidebar + lifecycle badge; inline rename via existing `customTitle`.
+10. **Create-agent + worktree sheet** with failure states (§4.9); creates into the selected room; registers `cmuxCreatedWorktreeID`.
+11. **Close policy (§4.10).** `force:` flag in `TabManager.closeWorkspace` (sync, no git); dedicated `closeRoom` flow (keep-≥1, members up front); two-phase async `WorktreeService` cleanup; verify via direct call, AppleScript, config replace, socket, palette/menu, close-all.
+12. **`WorktreeService` + ahead/behind plumbing.** `actor` for `git worktree remove` + dirty/unpushed inspection; add `rev-list --count @{u}..HEAD` to CmuxGit (or v1 dirty-only-with-warning).
+13. **Notifications** split (completion→originating room badge, needs-input→agent tab).
+14. **Persistence/restore (§4.11)** — rooms list + per-`.agent` `roomID`/kind + role migration; per-room history by `ChatRoomID`; worktree registry top-level keyed by path; refcount restored from persisted `cmuxCreatedWorktreeID` (never cwd).
+15. **Codex adapter** — **blocked on gate G1** (final-message capture) **and the marker gate**; wire `stop`→final-message (or the sized transcript fallback); if either gate fails, Codex is not chat-supported until resolved. Codex is the reviewer half of the core use case — first non-Claude milestone with real product value.
+16. **Cursor adapter** — same; subject to G1 + marker gate; document limitations.
+17. **Localization + audit**; **DocC** on public symbols; package READMEs.
 
 ---
 
@@ -485,18 +499,20 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 - `loadEarlier()` pages older exchanges; window bound respected.
 
 **Rooms / scoping (the pivot):**
-- `@all` in room A resolves **only A's group**; an agent in room B is not offered and not targeted.
-- A completion from an agent in room B **routes to B's channel**, even while room A is active.
+- `@all` in room A resolves **only A's agents** (role `.agent` + `roomID==A` + chat-supported); an agent in room B is not offered or targeted; a `.chatRoom` workspace is never in any roster.
+- A completion from an agent in room B **routes to B's channel**, even while room A is selected.
 - Isolation: a prompt in room A never appears in room B's history.
-- Membership: each agent has exactly one `groupId`→room; moving an agent to another group reassigns its room; an agent with an unknown/missing group is excluded (no crash).
-- Close room (not last) → its agents close; its history is retained and re-loads by `ChatRoomID`. Closing the **last** room is refused (keep ≥1).
-- **Worktree cleanup** (through an injected `WorktreeManaging` seam — fakeable, no real git): closing the **last** tab on a **clean** cmux-created worktree calls remove; a worktree **shared by 2 tabs** → remove is called only after **both** close, never on the first; **dirty/unpushed** → remove NOT called, user prompted, default keep; a tab in a **non-cmux-created** dir → remove never called (no filesystem touch); closing a room batches its worktree confirmations.
+- Membership: each agent has exactly one non-optional `roomID`; moving an agent to another room rewrites `roomID`; **an in-flight turn still routes to the originating room after a move**.
+- Unsupported agent (marker can't round-trip / unknown kind) is **excluded from `@`/`@all`**, never silently degraded.
+- Close room (not last) → its member agents close; its history is **archived** (retained by `ChatRoomID`). Closing the **last** room is refused (keep ≥1).
 
-**Lifecycle + identifier mapping:** badge/progress/needs-input derive from the existing lifecycle seam (assert via fake store) — no second source. The seam resolves `AgentID → (panelId, agentName)` correctly (assert mapping); a panel reporting an **unknown/unsupported agent name** → tab flagged unsupported, excluded from the `@` roster, **no crash**; a panel reporting **multiple** agent names → flagged unsupported (one-agent-per-tab invariant).
+**Worktree cleanup** (through the async `WorktreeService` seam — fakeable, no real git): closing the **last** tab referencing a **clean** cmux-created worktree id triggers remove; a worktree id **shared by 2 tabs** → remove only after **both** close, never on the first; **dirty/unpushed** → remove NOT called, prompted, default keep; a tab with **no** worktree id → remove never called (no filesystem touch); cleanup runs **off the sync close mutator** (request→confirm→commit); a room close batches its confirmations.
 
-**Persistence/migration:** round-trip rooms list + room↔group binding + exchanges/snapshots; history reloads per `ChatRoomID`; old (pre-rooms) snapshot migrates to one default room over a group of its agents; old snapshot without role/kind restores with correct defaults; closed-agent history renders; paged reads.
+**Lifecycle + identifier mapping:** badge/progress/needs-input derive from the existing lifecycle seam (assert via fake store) — no second source. The seam resolves `AgentID → (panelId, agentName)` correctly; a panel with an **unknown/multiple** agent name → flagged unsupported, excluded from `@`, **no crash**.
 
-**Close policy (app-target, through real entrypoints):** the **last** `.chatRoom` cannot close via **direct `TabManager.closeWorkspace(force:false)`**, sidebar X, ⌘W/menu, command palette, **socket `closeWorkspace`**, AppleScript, config replace, or bulk/`close-all`; the internal `force:true` teardown path *can*. A **non-last** room closes (group-delete path) and closes its agents; its history persists and reloads by id. Close-all / window-teardown force-closes rooms last; no orphaned history. Agent confirm-on-close when `running`.
+**Persistence/migration:** round-trip rooms list + per-`.agent` `roomID`/kind/role + exchanges; history reloads per `ChatRoomID`; pre-rooms snapshot migrates to one default room (agents stamped with its id); **worktree refcount rebuilt from persisted `cmuxCreatedWorktreeID`, and a tab whose live cwd changed (OSC-7) still restores the correct reference**; paged reads.
+
+**Close policy (app-target, through real entrypoints):** the **last** `.chatRoom` cannot close via **direct `closeWorkspace(force:false)`**, sidebar X, ⌘W/menu, palette, **socket**, AppleScript, config replace, or `close-all`; `force:true` teardown *can*. A **non-last** `closeRoom` closes its member agents and archives history. Close mutator runs **no git** (cleanup is async/two-phase). Agent confirm-on-close when `running`.
 
 **Hook bridge (integration):** crafted raw `prompt-submit`(with marker)/`stop` events carrying `surface_id` drive the coordinator; marker recovered from `toolInputJSON`; `last_assistant_message` decoded verbatim; events read pre-redaction; malformed input rejected without crash; no focus change.
 
@@ -505,7 +521,7 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 ### 6.2 Manual acceptance (验收 — UX only)
 `./scripts/reload.sh --tag chat-room`. Confirm:
 1. Sidebar shows two sections — chat rooms on top, grouped agents below. Create a second room; rename a room; each room is colored.
-2. Create agent tabs into a room's group (Claude/Codex/Cursor): auto-name; show ~pwd + branch (own line); **rotating** spinner while running (static glyph under Reduce Motion); each appears under its room's group.
+2. Create agent tabs into a room (Claude/Codex/Cursor): auto-name; show ~pwd + branch (own line); **rotating** spinner while running (static glyph under Reduce Motion); each appears under its room in the bottom section.
 3. Double-click an agent title → inline rename; pwd/branch read-only.
 4. In room A, `@claude-code-1 <prompt>` → appears in that tab, runs; on finish **only the final message** posts to **room A's** channel, stamped name + ~pwd + branch.
 5. Type directly in an agent tab → its final message does **not** appear in any channel (even if it finishes before an in-flight chat prompt, and even byte-identical text).
@@ -514,13 +530,13 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 8. Permission prompt in one agent → **needs-input** (amber, text label) + notifies that tab; channel does not ring. `@`-sending to it **holds** ("waiting — needs input"); answer it → held message delivers and its reply returns.
 9. Forward a reply with a note → target gets `"quoted"` + note; reply chains into a new exchange. **Quote-into-composer** drops quoted text into your composer as a draft; **copy** copies raw text; go-to-tab works. Long messages render in full.
 10. New-agent sheet failure paths surface inline (branch collision, missing CLI, worktree failure) — no half-created tab; created into the active room.
-11. New agent in a **new worktree** → branch/worktree created; tab shows new branch, under the active room's group.
+11. New agent in a **new worktree** → branch/worktree created; tab shows new branch, under the active room.
 12. **Cross-room:** while viewing room A, a reply lands in room B → room B shows an unread badge; switching to B shows it. No leakage into A.
-13. **Move:** drag an agent from room A's group to room B's → it's now reachable from B's `@`, not A's.
-14. Close a running agent → confirm; gone from its room's `@`/`@all`; past messages remain. Close a non-last room → its agents close, its history persists (re-openable); the last room can't be closed.
+13. **Move:** drag an agent from room A to room B → reachable from B's `@`, not A's. If it had an in-flight A-prompt, that reply still lands in **A**.
+14. Close a running agent → confirm; gone from its room's `@`/`@all`; past messages remain. Close a non-last room → its agents close, its history is archived (last room can't be closed).
 14b. **Worktree cleanup:** close the *last* agent on a clean *new worktree* → worktree removed. With **two** agents sharing one worktree, closing the first leaves it; closing the second removes it. **Uncommitted/unpushed** → prompted, worktree **kept** by default. Agent in an *existing (non-cmux) dir* → tab closes, **no files touched**.
 15. Long channel → only a recent window renders; **"Load earlier"** pages history.
-16. Restart → rooms + per-room history persist (incl. since-closed agents); agent tabs restore under their groups with kind/badges and reappear in the right room's `@all`.
+16. Restart → rooms + per-room history persist (incl. since-closed agents); agent tabs restore under their rooms with kind/badges and reappear in the right room's `@all`; a worktree-backed agent that had `cd`-ed elsewhere still cleans up correctly on a later close.
 17. Notifications: a room badges for its replies (when not active); agent tab for needs-input; no double-ring.
 
 ---
@@ -529,12 +545,12 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 
 Resolved in rev 3–4 (round-2/3 feedback): correlation is a **hidden `ChatRequestID` marker only** — exact-text fully removed from the design (B1, confirmed clean: `rg` finds no `exactText`/`exact-text` in the body); `surface_id` carried end-to-end, events read **pre-redaction** (§4.4); close gate at the **lowest mutator** with `force:` + a full caller-audit table and the `tabs.count`/close-all interaction (§4.10); `needsInput` targets **held, not blind-injected** (§3.11/§4.6); **identifier-mapping table** for `AgentID`/`SurfaceID`/`panelId`/`agentName` (§4.3/§4.5); `AgentKind` unsupported-agent path; **two hook-install mechanisms** (Claude/OMP vs table) documented (§4.4).
 
-Resolved by the rev-5 multi-room pivot: **history key** is now the room's own `ChatRoomID` (no window/session-id guessing); `@all` scope and worktree isolation are structural (per-room group).
+Resolved by rev-8 (round-4 feedback): the **room model no longer uses `WorkspaceGroup`** — room = `.chatRoom` workspace, membership = non-optional `roomID` on agents (no anchor/contiguity/empty-group/ungroup problems); marker is a **hard support gate** (degraded fallback removed); **dedicated `closeRoom`** flow (not `deleteWorkspaceGroup`), close = archive (no v1 reopen UI); worktree cleanup is **two-phase async** off the sync mutator; refcount restored from a **persisted `cmuxCreatedWorktreeID`**, not cwd; central **creation policy**; **move-mid-flight** rule; **roster rule**; snapshot-boundary on room rows; isolation reworded to mention-scope.
 
-Remaining — the real risks now live in **Step 0 gates**, not the design body:
-- **G1 — can the reviewer return text? (biggest risk.)** Final-message capture is verified **only for Claude via OMP**; codex/cursor are unconfirmed. The product has no value until Codex can post review text. G1 must confirm `stop`-carries-message or size the transcript fallback (`RestorableAgentSession.transcriptPath`) before the Codex adapter ships. Transcript fallback acceptable for v1, or restrict to agents that carry the message?
-- **Marker viability (Step 0):** a token that survives `toolInputJSON`, strips before display/forward, and doesn't derail Claude/Codex/Cursor. Right form? Per-agent degraded fallback acceptable where it can't?
+Remaining — risks live in **Step 0 gates**, not the design body:
+- **G1 — can the reviewer return text? (biggest risk.)** Final-message capture verified **only for Claude via OMP**; codex/cursor unconfirmed. G1 must confirm `stop`-carries-message or size the transcript fallback before the Codex adapter ships. Transcript fallback acceptable for v1, or restrict to message-carrying agents?
+- **Marker viability (Step 0):** a token that survives `toolInputJSON`, strips before display/forward, and doesn't derail Claude/Codex/Cursor. Right form? (No fallback now — failure ⇒ agent excluded from `@`.)
 - **`surface_id` threading:** is extending `WorkstreamEvent`/`feed.push` the right layer; does any consumer assume the current schema?
-- **Group API sufficiency:** does `WorkspaceGroup` expose programmatic create/rename/move-member/delete + membership/order for the room binding (§4.8), or is new group API needed?
-- **Room↔group lifetime:** on close, retain a room's history for re-open (proposed) vs purge — and is "delete group = close room" the right reuse, given group-delete's existing anchor-close confirmation (`TabManager:5768`)?
-- **`WorkspaceRole` + room model placement:** `WorkspaceRole` on `Workspace` + a persisted rooms list as proposed, or model the chat room as a distinct workspace subtype?
+- **ahead/behind plumbing:** add `rev-list --count @{u}..HEAD` to CmuxGit as a prereq, or ship v1 cleanup **dirty-only with an explicit warning**? (Your call on scope.)
+- **Two-section renderer scope:** the new section-aware sidebar (split + section-aware drag) is real work, not reuse — confirm the §4.8 approach (room = `.chatRoom` workspace rendered in the top section) vs modeling rooms as non-workspace entities.
+- **User-visible calls I made (veto if wrong):** (a) close = **archive without a reopen UI** in v1 (history kept on disk, no way to reopen yet); (b) an agent failing the marker/G1 gate is **excluded from `@`** (still usable directly) rather than degraded.
