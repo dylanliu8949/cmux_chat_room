@@ -35,7 +35,7 @@ These beliefs are *requirements in disguise*; the product must protect them:
 
 ### What we're building
 
-A fork of **cmux** (native macOS terminal app with vertical tabs) turned into an **AI chat room**: a Slack-like sidebar with **multiple chat rooms** (top section) over **grouped agent terminal tabs** (bottom section). Each chat room corresponds 1:1 to an agent group; you `@mention` agents to send prompts, each agent's *final* message returns to its room, and you forward messages between agents — while every agent tab remains a fully interactive coding-agent terminal.
+A fork of **cmux** (native macOS terminal app with vertical tabs) turned into an **AI chat room**: a Slack-like sidebar with **multiple chat rooms** (top section) over **agent terminal tabs grouped by their room** (bottom section). Each agent belongs to exactly one room (via a `roomID`); you `@mention` agents to send prompts, each agent's *final* message returns to its room, and you forward messages between agents — while every agent tab remains a fully interactive coding-agent terminal.
 
 Multiple rooms in one window replace Dylan's current habit of **one macOS desktop per worktree** (constant Spaces-switching, or one cmux instance per worktree). Now a single instance holds a room per worktree/feature, and `@all` stays scoped to that room's agents — so parallel worktrees don't interfere.
 
@@ -183,15 +183,17 @@ Dependency direction is strictly downward: `CmuxChatRoomUI → CmuxChatRoom → 
 ```swift
 public struct AgentID: Hashable, Sendable, Codable { public let raw: UUID }      // = agent workspace/tab id
 public struct SurfaceID: Hashable, Sendable, Codable { public let raw: UUID }    // agent's terminal surface
-public struct ChatRoomID: Hashable, Sendable, Codable { public let raw: UUID }   // == the room workspace's id
+public struct ChatRoomID: Hashable, Sendable, Codable { public let raw: UUID }   // STABLE, persisted; NOT a Workspace.id
 public struct ChatRequestID: Hashable, Sendable, Codable { public let raw: UUID } // correlation token
 public struct MessageID: Hashable, Sendable, Codable { public let raw: UUID }
 public struct ExchangeID: Hashable, Sendable, Codable { public let raw: UUID }
 
-/// A chat room: a named channel. Backed by a `.chatRoom` workspace (its `id` == that workspace's id).
-/// Membership is NOT a WorkspaceGroup — it's the set of agent workspaces whose `roomID == this.id`.
+/// A chat room: a named channel. Backed by a `.chatRoom` workspace that carries `chatRoomID` as a
+/// **stable persisted field** (NOT the workspace's `id`, which is re-minted on restore —
+/// `Workspace.id = UUID()` in init, restore creates fresh workspaces, `TabManager.swift:9620`).
+/// Membership is the set of agent workspaces whose `roomID == this.id` (no `WorkspaceGroup`).
 public struct ChatRoom: Sendable, Codable, Identifiable {
-    public let id: ChatRoomID        // == the backing .chatRoom workspace id
+    public let id: ChatRoomID        // stable; == the backing workspace's persisted `chatRoomID`
     public var name: String          // renameable
 }
 
@@ -262,14 +264,14 @@ public enum ChatPromptMarker {
 
 | Coordinate | Type | Meaning | Owner |
 |---|---|---|---|
-| `ChatRoomID` | `UUID` | a chat room; **== the backing `.chatRoom` workspace id** | `RoomsCoordinator` (§4.6) + `TabManager` |
-| `AgentID` | `UUID` | the agent **tab/workspace** id | `TabManager` |
-| `roomID` | `ChatRoomID` | **non-optional** on each `.agent` workspace — its room membership | `Workspace` (new field) |
+| `ChatRoomID` | `UUID` | a chat room — a **stable persisted id**, distinct from any workspace id | persisted on the `.chatRoom` workspace |
+| `AgentID` | `UUID` | the agent **tab/workspace** id (re-minted on restore; never used to key history) | `TabManager` |
+| `roomID` | `ChatRoomID` | **non-optional** on each `.agent` workspace — its room membership (references the stable `ChatRoomID`) | `Workspace` (new field) |
 | `SurfaceID` | `UUID` | the agent's **terminal surface** (= cmux `panelId`) | `Workspace.panels` |
 | `panelId` | `UUID` | key of the existing lifecycle store | `Workspace.agentLifecycleStatesByPanelId` |
 | `agentName` | `String` | inner key of the lifecycle store (`"claude_code"`, …); a panel may hold several | the agent CLI / hook |
 
-**Room ↔ membership:** a room's agents = live `.agent` workspaces with `roomID == room.id`. **No `WorkspaceGroup`, no separate `groupId`** — the `.chatRoom` workspace's id *is* the `ChatRoomID`, so room identity is unambiguous.
+**Room ↔ membership:** a room's agents = live `.agent` workspaces with `roomID == room.id`. **No `WorkspaceGroup`, no separate `groupId`.** The `ChatRoomID` is a stable persisted id carried by the `.chatRoom` workspace (not its re-minted `id`), and agents' `roomID` references it — so room identity and history survive restart.
 **v1 constraints:** one agent per agent-tab (so `SurfaceID == panelId`; lifecycle lookup `agentLifecycleStatesByPanelId[panelId][agentName]`), and one agent → one room (`roomID` non-optional). The `AgentRosterProviding`/`AgentLifecycleReading` seams own the `AgentID ↔ (panelId, agentName)` map; a panel reporting multiple agent names → tab flagged unsupported, not guessed.
 
 ### 4.4 Reuse the existing hook pipeline (no new transport)
@@ -304,28 +306,43 @@ The seam performs the identifier mapping from §4.3: for an agent tab it resolve
 
 ### 4.6 Coordinator + marker correlation + needs-input hold (`CmuxChatRoom`, `@MainActor @Observable`)
 
+**Single source of truth (same pattern as lifecycle §4.5 and roster §4.7).** Room *identity, list, and selection are owned by the app/`TabManager`* (rooms are `.chatRoom` workspaces; the active room = the selected `.chatRoom` workspace). The coordinator does **not** own a `rooms` array or an `activeRoom` flag — it **derives** them through read seams and **mutates** room workspaces through a managing seam. It owns only channel/correlation/history state.
+
 ```swift
-/// Owns all chat rooms; correlation queues are global (a surface belongs to one agent in one room).
+/// Read seam: rooms + active room, derived from the live `.chatRoom` workspaces (app-implemented).
+public protocol RoomWorkspaceReading: Sendable {
+    func rooms() async -> [ChatRoom]            // from live .chatRoom workspaces (id = persisted chatRoomID)
+    func activeRoomID() async -> ChatRoomID?    // from TabManager.selectedTabId
+    var changes: AsyncStream<Void> { get }      // rooms/selection changed
+}
+/// Mutation seam: room CRUD + membership, performed on app-owned workspaces (app-implemented).
+public protocol RoomWorkspaceManaging: Sendable {
+    func createRoom(name: String) async -> ChatRoomID   // creates a .chatRoom workspace w/ a fresh stable chatRoomID
+    func renameRoom(_ id: ChatRoomID, to: String) async
+    func requestCloseRoom(_ id: ChatRoomID) async -> Bool   // §4.10 flow; false if refused (keep ≥1)
+    func setRoom(of agent: AgentID, to: ChatRoomID) async   // move (sets the agent's roomID)
+}
+
 @MainActor @Observable
 public final class RoomsCoordinator {
-    public private(set) var rooms: [ChatRoom] = []
-    public private(set) var activeRoom: ChatRoomID?
-    private var byRoom: [ChatRoomID: RoomChannel] = [:]            // per-room channel state
-
+    private var byRoom: [ChatRoomID: RoomChannel] = [:]            // per-room channel state (owned here)
     // global correlation (keyed by surface / request, not by room)
     private var turnQueueBySurface: [SurfaceID: [TurnBinding]] = [:]
     private var pendingByRequest: [ChatRequestID: PendingInjection] = [:]
     private var heldForNeedsInput: [AgentID: [HeldPrompt]] = [:]   // §3.11 safety hold
 
-    private let roster: any AgentRosterProviding   // resolves a room → its live agents (by roomID)
+    private let roomsReading: any RoomWorkspaceReading   // derive rooms + active room
+    private let roomsManaging: any RoomWorkspaceManaging // create/rename/close/move
+    private let roster: any AgentRosterProviding
     private let lifecycle: any AgentLifecycleReading
     private let injector: any PromptInjecting
     private let notifier: any ChatNotifying
     private let history: any ChatHistoryStore
 
-    public func createRoom(name: String) async -> ChatRoomID { … }   // also creates the bound WorkspaceGroup
-    public func renameRoom(_ id: ChatRoomID, to: String) async { … }
-    public func closeRoom(_ id: ChatRoomID) async { … }              // §4.10; keep ≥1
+    // Room CRUD forwards to the app seam (which mutates workspaces); names persist on the workspace.
+    public func createRoom(name: String) async -> ChatRoomID { await roomsManaging.createRoom(name: name) }
+    public func renameRoom(_ id: ChatRoomID, to: String) async { await roomsManaging.renameRoom(id, to: to) }
+    public func closeRoom(_ id: ChatRoomID) async { _ = await roomsManaging.requestCloseRoom(id) }
     public func send(in room: ChatRoomID, _ body: String, to mentions: [AgentMention], origin: PromptOrigin) async { … }
     public func forward(_ message: MessageID, to: [AgentMention], note: String) async { … }
     public func handle(_ event: AgentTurnEvent) { … }               // routes via request→room map
@@ -369,7 +386,9 @@ The marker makes binding independent of prompt text, so a byte-identical direct 
 - `ChatRoomView` (`CmuxChatRoomUI`): renders the selected room's channel — windowed snapshot-fed exchanges + "Load earlier", room-scoped `@` autocomplete (§3.10), per-message **forward / quote-into-composer / copy / go-to-tab** (§3.7), full messages (§3.8), progress + needs-input/held status, markdown.
 
 ### 4.9 Create-agent + worktree sub-flow (with failure states)
-**Central creation policy (one path).** All agent-workspace creation goes through a single policy that stamps **`role = .agent`, `AgentKind`, and `roomID` (the active room)** — no workspace is created without them. The generic `addWorkspace` entrypoints (`TabManager.swift:2605`, audited in Step 0) are routed through this policy (or disabled) in chat-room builds, so there are no role-less / room-less / bash workspaces. The `.chatRoom` workspace has its own creation path.
+**Central creation policy (one path) — fail-closed.** All agent-workspace creation funnels through one policy that stamps **`role = .agent`, `AgentKind`, and a `roomID`**. `roomID` resolves to the caller's explicit room if given, else the **active room**; if neither exists the creation is **rejected** (fail-closed — keep-≥1-room makes "no active room" unreachable in practice). No workspace is ever created role-less or room-less. The `.chatRoom` workspace has its own creation path (stamps a fresh stable `chatRoomID`).
+
+`addWorkspace` (`TabManager.swift:2605`) has **~27 call sites across ~11 files** (AppleScript, config-executor, fork-conversation, detached-workspace, move-tab-to-new-workspace, session-index, CLI `workspace.create`, AppDelegate, ContentView, mobile RPC, extension APIs). **Step 0 produces an acceptance matrix** classifying every public creation surface as one of: **route** (→ agent creation with a resolved `roomID`), **disable** (refuse with a localized error in chat-room mode), or **out-of-scope** (documented). Each routed/disabled surface gets an app-target test — not just the Step-0 audit. This is a broad change; Step 9 is sized accordingly, and a single missed path is a runtime invariant violation, so the policy is enforced at the `addWorkspace` funnel itself (the one place all sites converge).
 
 "New agent" sheet: (1) kind; (2) location — *current pwd/branch* or *new worktree* (base branch + new branch + parent dir → `git worktree add <path> -b <branch> <base>`); then launch via `CMUXAgentLaunch`, auto-name, assign the active room's `roomID`.
 **Track cmux-created worktrees, refcounted, via a persisted id.** cmux maintains a registry of worktrees it created (keyed by path: branch + referrer set). Each agent tab persists a **`cmuxCreatedWorktreeID`** when launched into one (the *new worktree* path registers it; a later agent launched into the same worktree references the same id). A tab in an **existing, non-cmux-created** directory carries **no** id — never removed. Refcount = number of tabs referencing a worktree id; cleanup at zero (§4.10). The id is the durable link (NOT live cwd, which OSC-7 mutates).
@@ -393,9 +412,9 @@ The marker makes binding independent of prompt text, so a byte-identical direct 
 **`closeRoom(id)` flow (dedicated):** enforce keep-≥1-room **before** any mutation; resolve the room's agent members up front (snapshot the set); run the **two-phase worktree cleanup** (below) for those agents; close each agent member; then close the room workspace (`force`). Close-all / window-teardown `force`-closes rooms last. **Close = archive:** the room's history file is retained on disk keyed by `ChatRoomID`; **v1 has no reopen UI** (retained for a future feature — there is *no* "re-openable by id" promise in v1, so nothing dangles). Confirm if any member agent is `running`.
 
 **Two-phase, async worktree cleanup (git off the `@MainActor` mutator).** Removal must never run inside the synchronous close mutator. A `WorktreeService` (`actor`, async) does the git work; close is request→confirm→commit:
-1. **Request (off-mutator):** for each closing agent, drop it from its `cmuxCreatedWorktreeID` referrer set; collect worktrees whose refcount hit zero.
-2. **Inspect + confirm:** the service checks each zero-refcount worktree for **uncommitted** (`isDirty`, exists in CmuxGit) and **unpushed** (`git rev-list --count @{u}..HEAD` + no-upstream handling — **net-new CmuxGit plumbing**, §2). Dirty/unpushed → **do not remove**, surface state, default *keep*. Clean → confirm (batched into one summary when a whole room closes).
-3. **Commit (async):** `git worktree remove` the confirmed-clean worktrees; the tab/room close itself already completed synchronously.
+1. **Request / preview (off-mutator, NO registry mutation):** compute which `cmuxCreatedWorktreeID`s *would* reach zero referrers if the closing agents were removed — **without** mutating the referrer sets yet (so a cancelled/refused close leaves the registry untouched).
+2. **Inspect + confirm:** the service checks each would-be-zero worktree for **uncommitted** (`isDirty`, exists in CmuxGit) and **unpushed** (`git rev-list --count @{u}..HEAD` + no-upstream handling — **net-new CmuxGit plumbing**, §2). Dirty/unpushed → **do not remove**, surface state, default *keep*. Clean → confirm (batched into one summary when a whole room closes).
+3. **Commit (only after the close actually succeeds):** now decrement the referrer sets for the closed agents; for worktrees that truly reached zero **and** were confirmed clean, `git worktree remove` (async). If the close was **refused or the user cancelled**, the registry is unchanged — no drift, no rollback needed.
 A tab in a **non-cmux-created** directory has no id → close only, **touch no files**. Pending/held outcomes for a closing agent → `.tabClosed`; past messages persist.
 
 > **v1 scope note (gate):** if the `@{u}..HEAD` ahead/behind plumbing slips, v1 cleanup is **dirty-only** with an explicit "unpushed not checked yet" warning in the confirm — never a silent degrade.
@@ -403,13 +422,13 @@ A tab in a **non-cmux-created** directory has no id → close only, **touch no f
 
 ### 4.11 Persistence + migration
 `ChatHistoryStore` (actor-backed repository, JSON under Application Support). Stores all exchanges/replies with embedded `AgentIdentitySnapshot`; supports **paged reads** for "Load earlier" (§3.9) and bounded initial load.
-**History keys off `ChatRoomID`** — the room is a first-class, persisted entity with its own stable id, so the old "what id survives restore?" problem is gone. Each room's history file is keyed by its `ChatRoomID`.
-Session snapshots gain explicit fields (migration defaults for old data):
-- **Rooms list** — the `ChatRoom`s (`id`, `name`) + which is selected, persisted with the window/session. (Migration: a pre-rooms session gets one default room; its existing agent tabs are stamped with that room's `id`.)
-- `SessionWorkspaceSnapshot.role: WorkspaceRole` (default `.agent`; `.chatRoom` for the room workspace) and, on `.agent`, the **`roomID`** and **`AgentKind`**. (`roomID` replaces any reliance on the existing `groupId`.)
-- **Worktree registry** — persisted **top-level on `AppSessionSnapshot`** (`SessionPersistence.swift:1859`), keyed by **path** (branch + the set of referencing tab ids), matching the refcount's path-keyed shape (not duplicated per workspace). Each `.agent` snapshot persists its **`cmuxCreatedWorktreeID`** (or none).
-- **Restore the refcount from the persisted ids, NOT live cwd.** `currentDirectory` is OSC-7-mutable (`Workspace.swift:12205`) and unreliable; rebuilding referrer sets from cwd would under/over-count and remove a still-used worktree. Rebuild strictly from each tab's persisted `cmuxCreatedWorktreeID`.
-On restore: rebuild rooms from the persisted list; re-derive each room's roster from restored `.agent` workspaces' `roomID`; reconnect each room's history by `ChatRoomID`; rebuild the worktree registry from persisted ids. Without role/kind/roomID, restored agent tabs would lose their room binding and badges — required, not optional.
+**History keys off the stable `ChatRoomID`** — persisted on the `.chatRoom` workspace, distinct from the re-minted `Workspace.id`, so room history reconnects after restart. Each room's history file is keyed by its `ChatRoomID`.
+Session snapshots gain explicit fields (migration defaults for old data). **Rooms are NOT persisted as a separate list** (that could diverge from the workspaces) — they are **derived from the persisted `.chatRoom` workspaces**, mirroring how lifecycle/roster derive from the authoritative store:
+- `SessionWorkspaceSnapshot.role: WorkspaceRole` (default `.agent`; `.chatRoom` for a room workspace). On a `.chatRoom`: a **stable `chatRoomID`** + the room **name**. On an `.agent`: its **`roomID`** (→ a room's `chatRoomID`) and **`AgentKind`**. (`roomID` replaces any reliance on `groupId`.)
+- **Selected room** is the existing persisted selected-tab pointer (the selected `.chatRoom` workspace) — no separate active-room field.
+- **Worktree registry** — persisted **top-level on `AppSessionSnapshot`** (`SessionPersistence.swift:1859`), keyed by **path** (branch + referencing tab ids). Each `.agent` snapshot persists its **`cmuxCreatedWorktreeID`** (or none).
+- **Restore the refcount from the persisted ids, NOT live cwd** (`currentDirectory` is OSC-7-mutable, `Workspace.swift:12205`).
+Migration: a pre-rooms session gets one default `.chatRoom` workspace (fresh stable `chatRoomID`); existing agent tabs are stamped with that `roomID`. On restore: derive rooms from restored `.chatRoom` workspaces; derive each room's roster from restored `.agent` `roomID`s; reconnect history by `ChatRoomID`; rebuild the worktree registry from persisted ids. Without role/chatRoomID/roomID/kind, restored tabs lose their room binding — required.
 
 ### 4.12 Data flow
 
@@ -425,7 +444,7 @@ flowchart LR
   EX --> UI[ChatRoomView - active room, windowed]
   LC[Workspace.agentLifecycleStatesByPanelId] -- read-only seam --> CO
   CO -- "leaves needsInput → flush held prompts" --> SURF
-  TM[TabManager groups + live tabs] -- AsyncStream --> CO
+  TM[TabManager: .chatRoom + .agent workspaces, selection] -- AsyncStream --> CO
   CO -- "completion in non-active room" --> NCH[badge that room]
   LC -- needsInput --> NAG[notify agent tab]
 ```
@@ -440,27 +459,29 @@ Vertical slice: Claude Code end-to-end *before* Codex/Cursor. Two-commit red/gre
    - **Gate G1 (go/no-go): can codex and cursor return their final message?** Confirm `stop` carries it, or that it's recoverable from `RestorableAgentSession.transcriptPath`. **Size the transcript fallback** (locate/tail transcript, parse last assistant turn, map session→surface); if needed it becomes its own step before that agent ships. An agent that can do neither is **out of v1** (explicit).
    - **Marker encoding (hard gate, no fallback)** — fix a concrete token that round-trips through `toolInputJSON` and that Claude/codex/cursor each tolerate (test all three). An agent where it can't round-trip is **not chat-supported** (excluded from `@`), not degraded (§4.6).
    - **`surface_id` threading** — where it's available at the hook layer (`CLI/cmux.swift:205`) and how to add it to `WorkstreamEvent`/`feed.push` without breaking existing consumers.
-   - **Identifier mapping** — confirm one-agent-per-tab and `AgentID ↔ (panelId, agentName)`; `roomID` is a new non-optional field on `.agent` workspaces (§4.3).
-   - **Design the two-section sidebar split** — `SidebarWorkspaceRenderItem` is flat today; design the section-aware renderer (top `.chatRoom`, bottom `.agent` grouped by `roomID`) + section-aware drag. This is **net-new work**, not group reuse (§4.8).
-   - **Workspace-creation policy audit** — enumerate every `addWorkspace`/workspace-creation entrypoint (`TabManager.swift:2605`, …); route all through the policy that stamps role+kind+roomID, or disable in chat-room mode (§4.9).
+   - **ID restore semantics** — confirm `Workspace.id` is re-minted on restore (`TabManager.swift:9620`), so `ChatRoomID` must be a **separate stable persisted field** on the room workspace (not `id`); `roomID` (on `.agent`) and history both key off it (§4.3/§4.11).
+   - **Room ownership** — confirm `TabManager` can own room list + selection and expose them via `RoomWorkspaceReading`, and mutate via `RoomWorkspaceManaging`, so the coordinator derives (no duplicate room state) (§4.6).
+   - **Identifier mapping** — confirm one-agent-per-tab and `AgentID ↔ (panelId, agentName)`.
+   - **Design the two-section sidebar split** — `SidebarWorkspaceRenderItem` is flat today; design the section-aware renderer (top `.chatRoom`, bottom `.agent` grouped by `roomID`) + section-aware drag. **Net-new work**, not group reuse (§4.8).
+   - **Workspace-creation acceptance matrix** — enumerate the ~27 `addWorkspace` call sites (`TabManager.swift:2605`; e.g. `ContentView.swift:2810`, `AppDelegate.swift:4892`, `CLI/cmux.swift:5149`); classify each **route / disable / out-of-scope**; define the fail-closed default (resolve `roomID` → active room, else reject). Enforce at the `addWorkspace` funnel (§4.9).
    - **`git` ahead/behind plumbing** — size `rev-list --count @{u}..HEAD` (+ no-upstream) in CmuxGit (net-new); decide prereq-step vs v1 dirty-only-with-warning (§4.10).
    - **Close-caller audit** — re-grep every direct `closeWorkspace` caller; label force/non-force; confirm `closeRoom` is a dedicated flow (NOT `deleteWorkspaceGroup`) (§4.10).
    - **Hook-install mechanisms** — Claude/OMP (self-managed) vs `AgentHookDef` table (codex/cursor); the bridge handles both.
    - Plus: that `prompt-submit` fires for *injected* input per agent, and the CI package-test list. (History key is now `ChatRoomID` — resolved.)
 1. **Scaffold packages.** `CmuxChatRoomCore`, `CmuxChatRoom`, `CmuxChatRoomUI` (+ Swift Testing targets). Add all three to `.github/workflows/ci.yml` `PACKAGES`. Wire any app-target test files into `project.pbxproj`; run `normalize-pbxproj.py` + `check-pbxproj.sh`.
 2. **Core model.** §4.3 DTOs + `ChatPromptMarker` + protocol seams in `CmuxChatRoomCore`. Unit-test `ChatPromptMarker.inject`/`extract` round-trip incl. multiline/forward bodies.
-3. **`RoomsCoordinator` + correlation (pure).** Implement §4.6 against fakes (multi-room). **Correlation tests first (red/green):** direct turn dropped; direct completes-first while chat pending; **byte-identical direct prompt (no marker) does not bind**; marker bind/strip; FIFO pairing per surface; **completion routes to the originating room (not the active room)**; **`@all` resolves only the active room's agents** (role+roomID+chat-supported); **agent moved mid-flight → reply still lands in originating room**; **needs-input hold then flush**; forward/quote; resolve-at-send-time.
+3. **`RoomsCoordinator` + correlation (pure).** Implement §4.6 against fakes for **all** seams incl. `RoomWorkspaceReading`/`RoomWorkspaceManaging` (rooms + active room derived from the fake, room CRUD forwarded to it — no owned `rooms`/`activeRoom`). **Correlation tests first (red/green):** direct turn dropped; direct completes-first while chat pending; **byte-identical direct prompt (no marker) does not bind**; marker bind/strip; FIFO pairing per surface; **completion routes to the originating room (not the active room)**; **`@all` resolves only the active room's agents** (role+roomID+chat-supported); **agent moved mid-flight → reply still lands in originating room**; **needs-input hold then flush**; forward/quote; resolve-at-send-time.
 4. **Persistence.** `ChatHistoryStore` actor + JSON + paged reads; round-trip + migration tests (injected temp dir).
 5. **`surface_id` + raw-event hook bridge.** Extend `WorkstreamEvent`/`feed.push` with `surface_id`; tap **raw decoded events before EventBus redaction**; map `prompt-submit`(raw `toolInputJSON`)/`stop` → `AgentTurnEvent`. Lifecycle read-only seam over `agentLifecycleStatesByPanelId`; injection seam over `surface.send_text` (multi-line safe, non-focus-stealing).
 6. **Claude Code end-to-end** via `CMUXAgentLaunch`: create agent tab → `@` → inject body + marker → bound via marker at `prompt-submit` → `stop` final message → channel reply. Verify marker is stripped from the displayed reply path.
-7. **Two-section sidebar renderer + rooms (§4.8) — net-new.** Section-aware renderer (top `.chatRoom`, bottom `.agent` grouped by `roomID`); `WorkspaceRole` + non-optional `roomID`; room create/rename; **room = selected `.chatRoom` workspace** (reuse tab selection); section-aware drag-to-move = rewrite `roomID`; disable legacy ungroup paths; snapshot-fed room rows.
+7. **Rooms as workspaces + ownership seams (§4.6/§4.8).** Add `WorkspaceRole` + stable `chatRoomID` (on `.chatRoom`) + non-optional `roomID` (on `.agent`) to `Workspace`; `TabManager` impl of `RoomWorkspaceReading`/`RoomWorkspaceManaging` (room list + selection + CRUD + move). **Net-new section-aware sidebar renderer** (top `.chatRoom`, bottom `.agent` by `roomID`) + section-aware drag = rewrite `roomID`; snapshot-fed room rows; **room = selected `.chatRoom` workspace**.
 8. **Chat-room panel + UI.** `ChatRoomPanel` shell + `ChatRoomView` for the selected room (windowed snapshot-fed exchanges, "Load earlier", room-scoped `@` autocomplete §3.10, forward composer, **quote-into-composer + copy** §3.7, full messages, progress + needs-input/held status, jump-to-tab, a11y/reduced-motion).
-9. **Agent tab UX + creation policy (§4.9).** Central creation policy stamping role+kind+roomID over all `addWorkspace` paths; `AgentKind`; auto-name; three-line sidebar + lifecycle badge; inline rename via existing `customTitle`.
+9. **Creation policy + agent tab UX (§4.9) — broad change.** Enforce the fail-closed creation policy (role+kind+roomID, resolve→active-room-else-reject) at the `addWorkspace` funnel; apply the Step-0 acceptance matrix to all ~27 sites (route / disable / out-of-scope) **with per-surface app-target tests**; `AgentKind`; auto-name; three-line sidebar + lifecycle badge; inline rename via existing `customTitle`. (Size honestly — this touches ~11 files beyond `TabManager`.)
 10. **Create-agent + worktree sheet** with failure states (§4.9); creates into the selected room; registers `cmuxCreatedWorktreeID`.
 11. **Close policy (§4.10).** `force:` flag in `TabManager.closeWorkspace` (sync, no git); dedicated `closeRoom` flow (keep-≥1, members up front); two-phase async `WorktreeService` cleanup; verify via direct call, AppleScript, config replace, socket, palette/menu, close-all.
 12. **`WorktreeService` + ahead/behind plumbing.** `actor` for `git worktree remove` + dirty/unpushed inspection; add `rev-list --count @{u}..HEAD` to CmuxGit (or v1 dirty-only-with-warning).
 13. **Notifications** split (completion→originating room badge, needs-input→agent tab).
-14. **Persistence/restore (§4.11)** — rooms list + per-`.agent` `roomID`/kind + role migration; per-room history by `ChatRoomID`; worktree registry top-level keyed by path; refcount restored from persisted `cmuxCreatedWorktreeID` (never cwd).
+14. **Persistence/restore (§4.11)** — `.chatRoom` (`chatRoomID`+name) + per-`.agent` `roomID`/kind + role; **rooms derived from restored `.chatRoom` workspaces** (no separate list); per-room history by stable `ChatRoomID`; worktree registry top-level keyed by path; refcount restored from persisted `cmuxCreatedWorktreeID` (never cwd).
 15. **Codex adapter** — **blocked on gate G1** (final-message capture) **and the marker gate**; wire `stop`→final-message (or the sized transcript fallback); if either gate fails, Codex is not chat-supported until resolved. Codex is the reviewer half of the core use case — first non-Claude milestone with real product value.
 16. **Cursor adapter** — same; subject to G1 + marker gate; document limitations.
 17. **Localization + audit**; **DocC** on public symbols; package READMEs.
@@ -495,12 +516,15 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 - Membership: each agent has exactly one non-optional `roomID`; moving an agent to another room rewrites `roomID`; **an in-flight turn still routes to the originating room after a move**.
 - Unsupported agent (marker can't round-trip / unknown kind) is **excluded from `@`/`@all`**, never silently degraded.
 - Close room (not last) → its member agents close; its history is **archived** (retained by `ChatRoomID`). Closing the **last** room is refused (keep ≥1).
+- **Rooms are derived, not owned:** the coordinator's room list + active room come from the `RoomWorkspaceReading` fake; `createRoom`/`closeRoom`/`renameRoom`/move forward to the `RoomWorkspaceManaging` fake (assert the calls) — no shadow room state.
+- **Restart stability (id decoupling):** with re-minted workspace ids on restore (fake assigns new `Workspace.id`s), room history still reconnects by the stable `ChatRoomID`, and agents' persisted `roomID` still resolves to their room.
+- **Creation policy (fail-closed):** a creation with no explicit room → stamped with the active room; with no active room → **rejected** (no role-less/room-less workspace); per public surface (route/disable) behaves per the acceptance matrix.
 
-**Worktree cleanup** (through the async `WorktreeService` seam — fakeable, no real git): closing the **last** tab referencing a **clean** cmux-created worktree id triggers remove; a worktree id **shared by 2 tabs** → remove only after **both** close, never on the first; **dirty/unpushed** → remove NOT called, prompted, default keep; a tab with **no** worktree id → remove never called (no filesystem touch); cleanup runs **off the sync close mutator** (request→confirm→commit); a room close batches its confirmations.
+**Worktree cleanup** (through the async `WorktreeService` seam — fakeable, no real git): closing the **last** tab referencing a **clean** cmux-created worktree id triggers remove; a worktree id **shared by 2 tabs** → remove only after **both** close, never on the first; **dirty/unpushed** → remove NOT called, prompted, default keep; a tab with **no** worktree id → remove never called (no filesystem touch); cleanup runs **off the sync close mutator** (preview→confirm→commit). **Cancel/refuse leaves the registry unchanged** — the preview phase mutates nothing; referrer decrement happens only after the close commits. A room close batches its confirmations.
 
 **Lifecycle + identifier mapping:** badge/progress/needs-input derive from the existing lifecycle seam (assert via fake store) — no second source. The seam resolves `AgentID → (panelId, agentName)` correctly; a panel with an **unknown/multiple** agent name → flagged unsupported, excluded from `@`, **no crash**.
 
-**Persistence/migration:** round-trip rooms list + per-`.agent` `roomID`/kind/role + exchanges; history reloads per `ChatRoomID`; pre-rooms snapshot migrates to one default room (agents stamped with its id); **worktree refcount rebuilt from persisted `cmuxCreatedWorktreeID`, and a tab whose live cwd changed (OSC-7) still restores the correct reference**; paged reads.
+**Persistence/migration:** round-trip `.chatRoom` (`chatRoomID`+name) and `.agent` (`roomID`/kind/role) workspaces + exchanges; **rooms derived from restored `.chatRoom` workspaces** (no separate list); history reloads per stable `ChatRoomID` **even though `Workspace.id` is re-minted**; pre-rooms snapshot migrates to one default room (agents stamped with its `chatRoomID`); **worktree refcount rebuilt from persisted `cmuxCreatedWorktreeID`, and a tab whose live cwd changed (OSC-7) still restores the correct reference**; paged reads.
 
 **Close policy (app-target, through real entrypoints):** the **last** `.chatRoom` cannot close via **direct `closeWorkspace(force:false)`**, sidebar X, ⌘W/menu, palette, **socket**, AppleScript, config replace, or `close-all`; `force:true` teardown *can*. A **non-last** `closeRoom` closes its member agents and archives history. Close mutator runs **no git** (cleanup is async/two-phase). Agent confirm-on-close when `running`.
 
@@ -547,7 +571,7 @@ Consistent with §4–§6. **New packages** (each added to `.github/workflows/ci
 
 | Path | Kind | Contents |
 |---|---|---|
-| `Packages/CmuxChatRoomCore/` | new (Core) | DTOs (`ChatRoom`, `Exchange`, `Reply`, IDs, `AgentTurnEvent`), `ChatPromptMarker`, protocol seams (`AgentRosterProviding`, `AgentLifecycleReading`, `PromptInjecting`, `ChatNotifying`, `ChatHistoryStore`, `WorktreeManaging`) |
+| `Packages/CmuxChatRoomCore/` | new (Core) | DTOs (`ChatRoom`, `Exchange`, `Reply`, IDs incl. stable `ChatRoomID`, `AgentTurnEvent`), `ChatPromptMarker`, protocol seams (`RoomWorkspaceReading`, `RoomWorkspaceManaging`, `AgentRosterProviding`, `AgentLifecycleReading`, `PromptInjecting`, `ChatNotifying`, `ChatHistoryStore`, `WorktreeManaging`) |
 | `Packages/CmuxChatRoom/` | new (Domain) | `RoomsCoordinator` (`@Observable`), correlation, needs-input hold |
 | `Packages/CmuxChatRoomUI/` | new (UI) | `ChatRoomView`, composer + `@`-autocomplete, forward/quote composer, exchange rows, room rows |
 
@@ -557,8 +581,8 @@ Consistent with §4–§6. **New packages** (each added to `.github/workflows/ci
 
 | File | Change |
 |---|---|
-| `Sources/Workspace.swift` | add `WorkspaceRole`, non-optional `roomID` (on `.agent`), `AgentKind`, `cmuxCreatedWorktreeID` |
-| `Sources/TabManager.swift` | `closeWorkspace(force:)` + result; central creation policy (route `addWorkspace`); `closeRoom` flow; room CRUD; room/agent ordering for the two-section data |
+| `Sources/Workspace.swift` | add `WorkspaceRole`; on `.chatRoom` a stable persisted `chatRoomID` + room `name`; on `.agent` non-optional `roomID` + `AgentKind` + `cmuxCreatedWorktreeID` |
+| `Sources/TabManager.swift` | impl `RoomWorkspaceReading`/`RoomWorkspaceManaging` (owns room list + selection); `closeWorkspace(force:)` + result; central fail-closed creation policy at the `addWorkspace` funnel; `closeRoom` flow; two-section ordering data |
 | `Sources/SidebarWorkspaceRenderItem.swift` | section-aware renderer (top `.chatRoom`, bottom `.agent` by `roomID`) + section-aware drag — **net-new** |
 | `Sources/ContentView.swift` | two-section sidebar wiring; snapshot-fed room rows + badges; agent-tab three-line layout + lifecycle badge |
 | `Packages/CMUXWorkstream/Sources/CMUXWorkstream/WorkstreamEvent.swift` + `feed.push` | add `surface_id` |
@@ -566,7 +590,7 @@ Consistent with §4–§6. **New packages** (each added to `.github/workflows/ci
 | `Sources/TerminalController.swift` | route hook events to the bridge; `closeWorkspace` socket path consults the gate |
 | `Packages/CMUXAgentLaunch/` | marker injection + per-agent hook install (OMP vs `AgentHookDef`); `cmuxCreatedWorktreeID` stamping |
 | `Packages/CmuxGit/` | ahead/behind (`rev-list --count @{u}..HEAD`, no-upstream) — net-new (or deferred per §7) |
-| `Sources/SessionPersistence.swift` | persist rooms list + per-`.agent` `role`/`roomID`/`AgentKind`; worktree registry top-level keyed by path (`:1859`) |
+| `Sources/SessionPersistence.swift` | persist `.chatRoom` `chatRoomID`+name + per-`.agent` `role`/`roomID`/`AgentKind` (rooms derived, no separate list); worktree registry top-level keyed by path (`:1859`) |
 | `Resources/Localizable.xcstrings`, `web/messages/{en,ja}.json` | new user-facing strings (EN + JA) |
 | `cmux.xcodeproj/project.pbxproj` | link new packages into `cmux` + `cmux-unit`; wire app-target test files |
 | `.github/workflows/ci.yml` | add new packages to `PACKAGES` |
@@ -588,4 +612,5 @@ Superseded approaches, kept so they aren't re-litigated. Each is **not** the cur
 - **Collapsible / "read-more" long messages** → replaced by **always-full** messages (collapsing invites skimming); channel length handled by windowing + "Load earlier".
 - **General busy-state queue** → only the **needs-input safety hold** remains (running/idle pipe through immediately).
 - **History keyed by window/session id** → keyed by **`ChatRoomID`** (a first-class, persisted id).
+- **`ChatRoomID` equal to the room workspace's `id`** → decoupled: `ChatRoomID` is a **separate stable persisted field**. `Workspace.id` is re-minted on restore (`TabManager.swift:9620`), so equating them would detach room history every restart.
 - **Plain bash tabs** → dropped; the only non-room tab type is the agent tab (shell via `!`).
