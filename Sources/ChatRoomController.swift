@@ -43,15 +43,20 @@ final class ChatRoomController: ObservableObject {
         observeNotifications()
     }
 
-    /// Configures the singleton once, against the primary `TabManager`. Observer wiring only — the
-    /// default room is created later via ``bootstrapDefaultRoom()`` (after the app finishes launching),
-    /// since creating a workspace during `App.init` is too early.
+    /// Binds the singleton to the **visible window's** `TabManager` (cmux is multi-window; the
+    /// App-level `@StateObject` is not the instance the sidebar renders). Call from the window
+    /// registration path. Idempotent — binds once and ensures a default room exists.
     static func configure(tabManager: TabManager) {
         guard shared == nil else { return }
-        shared = ChatRoomController(tabManager: tabManager)
+        let controller = ChatRoomController(tabManager: tabManager)
+        shared = controller
+        controller.bootstrapDefaultRoom()
+#if DEBUG
+        cmuxDebugLog("chatroom.configure bound tm=\(ObjectIdentifier(tabManager)) rooms=\(tabManager.chatRoomWorkspaces.count) agents=\(tabManager.agentWorkspaces.count)")
+#endif
     }
 
-    /// Ensures at least one chat room exists (call after launch / after restore). Idempotent.
+    /// Ensures at least one chat room exists (idempotent).
     func bootstrapDefaultRoom() {
         tabManager?.ensureDefaultRoomExists()
     }

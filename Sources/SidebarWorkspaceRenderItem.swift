@@ -19,34 +19,20 @@ enum SidebarWorkspaceRenderItem {
         }
     }
 
-    /// Two-section ordering for the chat room: chat-room workspaces on top, then agent workspaces
-    /// grouped under their room (membership by `roomID`). Net-new, not the flat group renderer.
+    /// Title for the chat-rooms section header (also used to wire its `+` action).
+    static let chatRoomsSectionTitle = String(localized: "sidebar.section.chatRooms", defaultValue: "Chat rooms")
+    /// Title for the agents section header (also used to wire its `+` action).
+    static let agentsSectionTitle = String(localized: "sidebar.section.agents", defaultValue: "Agents")
+
+    /// Two flat sections: chat rooms on top, then all agents. Each section header carries a `+` to
+    /// create a new room / agent. No "ungrouped" and no per-room sub-grouping (membership is still
+    /// tracked by `roomID` internally for `@`-scoping).
     static func chatRoomRenderItems(tabs: [Workspace]) -> [SidebarWorkspaceRenderItem] {
-        let rooms = tabs.filter { $0.workspaceRole == .chatRoom }
-        let agents = tabs.filter { $0.workspaceRole == .agent }
-        guard !rooms.isEmpty || !agents.isEmpty else { return [] }
-
         var items: [SidebarWorkspaceRenderItem] = []
-        items.append(.sectionHeader(String(localized: "sidebar.section.chatRooms", defaultValue: "Chat rooms")))
-        for room in rooms { items.append(.workspace(room)) }
-
-        items.append(.sectionHeader(String(localized: "sidebar.section.agents", defaultValue: "Agents")))
-        var placed: Set<UUID> = []
-        for room in rooms {
-            guard let rid = room.chatRoomID else { continue }
-            let members = agents.filter { $0.roomID == rid }
-            guard !members.isEmpty else { continue }
-            items.append(.sectionHeader(room.roomName ?? room.title))
-            for agent in members {
-                items.append(.workspace(agent))
-                placed.insert(agent.id)
-            }
-        }
-        let orphans = agents.filter { !placed.contains($0.id) }
-        if !orphans.isEmpty {
-            items.append(.sectionHeader(String(localized: "sidebar.section.ungrouped", defaultValue: "Ungrouped")))
-            for agent in orphans { items.append(.workspace(agent)) }
-        }
+        items.append(.sectionHeader(chatRoomsSectionTitle))
+        for room in tabs where room.workspaceRole == .chatRoom { items.append(.workspace(room)) }
+        items.append(.sectionHeader(agentsSectionTitle))
+        for agent in tabs where agent.workspaceRole == .agent { items.append(.workspace(agent)) }
         return items
     }
     static func renderItems(

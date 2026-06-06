@@ -3447,6 +3447,8 @@ struct ContentView: View {
                 fileExplorerState: fileExplorerState,
                 cmuxConfigStore: cmuxConfigStore
             )
+            // Bind the chat-room controller to the visible window's TabManager.
+            ChatRoomController.configure(tabManager: tabManager)
             installFileDropOverlayWhenReady(on: window, tabManager: tabManager)
         }))
 
@@ -12325,12 +12327,15 @@ struct VerticalTabsSidebar: View {
         for title: String,
         renderContext: WorkspaceListRenderContext
     ) -> (() -> Void)? {
-        if title == String(localized: "sidebar.section.chatRooms", defaultValue: "Chat rooms") {
+        if title == SidebarWorkspaceRenderItem.chatRoomsSectionTitle {
             return { ChatRoomController.shared?.promptNewRoom() }
         }
-        if let room = tabManager.chatRoomWorkspaces.first(where: { ($0.roomName ?? $0.title) == title }),
-           let rid = room.chatRoomID {
-            return { ChatRoomController.shared?.promptNewAgent(roomID: rid) }
+        if title == SidebarWorkspaceRenderItem.agentsSectionTitle {
+            let manager = tabManager
+            return {
+                let rid = manager.activeChatRoomID ?? manager.ensureDefaultRoomExists()
+                ChatRoomController.shared?.promptNewAgent(roomID: rid)
+            }
         }
         return nil
     }

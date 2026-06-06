@@ -173,9 +173,9 @@ struct cmuxApp: App {
         KeyboardShortcutSettings.settingsFileStore.applyDeferredManagedDefaultSideEffects()
         StartupBreadcrumbLog.append("app.init.keyboardShortcuts.sideEffectsApplied")
         StartupBreadcrumbLog.append("app.init.tabManager.begin")
-        let chatRoomTabManager = TabManager()
-        _tabManager = StateObject(wrappedValue: chatRoomTabManager)
-        ChatRoomController.configure(tabManager: chatRoomTabManager)
+        _tabManager = StateObject(wrappedValue: TabManager())
+        // ChatRoomController is bound to the visible window's TabManager in ContentView's window
+        // registration (cmux is multi-window; this App-level @StateObject is not what the sidebar renders).
         StartupBreadcrumbLog.append("app.init.tabManager.complete")
         // Migrate legacy and old-format socket mode values to the new enum.
         if let stored = defaults.string(forKey: SocketControlSettings.appStorageKey) {
