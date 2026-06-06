@@ -7,7 +7,8 @@
 
 - **rev 1** — initial spec.
 - **rev 2** — incorporates Codex review round 1 (3 independent reviewers, all "Not Ready") after verifying every claim against the code. Major changes: (a) reuse the **existing** cmux agent pipeline — hooks (`CLI/CMUXCLI+AgentHookDefinitions.swift`), launch (`Packages/CMUXAgentLaunch`), lifecycle (`Workspace.agentLifecycleStatesByPanelId`), and the `stop` hook's existing `last_assistant_message` payload — instead of building parallel infrastructure; (b) token-based correlation; (c) fix package layering with a low `CmuxChatRoomCore`; (d) single source of truth for lifecycle; (e) central `WorkspaceRole`-aware close policy; (f) explicit persistence/migration; (g) correct CI test gating; (h) "Step 0" infra audit; (i) UX: richer `@`-autocomplete rows, full (non-collapsed) messages, channel windowing + "load earlier", new-agent failure states, accessibility/reduced-motion.
-- **rev 3** — incorporates Codex review round 2 (3 reviewers), verified against code. Major changes: (a) **`surface_id` carried end-to-end** — `WorkstreamEvent`/feed schema extended with `surface_id` (hook layer already has it; `CLI/cmux.swift:205`), and the chat bridge consumes **raw decoded events before EventBus redaction** (`CmuxEventPublishing.swift:451` nulls `tool_input`); per-surface FIFO now works with multiple agent panels per workspace. (b) **Hidden `ChatRequestID` marker** correlation (chosen over exact-text): a non-displayed token is injected with the prompt, round-trips via the raw `toolInputJSON` (`WorkstreamEvent.swift:17`, **not** the whitespace-collapsing `submittedPromptMessage` at `WorkspacePromptSubmit.swift:133`), binds the turn, and is stripped before channel display/forward; FIFO still pairs the bound `prompt-submit` to its `stop`. (c) **Close gate at the lowest mutator** — guard inside `TabManager.closeWorkspace` (`:5205`, no guard today) with an explicit internal force flag, since AppleScript (`AppleScriptSupport.swift:473`) and config (`CmuxConfigExecutor.swift:508`) call it directly. (d) **needs-input hold** — `send_text` injects raw terminal bytes (`TerminalController.swift:8653`), so prompts to a `needsInput` target are held (not blind-injected into a permission prompt) and delivered when it leaves `needsInput`; running/idle still pipe through immediately. (e) UX: per-message **copy** + **quote-into-composer**.
+- **rev 3** — incorporates Codex review round 2 (3 reviewers), verified against code. Major changes: (a) **`surface_id` carried end-to-end** — `WorkstreamEvent`/feed schema extended with `surface_id` (hook layer already has it; `CLI/cmux.swift:205`), and the chat bridge consumes **raw decoded events before EventBus redaction** (`CmuxEventPublishing.swift:451` nulls `tool_input`); per-surface FIFO now works with multiple agent panels per workspace. (b) **Hidden `ChatRequestID` marker** correlation (chosen over exact-text): a non-displayed token is injected with the prompt, round-trips via the raw `toolInputJSON` (`WorkstreamEvent.swift:17`, **not** the whitespace-collapsing `submittedPromptMessage` at `WorkspacePromptSubmit.swift:133`), binds the turn, and is stripped before channel display/forward; FIFO still pairs the bound `prompt-submit` to its `stop`. (c) **Close gate at the lowest mutator** — guard inside `TabManager.closeWorkspace` (`:5205`, which today has only a `guard tabs.count > 1`, no role/can-close guard) with an explicit internal force flag, since AppleScript (`AppleScriptSupport.swift:473`) and config (`CmuxConfigExecutor.swift:508`) call it directly. (d) **needs-input hold** — `send_text` injects raw terminal bytes (`TerminalController.swift:8653`), so prompts to a `needsInput` target are held (not blind-injected into a permission prompt) and delivered when it leaves `needsInput`; running/idle still pipe through immediately. (e) UX: per-message **copy** + **quote-into-composer**.
+- **rev 4** — incorporates Codex review round 3, verified against code. (B1) confirmed the marker decision is already fully propagated in rev 3 (no exact-text remains); tightened the §4.6 fallback wording. (B2) **final-message capture is confirmed only for Claude via the OMP wrapper** (`CMUXCLI+OmpExtension.swift:192`); there is **no `claude` entry** and codex/cursor `stop` carrying the message is **unconfirmed** — promoted to a named **go/no-go gate (G1)** in Step 0, sized the transcript fallback, and documented that Claude/OMP (self-managed extension, `events: []`) and codex/cursor (`AgentHookDef` table) use **two different hook-install mechanisms**. (B3) added an **identifier-mapping table** — the lifecycle store is `panelId → agentName → state` and a panel may host multiple agents; specified the `(panelId, agentName) → AgentID/SurfaceID` mapping and the one-agent-per-tab constraint. (B4) §4.10 now commits to auditing **every** direct `closeWorkspace` caller (TabManager `4430/5337/5343/5498/5744/6040/7812/7816`, TerminalController `1450/4426/6810/18104`) with force/non-force labels and addresses the `tabs.count > 1` ↔ non-closable-chat-room interaction. Minor: `AgentKind` gains an explicit unsupported-agent path; history-key is a Step-0 must-resolve, not a baked assumption.
 
 ---
 
@@ -64,8 +65,8 @@ The chat room is an **adjudication and coordination surface** — not a consensu
 | **Existing agent lifecycle** | `Sources/Workspace.swift:10559` | `agentLifecycleStatesByPanelId: [UUID:[String:AgentHibernationLifecycleState]]` |
 | Lifecycle states | `Sources/AgentHibernation/AgentHibernationLifecycleState.swift:3` | `unknown / running / idle / needsInput` |
 | Lifecycle mutation + CLI | `Sources/Workspace.swift:12287`; `Sources/TerminalController.swift:19378` | `setAgentLifecycle(...)`, `set_agent_lifecycle` CLI |
-| **Existing agent hook defs** | `CLI/CMUXCLI+AgentHookDefinitions.swift:142-256` | hooks for claude/codex/cursor/gemini/… ; events `prompt-submit`, `stop`, `agent-response`, `session-end/-finalize` |
-| **`stop` already carries final msg** | `CLI/CMUXCLI+OmpExtension.swift:192` | `sendHook("stop", ctx, { last_assistant_message })` |
+| **Existing agent hook defs** | `CLI/CMUXCLI+AgentHookDefinitions.swift:142-256` | table-based hooks for codex/cursor/gemini/grok/kiro/… ; events `prompt-submit`, `stop`, `agent-response`, `session-end/-finalize`. **No `claude` entry** — Claude runs via the OMP wrapper (self-managed extension; `events: []` in the table) |
+| **Final-message payload (Claude/OMP only)** | `CLI/CMUXCLI+OmpExtension.swift:192` | `sendHook("stop", ctx, { last_assistant_message })` — verified for OMP/Claude only; **codex/cursor `stop` carrying the final text is unconfirmed (gate G1, §5)** |
 | Hook → app routing | `cmux hooks <agent> <subcommand>` over `CMUX_SOCKET_PATH`; `Sources/WorkspacePromptSubmit.swift:86` (`lastAssistantMessage`); `CLI/FeedEventClassifier.swift:214` (`stop → .response`) | the feed already classifies turn-completion |
 | **Agent launch infra** | `Packages/CMUXAgentLaunch/` (`HermesAgentHookConfig.swift`, `AgentSpawnIdentity.swift`, env policy, resume) | hook install + identity stamping; reuse for launch |
 | Panel protocol (needs shim) | `Sources/Panels/Panel.swift:267` | `protocol Panel: AnyObject, Identifiable, ObservableObject` — **requires ObservableObject** |
@@ -177,6 +178,9 @@ public struct MessageID: Hashable, Sendable, Codable { public let raw: UUID }
 public struct ExchangeID: Hashable, Sendable, Codable { public let raw: UUID }
 
 public enum AgentKind: String, Sendable, Codable { case claudeCode, codex, cursor }
+// v1 supports exactly these three. The lifecycle store admits ~16 agent-name strings and the hook
+// table has more (grok/gemini/kiro/…). Roster derivation maps an unknown agent name to `nil` kind →
+// the tab is treated as "unsupported": not @-mentionable, no crash (see §4.3 identifier mapping).
 
 public struct AgentIdentitySnapshot: Sendable, Codable, Hashable {
     public let agentID: AgentID
@@ -235,14 +239,34 @@ public enum ChatPromptMarker {
 }
 ```
 
+**Identifier spaces (four coordinates).** These must not be conflated:
+
+| Coordinate | Type | Meaning | Owner |
+|---|---|---|---|
+| `AgentID` | `UUID` | the agent **tab/workspace** id | `TabManager` |
+| `SurfaceID` | `UUID` | the agent's **terminal surface** (= cmux `panelId`) | `Workspace.panels` |
+| `panelId` | `UUID` | key of the existing lifecycle store | `Workspace.agentLifecycleStatesByPanelId` |
+| `agentName` | `String` | inner key of the lifecycle store (`"claude_code"`, `"codex"`, …); a panel may hold several | the agent CLI / hook |
+
+**v1 constraint: one agent per agent-tab** (one managed agent surface per chat-room agent tab). Under that constraint `SurfaceID == panelId`, and the lifecycle lookup for an agent tab is `agentLifecycleStatesByPanelId[panelId][agentName]` where `panelId`/`agentName` come from that tab's launched surface. The `AgentRosterProviding`/`AgentLifecycleReading` seams (app target) own the `AgentID ↔ (panelId, agentName)` map and expose only `AgentID`/`SurfaceID` to the coordinator; if a panel ever reports multiple agent names, the tab is flagged unsupported rather than guessed.
+
 ### 4.4 Reuse the existing hook pipeline (no new transport)
 
 The agent CLIs already run cmux hooks (`CLI/CMUXCLI+AgentHookDefinitions.swift`) that call `cmux hooks <agent> <subcommand>` over the socket. We **extend the app-side handling** of two events already in the pipeline rather than writing new hook scripts or a `chat.agent_report` command:
 
 - `prompt-submit` — carries the submitted prompt text.
-- `stop` (a.k.a. `agent-response`) — already carries `last_assistant_message` (`CMUXCLI+OmpExtension.swift:192`).
+- `stop` (a.k.a. `agent-response`) — carries `last_assistant_message` **for Claude via the OMP wrapper only** (`CMUXCLI+OmpExtension.swift:192`). **Whether codex/cursor `stop` carries the final message is unconfirmed** (see gate G1).
 
-App-side, these are routed (per surface) into a `CmuxChatRoomCore.AgentTurnEvent` stream the coordinator subscribes to. Launch/hook installation reuses `CMUXAgentLaunch` (which already stamps identity and installs hook config). **Step 0 (§5) confirms, per agent (claude/codex/cursor), that `prompt-submit` fires for injected input, that `stop` carries the final message, and that the marker (§4.6) round-trips through that agent's prompt handling without the agent choking on it.**
+App-side, these are routed (per surface) into a `CmuxChatRoomCore.AgentTurnEvent` stream the coordinator subscribes to.
+
+**Two hook-install mechanisms, not one (verified).** "Reuse `CMUXAgentLaunch`" is *not* uniform across agents:
+- **Claude** runs through the **OMP self-managed extension** — its hook entry has `events: []` in the table and OMP installs/owns its own hooks; this is the only path verified to emit `last_assistant_message`.
+- **codex/cursor/etc.** use the **`AgentHookDef` table** (`prompt-submit`/`stop`/…). Their final-message payload is unverified.
+So the chat bridge must handle both install/report shapes; the spec no longer assumes a single symmetric "claude/codex/cursor hook."
+
+**Gate G1 (go/no-go, in Step 0): can the *reviewer* return its text?** The product has no value until Codex (the reviewer half of the core use case) can post its final message to the channel. Step 0 must confirm, per codex and cursor, that *either* `stop` carries the final message *or* it is recoverable from the transcript (`RestorableAgentSession.transcriptPath`, §7). **Size the transcript fallback now** — it is a materially larger lift than an adapter (locate + tail the per-agent transcript, parse the last assistant turn, map session→surface), and if needed it moves out of "Step 0 finding" into its own implementation step before that agent ships. If neither path works for an agent, that agent is **not in v1** (explicit, not silent).
+
+**Step 0 also confirms**, per agent, that `prompt-submit` fires for *injected* input and that the marker (§4.6) round-trips through that agent's prompt handling without the agent choking on it.
 
 **Two schema/plumbing fixes required (verified gaps):**
 - **`surface_id` must be carried end-to-end.** `WorkstreamEvent` currently has `workspaceId` but no `surfaceId` (`WorkstreamEvent.swift:14`); the hook layer already knows the surface (`CLI/cmux.swift:205`), so extend the `feed.push`/`WorkstreamEvent` schema with `surface_id` and thread it through. Without it, per-surface FIFO collapses when a workspace holds multiple agent panels.
@@ -252,7 +276,9 @@ App-side, these are routed (per surface) into a `CmuxChatRoomCore.AgentTurnEvent
 
 ### 4.5 Lifecycle: single source of truth
 
-The coordinator does **not** keep its own lifecycle dictionary. Sidebar badges, exchange progress, and the needs-input notification all read the **existing** `Workspace.agentLifecycleStatesByPanelId` (already updated by `set_agent_lifecycle`). The coordinator observes it via a read-only seam (`AgentLifecycleReading`, exposing a snapshot + `AsyncStream` of changes) implemented in the app over the existing store. No drift with hibernation/sidebar.
+The coordinator does **not** keep its own lifecycle dictionary. Sidebar badges, exchange progress, and the needs-input notification all read the **existing** `Workspace.agentLifecycleStatesByPanelId` (already updated by `set_agent_lifecycle`). The coordinator observes it via a read-only seam (`AgentLifecycleReading`, exposing a snapshot + `AsyncStream` of changes keyed by `AgentID`) implemented in the app over the existing store. No drift with hibernation/sidebar.
+
+The seam performs the identifier mapping from §4.3: for an agent tab it resolves `AgentID → (panelId, agentName)` and reads `agentLifecycleStatesByPanelId[panelId][agentName]`. It is the **only** place that crosses between the chat-room id space (`AgentID`/`SurfaceID`) and the store's `(panelId, agentName)` space; the coordinator never sees `panelId`/`agentName`.
 
 ### 4.6 Coordinator + marker correlation + needs-input hold (`CmuxChatRoom`, `@MainActor @Observable`)
 
@@ -292,7 +318,7 @@ enum TurnBinding { case chatOrigin(ChatRequestID, ExchangeID); case direct }
 
 The marker makes binding independent of prompt text, so a byte-identical direct prompt while a chat prompt is pending can no longer mis-bind (it carries no marker). A direct turn that completes first is bound `.direct` and dropped. No marker ⇒ no chat binding ⇒ no leak.
 
-> **Marker design constraints** (validated in Step 0): the injected token must (a) survive verbatim in `toolInputJSON`, (b) be reliably stripped before any channel display/forward, and (c) not derail the agent. Candidate: a single trailing line the agent treats as inert metadata; the exact encoding is fixed in Step 0 against each CLI. If an agent cannot carry it cleanly, that agent falls back to per-surface FIFO + raw-text match with the documented byte-identical-collision limitation (a contained per-adapter decision, not a redesign).
+> **The marker is the only correlation mechanism in v1.** There is no exact-text matching path in the design (exact-text is broken anyway — `submittedPromptMessage` collapses whitespace, `WorkspacePromptSubmit.swift:133`). **Marker design constraints** (encoding fixed in Step 0): the token must (a) survive verbatim in `toolInputJSON`, (b) strip reliably before any channel display/forward, (c) not derail the agent. Candidate: a single trailing line the agent treats as inert metadata. If a specific agent cannot carry the marker cleanly, that agent is handled by a **documented, explicitly-degraded per-adapter fallback** (per-surface FIFO + raw `toolInputJSON` match, with the byte-identical-same-surface collision called out and tested) — a contained per-agent exception, never the default path.
 
 ### 4.7 Live roster (no parallel registry)
 `AgentRosterProviding` is implemented over `TabManager`, exposing `current()` + an `AsyncStream` of changes; the mentionable set is *derived* from live tabs. `@all` = live agents at send instant. The autocomplete dropdown calls `current()` on open (§3.10).
@@ -308,15 +334,29 @@ The marker makes binding independent of prompt text, so a byte-identical direct 
 **Failure/validation (inline, recoverable):** path or branch collision; dirty/missing base repo; missing CLI binary; unsupported/uninstalled hook for that agent; `git worktree add` failure; partial launch (surface created but agent didn't start → offer retry/close). Each surfaces an inline error in the sheet; nothing half-creates silently.
 
 ### 4.10 Close policy (gate at the lowest mutator)
-The role guard must live in the **destructive funnel itself**, not just at UI/socket entrypoints. Verified: `TabManager.closeWorkspace` (`:5205`) has no can-close guard today (only `guard tabs.count > 1`), and it's called **directly** by non-UI paths — AppleScript (`AppleScriptSupport.swift:473,624`) and config replacement (`CmuxConfigExecutor.swift:508`) — which bypass the UI's `canCloseWorkspace`. So:
+The role guard must live in the **destructive funnel itself**, not just at UI/socket entrypoints. Verified: `TabManager.closeWorkspace` (`:5205`) today has only `guard tabs.count > 1 else { return }` (no role/can-close guard), and it's called **directly** by many paths that bypass the UI's `canCloseWorkspace`. So:
 
-- Add a required `WorkspaceRole` to `Workspace`; make `closeWorkspace` **refuse a `.chatRoom` workspace** unless called with an explicit internal `force: true` (used only for app teardown / window close / session replace).
+- Add a required `WorkspaceRole` to `Workspace`; change `closeWorkspace` to take an explicit `force: Bool = false` and **refuse a `.chatRoom` workspace unless `force` is true** (force is used only for app teardown / window close / session replace). Have it return a result (closed / refused) so callers can react.
 - `canCloseWorkspace` remains a **UI affordance only** (hides/disables the X, ⌘W, palette/menu items).
-- Every entrypoint — sidebar X, ⌘W/menu, command palette, socket `closeWorkspace` (`TerminalController.swift:18104`), bulk/window close, AppleScript, config replace — now hits the same guarded mutator.
+- **Execution must audit and label every direct `closeWorkspace` caller** as force or non-force. Known callers to classify (not exhaustive — Step 0 re-greps):
+
+  | Caller | Path | Default |
+  |---|---|---|
+  | `TerminalController:18104` | socket `close_workspace` | non-force |
+  | `TerminalController:1450,4426` | socket dispatch | non-force |
+  | `TerminalController:6810` | `workspace.unpin.related_workspaces` | non-force |
+  | `AppleScriptSupport:473,624` | AppleScript | non-force |
+  | `CmuxConfigExecutor:508` | config replace | **force** (bootstrap/replace) |
+  | `TabManager:5337,5343` | `closeTab` / `closeCurrentWorkspace` | non-force |
+  | `TabManager:4430,5498,5744` | group delete / post-confirm batch | non-force (skip `.chatRoom`) |
+  | `TabManager:6040,7812,7816` | internal cleanup / teardown | **force** |
+
+- **`tabs.count > 1` interaction:** because the chat-room tab is non-closable, a window always retains it, so the "keep ≥1 tab" guard never blocks closing the *last agent* tab. But **close-all / window-teardown must `force`-close the chat room last** (otherwise the guard or the role-refusal would strand it). Spell this out so "close other tabs" / "close all" behave correctly.
 - Agent tabs: confirm-on-close when `running`; pending/held outcomes → `.tabClosed`; removed from roster. Closing an agent never erases its past messages (identity snapshots persist).
 
 ### 4.11 Persistence + migration
-`ChatHistoryStore` (actor-backed repository, JSON under Application Support, keyed per **window/session** — the same key that ties to session restore; named invariant: one chat room per window, history key = window/session id). Stores all exchanges/replies with embedded `AgentIdentitySnapshot`; supports **paged reads** for "Load earlier" (§3.9) and bounded initial load.
+`ChatHistoryStore` (actor-backed repository, JSON under Application Support). Stores all exchanges/replies with embedded `AgentIdentitySnapshot`; supports **paged reads** for "Load earlier" (§3.9) and bounded initial load.
+**History key is a Step-0 must-resolve, not a baked assumption.** The intended invariant is *one chat room per window*, keyed by the window/session id — but **window/session-id stability across restore is unverified**. Step 0 must confirm what identifier survives quit→relaunch and session-restore and key history off *that*; if no stable per-window id exists, fall back to a dedicated persisted id stamped on the chat-room workspace itself. Until resolved, do not hardcode the key.
 Session snapshots gain explicit fields (with migration defaults for old data): `SessionWorkspaceSnapshot.role: WorkspaceRole?` (default `.agent` when absent for restored tabs that had an agent, else `nil`) and the agent **kind** persisted on the panel/agent snapshot (`SessionTerminalPanelSnapshot.agent` extended or a sibling field). On restore: re-derive the live roster from restored agent tabs; the chat-room tab is recreated from its role; history reconnects by window/session key. Without these fields, restored agent tabs would vanish from `@all` and lose kind/badges — so they are required, not optional.
 
 ### 4.12 Data flow
@@ -344,7 +384,15 @@ flowchart LR
 
 Vertical slice: Claude Code end-to-end *before* Codex/Cursor. Two-commit red/green per regression test.
 
-0. **Existing-infra audit (no code).** Inventory and document, per agent (claude/codex/cursor): exact `cmux hooks` events fired, whether `prompt-submit` fires for *injected* input, whether `stop` carries `last_assistant_message`, **whether the §4.6 marker round-trips through `toolInputJSON` and the agent tolerates it**, how `CMUXAgentLaunch` installs hooks + stamps identity, **where `surface_id` is available at the hook layer and how to thread it into `WorkstreamEvent`/`feed.push`**, the existing lifecycle update path, all close entrypoints (incl. AppleScript/config direct calls), and the CI package-test list. Output: a findings note that confirms/adjusts §4.4–§4.11 and fixes the marker encoding before any code.
+0. **Existing-infra audit + gates (no code).** Produce a findings note that confirms/adjusts §4.3–§4.11 and resolves these before any code:
+   - **Gate G1 (go/no-go): can codex and cursor return their final message?** Confirm `stop` carries it, or that it's recoverable from `RestorableAgentSession.transcriptPath`. **Size the transcript fallback** (locate/tail transcript, parse last assistant turn, map session→surface); if needed it becomes its own step before that agent ships. An agent that can do neither is **out of v1** (explicit).
+   - **Marker encoding** — fix a concrete token that round-trips through `toolInputJSON` and that Claude/codex/cursor each tolerate (test all three); per-agent degraded fallback (§4.6) where it can't.
+   - **`surface_id` threading** — where it's available at the hook layer (`CLI/cmux.swift:205`) and how to add it to `WorkstreamEvent`/`feed.push` without breaking existing consumers.
+   - **Identifier mapping** — confirm one-agent-per-tab and the `AgentID ↔ (panelId, agentName)` resolution (§4.3).
+   - **Hook-install mechanisms** — Claude/OMP (self-managed) vs `AgentHookDef` table (codex/cursor); the bridge handles both.
+   - **History key** — what identifier is stable across restore (§4.11).
+   - **Close-caller audit** — re-grep every direct `closeWorkspace` caller; label force/non-force (§4.10).
+   - Plus: that `prompt-submit` fires for *injected* input per agent, and the CI package-test list.
 1. **Scaffold packages.** `CmuxChatRoomCore`, `CmuxChatRoom`, `CmuxChatRoomUI` (+ Swift Testing targets). Add all three to `.github/workflows/ci.yml` `PACKAGES`. Wire any app-target test files into `project.pbxproj`; run `normalize-pbxproj.py` + `check-pbxproj.sh`.
 2. **Core model.** §4.3 DTOs + `ChatPromptMarker` + protocol seams in `CmuxChatRoomCore`. Unit-test `ChatPromptMarker.inject`/`extract` round-trip incl. multiline/forward bodies.
 3. **Coordinator + correlation (pure).** Implement §4.6 against fakes. **Correlation tests first (red/green):** direct turn dropped; direct completes-first while chat pending; **byte-identical direct prompt (no marker) does not bind**; marker bind/strip; FIFO pairing per surface; **needs-input hold then flush on lifecycle change**; forward/quote; resolve-at-send-time.
@@ -358,8 +406,8 @@ Vertical slice: Claude Code end-to-end *before* Codex/Cursor. Two-commit red/gre
 11. **Close policy (§4.10)** — guard inside `TabManager.closeWorkspace` with `force:` flag; verify via direct call, AppleScript, config replace, socket, palette/menu, bulk.
 12. **Notifications** split (completion→chat, needs-input→agent).
 13. **Persistence/restore (§4.11)** incl. role/kind migration; roster re-derivation.
-14. **Codex adapter** — confirm hook events via Step 0; wire; degrade gracefully.
-15. **Cursor adapter** — same; document limitations.
+14. **Codex adapter** — **blocked on gate G1**; wire `stop`→final-message (or the sized transcript fallback if G1 requires it); degrade gracefully. Codex is the reviewer half of the core use case, so this is the first non-Claude milestone with real product value.
+15. **Cursor adapter** — same; subject to G1; document limitations.
 16. **Localization + audit**; **DocC** on public symbols; package READMEs.
 
 ---
@@ -385,11 +433,11 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 - Identity snapshot frozen at send time (later branch switch doesn't mutate history).
 - `loadEarlier()` pages older exchanges; window bound respected.
 
-**Lifecycle:** badge/progress/needs-input derive from the existing lifecycle seam (assert via fake store) — no second source.
+**Lifecycle + identifier mapping:** badge/progress/needs-input derive from the existing lifecycle seam (assert via fake store) — no second source. The seam resolves `AgentID → (panelId, agentName)` correctly (assert mapping); a panel reporting an **unknown/unsupported agent name** → tab flagged unsupported, excluded from the `@` roster, **no crash**; a panel reporting **multiple** agent names → flagged unsupported (one-agent-per-tab invariant).
 
 **Persistence/migration:** round-trip incl. snapshots; old snapshot without role/kind restores with correct defaults; closed-agent history renders; paged reads.
 
-**Close policy (app-target, through real entrypoints):** `.chatRoom` cannot close via **direct `TabManager.closeWorkspace`**, sidebar X, ⌘W/menu, command palette, **socket `closeWorkspace`**, AppleScript, config replace, or bulk/window close; the internal `force:` teardown path *can* close it. Agent confirm-on-close when `running`.
+**Close policy (app-target, through real entrypoints):** `.chatRoom` cannot close via **direct `TabManager.closeWorkspace(force:false)`**, sidebar X, ⌘W/menu, command palette, **socket `closeWorkspace`**, AppleScript, config replace, or bulk/`close-all`; the internal `force:true` teardown path *can* close it. **Close-all / window-teardown** force-closes the chat room last and leaves no orphaned history. The `tabs.count > 1` guard never strands the last *agent* tab (the non-closable chat room is always present). Agent confirm-on-close when `running`.
 
 **Hook bridge (integration):** crafted raw `prompt-submit`(with marker)/`stop` events carrying `surface_id` drive the coordinator; marker recovered from `toolInputJSON`; `last_assistant_message` decoded verbatim; events read pre-redaction; malformed input rejected without crash; no focus change.
 
@@ -415,13 +463,13 @@ Swift Testing, behavior-level (no source-text/AST assertions). **Package tests f
 
 ---
 
-## 7. Open items for the reviewer (Codex, round 3)
+## 7. Open items for the reviewer (Codex, round 4)
 
-Resolved since round 2: correlation now uses a **hidden `ChatRequestID` marker** (§4.6) not exact text; `surface_id` is carried end-to-end and events are read **pre-redaction** (§4.4); the close gate moved to the **lowest mutator** with a `force:` path (§4.10); `needsInput` targets are **held, not blind-injected** (§3.11/§4.6).
+Resolved in rev 3–4 (round-2/3 feedback): correlation is a **hidden `ChatRequestID` marker only** — exact-text fully removed from the design (B1, confirmed clean: `rg` finds no `exactText`/`exact-text` in the body); `surface_id` carried end-to-end, events read **pre-redaction** (§4.4); close gate at the **lowest mutator** with `force:` + a full caller-audit table and the `tabs.count`/close-all interaction (§4.10); `needsInput` targets **held, not blind-injected** (§3.11/§4.6); **identifier-mapping table** for `AgentID`/`SurfaceID`/`panelId`/`agentName` (§4.3/§4.5); `AgentKind` unsupported-agent path; **two hook-install mechanisms** (Claude/OMP vs table) documented (§4.4).
 
-Remaining for review:
-- **Marker viability (Step 0):** the design hinges on a token that (a) survives in `toolInputJSON`, (b) strips cleanly before display/forward, and (c) doesn't derail each agent. Is there a known encoding that's safe across Claude/Codex/Cursor, or should some agents fall back to FIFO + raw-text match with the documented collision limit? What's the right marker form (trailing metadata line? sentinel-wrapped block?)?
-- **Final-message availability:** if an agent's `stop` doesn't carry the message, is reading its transcript (`RestorableAgentSession.transcriptPath`) acceptable, or restrict v1 to agents that carry it?
-- **`surface_id` threading:** is extending `WorkstreamEvent`/`feed.push` the right layer, and does any consumer assume the current schema?
-- **History key:** confirm one-chat-room-per-window and that the window/session id is the right persistence key across restore.
+Remaining — the real risks now live in **Step 0 gates**, not the design body:
+- **G1 — can the reviewer return text? (biggest risk.)** Final-message capture is verified **only for Claude via OMP**; codex/cursor are unconfirmed. The product has no value until Codex can post review text. G1 must confirm `stop`-carries-message or size the transcript fallback (`RestorableAgentSession.transcriptPath`) before the Codex adapter ships. Is the transcript fallback acceptable for v1, or restrict to agents that carry the message?
+- **Marker viability (Step 0):** a token that survives `toolInputJSON`, strips before display/forward, and doesn't derail Claude/Codex/Cursor. Right form (trailing metadata line vs sentinel-wrapped)? Per-agent degraded fallback acceptable where it can't?
+- **`surface_id` threading:** is extending `WorkstreamEvent`/`feed.push` the right layer; does any consumer assume the current schema?
+- **History key:** what identifier is actually stable across quit→relaunch / session-restore (window id? stamped workspace id)? Unverified.
 - **`WorkspaceRole` placement:** add to `Workspace` + persistence as proposed, or model the chat room as a distinct workspace subtype?
