@@ -1,0 +1,61 @@
+# Markdown Encyclopedia
+
+本仓库所有 Markdown 文件的索引（不包含 `projects/`、`plans/`、`templates/`、`CLAUDE.md` 与 `AGENTS.md`），附简要说明。
+重新生成本文件时，请排除 `projects/`、`plans/`、`templates/` 下的所有内容，并排除 `CLAUDE.md` 与 `AGENTS.md`。
+
+- `canvas-editor/docs/architecture.md` - Canvas Editor 模块化架构概览：13 模块依赖图、数据流、解耦设计、坐标系统、DI。
+- `canvas-editor/docs/crossplatform.md` - 跨平台架构策略：共享核心层/平台特定层分层、6 条跨平台设计规则、添加新平台工作清单。
+- `canvas-editor/editor-models/docs/architecture.md` - editor-models 模块架构：数据模型、坐标类型、状态容器、工具函数。
+- `canvas-editor/editor-models/docs/coordinate-system.md` - 坐标系统与坐标变换：4 层坐标系（Local/Viewport/Canvas/Element）、类型安全设计、CoordinateTransformer API、变换数学。
+- `canvas-editor/editor-models/docs/type-safety.md` - 类型安全原则：每个数值域（坐标 / 距离 / 角度 / 缩放 / 分数 / 字号 / 像素密度 / 颜色 / 透明度）的 value class 包装；裸 Float/Double 不允许出现在 API 边界，由 lint_float_in_editor 强制执行。
+- `canvas-editor/editor-protocol/docs/architecture.md` - editor-protocol 模块架构：CanvasSerializer、EditorSnapshotSerializer、可序列化数据类。
+- `canvas-editor/editor-protocol-codegen/docs/architecture.md` - editor-protocol-codegen 模块架构：离线 JVM 工具，从 KSerializer/SerialDescriptor 反射生成 Python 镜像 `_generated_wire_types.py` 供 ui-test 消费；lint_codegen_consistency.sh 守卫漂移。
+- `canvas-editor/editor-renderer/docs/architecture.md` - editor-renderer 模块架构：live 渲染 RenderEngine、RenderPipeline、DrawCommand、图片/文本缓存、分辨率分层。
+- `canvas-editor/export-renderer/docs/architecture.md` - export-renderer 模块架构：headless PNG 导出、SkiaExportRenderer（commonMain）、跨 android/iOS/jvm 四平台。
+- `canvas-editor/editor-service/docs/architecture.md` - editor-service 模块架构：EditorService + 19 扩展、LocalSessionManager、LockManager、历史管理、DI。
+- `canvas-editor/editor-importer/docs/architecture.md` - editor-importer 模块架构：HTML / RTF（后续 Markdown） → ContentFlow / TableContent，model-only 输出（element 构造在 caller），全部解析器在 commonMain（HTML 走 ksoup），4 个 KMP target（Android / iOS arm64 / iOS sim / JVM）共用；可作 editor-service commonTest oracle。
+- `canvas-editor/editor-debug-server/docs/architecture.md` - editor-debug-server 模块架构：DebugHttpServer、REST API 端点、API 模型。
+- `canvas-editor/editor-utilities/docs/architecture.md` - editor-utilities 模块架构：TimeUtils 等平台相关工具函数。
+- `canvas-editor/editor-touch-input/docs/architecture.md` - editor-touch-input 模块架构：GestureRecognizer、11 个手势处理器、优先级。
+- `canvas-editor/editor-touch-input/docs/gesture.md` - 手势系统规范：画布/元素手势触发条件、预期行为、四角验证规则、坐标系统、手势优先级。
+- `canvas-editor/editor-phone-ui/docs/architecture.md` - editor-phone-ui 模块架构：EditorFactory、CanvasView、ContextMenuViewModel、UI 组件、DI 聚合、state-sync 客户端集成。
+- `canvas-editor/state-sync-client/docs/architecture.md` - state-sync-client 模块架构：phone 端 WebSocket 客户端、ApplyRemoteStateCommand 压成单条 undo、重连退避、Ktor engine 分平台。
+- `canvas-editor/state-sync-server/docs/architecture.md` - state-sync-server 模块架构：CLI 端 WebSocket 服务端（:9002）、push/pull suspend API、PushResult/PullResult、单一活动客户端 + 上线覆盖。
+- `.github/docs/architecture.md` - CI/CD 架构概览。
+- `.github/docs/how_to.md` - CI/CD 使用指南。
+- `docs/koin-di-setup-guide.md` - Koin 依赖注入设置指南（AI Agent 专用）。
+- `guides/READ-ME-FIRST.md` - 使用指南入口与概览。
+- `guides/dictionary.md` - 术语词典：项目中常用术语的定义（架构、文档、计划、Ralph、工作流）。
+- `guides/code-review-guide.md` - 代码审查指南：3 种结论（Ready/Needs Refinement/Abandon）、Clean Architecture 原则、7 个审查维度。
+- `guides/factory-pattern-guide.md` - Factory 模式指南：变体管理（实验、多平台、迁移）、规则豁免、生命周期。
+- `guides/large-scale-migration-guide.md` - 大规模迁移指南：clean-to-clean 一次到位，不接受中间过渡状态；理由（端到端可测 / 抛弃成本低 / 代码库始终干净）+ 反模式 + 真正应该拆 PR 的唯一例外。
+- `guides/encyclopedia.md` - Markdown 索引与说明。
+- `guides/linear-agile-development-guide.md` - Linear 敏捷开发操作指南。
+- `guides/naming-guide.md` - 命名规范：模块/文件夹/文件/类/函数/属性/常量/测试/DI 的命名约定，Service vs Manager 区分。
+- `guides/pull-request-guide.md` - Pull Request 工作流程指南。
+- `apps/editor-cli/docs/how_to.md` - editor-cli agent 使用指南：CLI 定位（headless editor + push/pull 同步）、agent 角色、标准 workflow、图片与形状示例、gotchas。
+- `apps/editor-cli/docs/commands.md` - editor-cli 命令参考：每个 canvas-cli 命令的参数/返回/错误码，element JSON 通用 shape，参数 wire 形态，坐标系统。
+- `apps/phone/ios/XCFRAMEWORK_BUILD_SETUP.md` - iOS XCFramework 构建步骤说明。
+- `apps/phone/ios/canvaseditor/canvaseditor/services/background-removal/docs/architecture.md` - iOS 背景移除模块架构。
+- `apps/phone/ios/canvaseditor/canvaseditor/services/docs/ios_bridge_architecture.md` - iOS Bridge 层架构。
+- `shared-services/docs/architecture.md` - Shared Services 共享业务服务层架构概览：定位、服务一览、三种平台集成模式、DI、测试策略、设计规则。
+- `shared-services/logger-service/docs/architecture.md` - logger-service 架构：Logger 统一日志 + LoggerCallbacks 回调注入。
+- `shared-services/logger-service/docs/how_to.md` - Logger Service 使用指南：日志输出、回调注册。
+- `shared-services/assertion/docs/architecture.md` - assertion 模块架构：Assert.that / Assert.notNull / Assert.unreachable 运行时不变量检测，debug 抛 AssertionError 终止进程，release 退化为 Logger.logError；纯 commonMain，无 expect/actual。
+- `shared-services/assertion/docs/how_to.md` - Assertion 使用指南：Assert.* API 用法、错误处理原则（logError vs Assert）、debug/release 语义、单元测试中 assertFailsWith&lt;AssertionError&gt; 模式。
+- `shared-services/photo-library/docs/architecture.md` - PhotoLibrary 架构：相册选图、saveImageToGallery、PhotoLibraryAssetSource 端口实现。
+- `shared-services/image-loader/docs/architecture.md` - ImageLoader 架构：按 Asset 读取图片字节，纯 commonMain（含 jvm target），通过 PhotoLibraryAssetSource 端口兼容 phone / CLI 两种形态。
+- `ralph/docs/architecture.md` - Ralph 调试循环架构概览。
+- `guides/debug-ralph-guide.md` - Ralph 自身的调试与开发指南：核心原则、反模式、日志位置。
+- `ralph/docs/duplicate_removal_guide.md` - 去重规则说明。
+- `ralph/docs/codex-evaluation.md` - Codex Backend 评估报告：各阶段表现、根本问题、不推荐用于自动化。
+- `ralph/docs/how_to.md` - Ralph 调试循环工具使用指南。
+- `ralph/docs/hypothesis_generation_guide.md` - 假设生成指南。
+- `guides/fix-lint-guide.md` - Lint Loop 范围指南：允许/禁止的修复、重构指标、执行顺序。
+- `guides/plan-execution-guide.md` - Ralph Phase 1 代码生成操作约束。
+- `guides/debug-unit-guide.md` - 单元测试调试指南：护栏、信任级别、产物位置。
+- `unit-test/docs/how_to_write_stable_unit_test.md` - 如何编写稳定的单元测试：Service / ViewModel 测试边界、fixture、harness、反模式。
+- `ui-test/docs/architecture.md` - UI 测试架构概览。
+- `ui-test/docs/how_to.md` - UI 测试工具使用指南：脚本参数、测试运行、步骤编号工具。
+- `guides/debug-ui-guide.md` - UI 测试调试指南。
+- `ui-test/docs/how_to_write_stable_ui_test.md` - 如何编写稳定的 UI 测试。
