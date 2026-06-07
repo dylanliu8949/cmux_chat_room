@@ -10565,6 +10565,8 @@ struct VerticalTabsSidebar: View {
     /// the chat-room agent rows rebuild their status-badge snapshots without needing a tab selection.
     /// Lifecycle transitions are infrequent (running/idle/needsInput), so this does not thrash layout.
     @State private var chatLifecycleVersion: Int = 0
+    /// Chat rooms whose agent rows are collapsed (hidden). Toggled by tapping the room row's chevron/name.
+    @State private var collapsedChatRoomIDs: Set<UUID> = []
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     private var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
     @AppStorage(CmuxExtensionSidebarSelection.defaultsKey)
@@ -12366,6 +12368,10 @@ struct VerticalTabsSidebar: View {
             },
             newAgent: { chatRoomID in ChatRoomController.shared?.promptNewAgent(roomID: chatRoomID) },
             moveAgent: { agentID, chatRoomID in manager.setRoom(ofAgent: agentID, toRoom: chatRoomID) },
+            toggleCollapse: { chatRoomID in
+                if collapsedChatRoomIDs.contains(chatRoomID) { collapsedChatRoomIDs.remove(chatRoomID) }
+                else { collapsedChatRoomIDs.insert(chatRoomID) }
+            },
             rooms: {
                 manager.chatRoomWorkspaces.compactMap { ws in
                     ws.chatRoomID.map { (chatRoomID: $0, name: ws.roomName ?? ws.title) }
@@ -12383,7 +12389,8 @@ struct VerticalTabsSidebar: View {
         let renderItems = SidebarWorkspaceRenderItem.chatRoomRenderItems(
             tabs: renderContext.tabs,
             selectedWorkspaceID: tabManager.selectedWorkspace?.id,
-            badgedRoomIDs: ChatRoomController.shared?.badgedRoomIDs ?? []
+            badgedRoomIDs: ChatRoomController.shared?.badgedRoomIDs ?? [],
+            collapsedRoomIDs: collapsedChatRoomIDs
         )
         let chatActions = chatSidebarActions()
         // Honor Settings → Sidebar (font size, path display, branch layout) in the chat-room rows.

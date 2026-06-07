@@ -42,7 +42,8 @@ enum SidebarWorkspaceRenderItem {
     static func chatRoomRenderItems(
         tabs: [Workspace],
         selectedWorkspaceID: UUID?,
-        badgedRoomIDs: Set<UUID>
+        badgedRoomIDs: Set<UUID>,
+        collapsedRoomIDs: Set<UUID> = []
     ) -> [SidebarWorkspaceRenderItem] {
         let rooms = tabs.filter { $0.workspaceRole == .chatRoom }
         // Only real agents (a resolvable `AgentKind`) are shown. This app has **no non-agent
@@ -55,14 +56,17 @@ enum SidebarWorkspaceRenderItem {
         var items: [SidebarWorkspaceRenderItem] = [.sectionHeader(chatRoomsSectionTitle)]
         for room in rooms {
             guard let crid = room.chatRoomID else { continue }
+            let isCollapsed = collapsedRoomIDs.contains(crid)
             items.append(.roomRow(ChatRoomRowSnapshot(
                 id: room.id,
                 chatRoomID: crid,
                 name: room.roomName ?? room.title,
                 colorHex: room.customColor,
                 isSelected: room.id == selectedWorkspaceID,
-                hasUnread: badgedRoomIDs.contains(crid)
+                hasUnread: badgedRoomIDs.contains(crid),
+                isCollapsed: isCollapsed
             )))
+            guard !isCollapsed else { continue }   // hide this room's agent rows when collapsed
             for agent in agents where agent.roomID == crid {
                 items.append(.agentRow(agentSnapshot(agent, selectedWorkspaceID: selectedWorkspaceID)))
             }

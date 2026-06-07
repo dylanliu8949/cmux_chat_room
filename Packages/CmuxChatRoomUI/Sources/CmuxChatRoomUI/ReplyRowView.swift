@@ -14,6 +14,20 @@ struct ReplyRowView: View {
     let actions: ChatRoomActions
     let onForward: (MessageID, String) -> Void
     let onQuoteIntoComposer: (String) -> Void
+    let onDisplayHeightChange: (MessageID) -> Void
+
+    /// Whether the reply body is expanded to its full height. Defaults to `true` — the whole
+    /// point of the chat room is to read agent responses in full, so we show everything by
+    /// default and only offer an optional "Show less" collapse for very long replies. Local view
+    /// state per row, keyed by the row's identity in the enclosing `ForEach`, so each agent
+    /// remembers its own expand/collapse independently.
+    @State private var isReplyExpanded = true
+
+    /// A reply longer than this (chars) or with at least ``collapsedLineLimit`` newlines gets an
+    /// optional "Show less" toggle so the reader can fold a very long answer if they want — but
+    /// it stays fully expanded until they choose to collapse it.
+    private static let collapseCharThreshold = 600
+    private static let collapsedLineLimit = 10
 
     private var hasReplied: Bool { if case .replied = outcome { return true } else { return false } }
 
@@ -39,11 +53,7 @@ struct ReplyRowView: View {
     @ViewBuilder private var content: some View {
         switch outcome {
         case .replied(let reply):
-            Text(reply.markdownBody)
-                .font(.system(size: 12))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            replyBody(reply)
             actionBar(for: reply)
         case .pending:
             pendingStatus
@@ -54,6 +64,40 @@ struct ReplyRowView: View {
             Text(String(localized: "chatroom.reply.failed", defaultValue: "failed to dispatch"))
                 .font(.system(size: 11)).foregroundStyle(.orange)
         }
+    }
+
+    /// The agent's reply text, shown in full by default (the entire captured response). A very
+    /// long reply gains an optional "Show less" toggle that folds it to ``collapsedLineLimit``
+    /// lines; "Show more" expands it back to the whole response.
+    @ViewBuilder private func replyBody(_ reply: Reply) -> some View {
+        let body = reply.markdownBody
+        let newlineCount = body.reduce(into: 0) { count, char in if char == "\n" { count += 1 } }
+        let isLong = body.count > Self.collapseCharThreshold || newlineCount >= Self.collapsedLineLimit
+        let collapsed = isLong && !isReplyExpanded
+        VStack(alignment: .leading, spacing: 3) {
+            Text(body)
+                .font(.system(size: 12))
+                .textSelection(.enabled)
+                .lineLimit(collapsed ? Self.collapsedLineLimit : nil)
+                // When collapsed we must NOT fix the vertical size, or the text expands to full
+                // height and ignores `lineLimit`. When expanded, fix it so the whole reply shows.
+                .fixedSize(horizontal: false, vertical: !collapsed)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isLong {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) { isReplyExpanded.toggle() }
+                    onDisplayHeightChange(reply.id)
+                } label: {
+                    Text(isReplyExpanded
+                         ? String(localized: "chatroom.reply.showLess", defaultValue: "Show less")
+                         : String(localized: "chatroom.reply.showMore", defaultValue: "Show more"))
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+        .id(reply.id)
     }
 
     @ViewBuilder private var pendingStatus: some View {

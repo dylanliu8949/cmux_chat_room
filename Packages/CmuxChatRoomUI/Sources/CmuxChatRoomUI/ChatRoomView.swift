@@ -2,9 +2,9 @@ public import SwiftUI
 public import CmuxChatRoomCore
 public import CmuxChatRoom
 
-/// The chat channel for one room: windowed exchange list, "Load earlier", an `@`-mention composer,
-/// and a forward sheet. Reads `coordinator.channels[roomID]` (observed) and re-fetches the live
-/// lifecycle (`coordinator.lifecycleVersion`) for in-flight running / needs-input visibility.
+/// The chat channel for one room: persisted recent exchanges, "Load earlier", an `@`-mention
+/// composer, and a forward sheet. Reads `coordinator.channels[roomID]` (observed) and re-fetches
+/// the live lifecycle (`coordinator.lifecycleVersion`) for in-flight running / needs-input visibility.
 ///
 /// The host app embeds this for a selected `.chatRoom` workspace and supplies ``ChatRoomActions`` for
 /// go-to-tab / copy side effects so this package never imports AppKit/cmux.
@@ -79,33 +79,46 @@ public struct ChatRoomView: View {
     }
 
     private var channelList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
-                Button {
-                    Task { await coordinator.loadEarlier(in: roomID) }
-                } label: {
-                    Text(String(localized: "chatroom.loadEarlier", defaultValue: "Load earlier"))
-                        .font(.system(size: 11))
-                }
-                .buttonStyle(.plain).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    Button {
+                        Task { await coordinator.loadEarlier(in: roomID) }
+                    } label: {
+                        Text(String(localized: "chatroom.loadEarlier", defaultValue: "Load earlier"))
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
 
-                ForEach(exchanges) { exchange in
-                    ExchangeRowView(
-                        exchange: exchange,
-                        lifecycle: lifecycleByAgent,
-                        actions: actions,
-                        onForward: { msgID, quoted in forwarding = ForwardDraft(sourceID: msgID, quoted: quoted) },
-                        onQuoteIntoComposer: { quoted in composerSeed = quoted }
-                    )
+                    ForEach(exchanges) { exchange in
+                        ExchangeRowView(
+                            exchange: exchange,
+                            lifecycle: lifecycleByAgent,
+                            actions: actions,
+                            onForward: { msgID, quoted in forwarding = ForwardDraft(sourceID: msgID, quoted: quoted) },
+                            onQuoteIntoComposer: { quoted in composerSeed = quoted },
+                            onReplyDisplayHeightChange: { replyID in
+                                Task { @MainActor in
+                                    await Task.yield()
+                                    withAnimation(.easeInOut(duration: 0.12)) {
+                                        proxy.scrollTo(replyID, anchor: .top)
+                                    }
+                                }
+                            }
+                        )
+                    }
                 }
+                .padding(12)
             }
-            .padding(12)
         }
     }
 
     private func refreshAll() async {
         roster = await coordinator.roster(inRoom: roomID)
+        if exchanges.isEmpty {
+            await coordinator.loadEarlier(in: roomID)
+        }
         await refreshLifecycle()
     }
 

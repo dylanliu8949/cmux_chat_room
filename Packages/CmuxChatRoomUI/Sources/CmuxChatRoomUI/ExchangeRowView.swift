@@ -10,6 +10,7 @@ struct ExchangeRowView: View {
     let actions: ChatRoomActions
     let onForward: (MessageID, String) -> Void
     let onQuoteIntoComposer: (String) -> Void
+    let onReplyDisplayHeightChange: (MessageID) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -47,7 +48,8 @@ struct ExchangeRowView: View {
                         liveState: lifecycle[target.agentID] ?? .unknown,
                         actions: actions,
                         onForward: onForward,
-                        onQuoteIntoComposer: onQuoteIntoComposer
+                        onQuoteIntoComposer: onQuoteIntoComposer,
+                        onDisplayHeightChange: onReplyDisplayHeightChange
                     )
                 }
             }

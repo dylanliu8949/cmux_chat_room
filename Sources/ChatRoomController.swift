@@ -160,6 +160,22 @@ final class ChatRoomController: ObservableObject {
 #endif
     }
 
+    /// Resolves the chat reply text for a feed event, preferring the full, formatting-preserved
+    /// message the CLI spilled to a temp file over the length-capped, single-lined inline copy.
+    /// Consumes (deletes) the temp file on read so it doesn't linger. Falls back to the inline
+    /// field whenever the file is absent, unreadable, or empty.
+    private static func resolveChatReply(for event: WorkstreamEvent) -> String? {
+        if let path = event.chatFullMessagePath {
+            let contents = try? String(contentsOfFile: path, encoding: .utf8)
+            try? FileManager.default.removeItem(atPath: path)
+            if let contents {
+                let trimmed = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return event.rawAssistantFinalMessage ?? event.assistantFinalMessage
+    }
+
     private func handleRawFeedEvent(_ event: WorkstreamEvent) {
 #if DEBUG
         let wsShort = (event.workspaceId ?? "nil").prefix(8)
@@ -202,7 +218,7 @@ final class ChatRoomController: ObservableObject {
         case .sessionStart: kind = .sessionStart
         default: kind = .other
         }
-        let finalMessage = event.rawAssistantFinalMessage ?? event.assistantFinalMessage
+        let finalMessage = Self.resolveChatReply(for: event)
         guard let turn = AgentTurnEvent.from(
             hook: AgentHookEvent(kind: kind, agent: agent, finalMessage: finalMessage)
         ) else {
@@ -242,6 +258,16 @@ extension WorkstreamEvent {
         guard hookEventName == .stop || hookEventName == .subagentStop else { return nil }
         return Self.rawString(fromJSON: extraFieldsJSON, keys: ["last_assistant_message", "lastAssistantMessage", "last_agent_message", "lastAgentMessage"])
             ?? Self.rawString(fromJSON: toolInputJSON, keys: ["last_assistant_message", "lastAssistantMessage"])
+    }
+
+    /// Path to a temp file holding the full, formatting-preserved chat reply, written by the CLI
+    /// Stop hook when the inline assistant message would be truncated or newline-flattened. The
+    /// chat bridge reads this file (then deletes it) so the room shows the entire response; absent
+    /// or unreadable, it falls back to the inline ``rawAssistantFinalMessage`` /
+    /// ``assistantFinalMessage``. See `writeChatReplyOverflowFile` in the CLI.
+    var chatFullMessagePath: String? {
+        guard hookEventName == .stop else { return nil }
+        return Self.rawString(fromJSON: extraFieldsJSON, keys: ["chat_full_message_path"])
     }
 
     private static func rawString(fromJSON jsonString: String?, keys: [String]) -> String? {

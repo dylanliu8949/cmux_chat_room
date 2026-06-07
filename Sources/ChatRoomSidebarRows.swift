@@ -12,6 +12,7 @@ struct ChatRoomRowSnapshot: Equatable, Identifiable {
     let colorHex: String?
     let isSelected: Bool
     let hasUnread: Bool
+    let isCollapsed: Bool        // true ⇒ this room's agent rows are hidden
 }
 
 /// Immutable snapshot of an agent row in the bottom sidebar section.
@@ -41,6 +42,7 @@ struct ChatSidebarActions {
     var closeWorkspace: (UUID) -> Void
     var newAgent: (UUID) -> Void          // arg: room's chatRoomID
     var moveAgent: (UUID, UUID) -> Void   // agentWorkspaceID, destination chatRoomID
+    var toggleCollapse: (UUID) -> Void    // arg: room's chatRoomID
     var rooms: () -> [(chatRoomID: UUID, name: String)]
 }
 
@@ -112,6 +114,13 @@ struct ChatRoomRowView: View {
 
     var body: some View {
         HStack(spacing: 6) {
+            Image(systemName: snapshot.isCollapsed ? "chevron.right" : "chevron.down")
+                .font(.system(size: 9 * s, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 10 * s, alignment: .center)
+                .accessibilityLabel(snapshot.isCollapsed
+                    ? String(localized: "chatroom.a11y.expandRoom", defaultValue: "expand room")
+                    : String(localized: "chatroom.a11y.collapseRoom", defaultValue: "collapse room"))
             Text("#").font(.system(size: 13 * s, weight: .bold)).foregroundStyle(color)
             if editing {
                 TextField("", text: $draft, onCommit: commit)
@@ -143,7 +152,9 @@ struct ChatRoomRowView: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(snapshot.isSelected ? color.opacity(0.6) : .clear, lineWidth: 1))
         )
         .contentShape(Rectangle())
-        .onTapGesture { actions.select(snapshot.id) }
+        // Single tap selects the room (shows its channel) AND toggles collapse of its agent rows —
+        // the chevron + name are one target, per the requested behavior.
+        .onTapGesture { actions.select(snapshot.id); actions.toggleCollapse(snapshot.chatRoomID) }
         .onTapGesture(count: 2) { beginEdit() }
         .contextMenu {
             Button(String(localized: "chatroom.action.rename", defaultValue: "Rename")) { beginEdit() }

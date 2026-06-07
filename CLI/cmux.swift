@@ -21312,7 +21312,14 @@ struct CMUXCLI {
                     markActive: shouldPromoteActiveSession,
                     turnId: parsedInput.turnId
                 )
-                if shouldPromoteActiveSession {
+                // Chat-room fork: register the resume binding on every top-level SessionStart that
+                // carries a session id — not just on /clear or stopped-session replacement. Upstream
+                // relies on tmux-wrapped process detection to capture the *initial* Claude resume
+                // binding, but this fork launches agents as a bare typed command (no tmux), so without
+                // an eager publish Claude's first session is never restorable and its tab comes back as
+                // a dead shell after a restart (Codex survives via its own cwd-matched rollout
+                // detection). Nested sub-agent sessions are still suppressed.
+                if shouldPromoteActiveSession || !suppressVisibleMutations {
                     publishAgentSurfaceResumeBinding(
                         client: client,
                         workspaceId: workspaceId,
@@ -22489,7 +22496,17 @@ struct CMUXCLI {
             return 80
         case "transcript_path", "transcriptPath":
             return 240
-        case "last_assistant_message", "lastAssistantMessage", "assistantPreamble", "assistant_preamble", "assistant_response", "assistantResponse", "title", "summary", "message", "body", "text", "prompt", "error", "codex_error_info", "codexErrorInfo", "additional_details", "additionalDetails", "description", "terminationReason", "user_message", "userMessage", "command":
+        case "last_assistant_message", "lastAssistantMessage", "assistantPreamble", "assistant_preamble", "assistant_response", "assistantResponse":
+            // Chat-room fork: the agent's final message is a first-class chat reply
+            // (design §3.8 "Full message text"), not a compact Feed preview, so it needs
+            // far more than the 240-char default that clipped real replies mid-sentence.
+            // Kept under CmuxEventBus.defaultMaxEventLineBytes (16 KiB): the whole feed
+            // event must fit one line, and an over-budget line gets its fields dropped
+            // (losing the reply entirely), so we leave headroom for the rest of the event.
+            // The chat UI collapses long replies behind a "Show more" toggle; the Feed
+            // re-truncates for its own display downstream.
+            return 8_000
+        case "title", "summary", "message", "body", "text", "prompt", "error", "codex_error_info", "codexErrorInfo", "additional_details", "additionalDetails", "description", "terminationReason", "user_message", "userMessage", "command":
             return 240
         default:
             return 160
@@ -28784,6 +28801,19 @@ export default function cmuxPiSessionExtension(pi: ExtensionAPI) {
         )
         event["_opencode_request_id"] = "\(source)-\(sessionId)-\(hookEventName)-\(Int(Date().timeIntervalSince1970 * 1000))"
 
+        // Chat-room fork: the inline assistant message that rides this event is both length-capped
+        // (8 KiB, to fit the 16 KiB event line) and flattened to a single line by setFeedContext —
+        // fine for the Feed preview, lossy for a chat reply that should show the entire formatted
+        // response (design §3.8). On a turn-completing Stop, spill the verbatim full message to a
+        // per-event temp file and hand the app its path; the app reads the file for the chat and
+        // falls back to the inline copy if the file is missing.
+        if hookEventName == "Stop",
+           let fullMessage = fullChatAssistantMessage(from: parsedInput.rawObject),
+           let requestId = event["_opencode_request_id"] as? String,
+           let overflowPath = writeChatReplyOverflowFile(message: fullMessage, requestId: requestId) {
+            event["chat_full_message_path"] = overflowPath
+        }
+
         let frame: [String: Any] = [
             "method": "feed.push",
             "params": [
@@ -28795,6 +28825,58 @@ export default function cmuxPiSessionExtension(pi: ExtensionAPI) {
               let line = String(data: data, encoding: .utf8)
         else { return }
         sendBestEffortFeedTelemetry(socketPath: client.socketPath, line: line, socketPassword: socketPassword)
+    }
+
+    /// The agent's final assistant message, verbatim — newlines and indentation preserved,
+    /// untruncated — pulled from the raw Stop-hook payload before compaction. This is the full
+    /// chat reply (design §3.8), distinct from the flattened, length-capped `assistantPreamble`
+    /// the Feed shows. Both Claude and Codex emit it inline on Stop; searches the same key
+    /// locations as ``compactClaudeHookObject``.
+    private func fullChatAssistantMessage(from rawObject: [String: Any]?) -> String? {
+        guard let rawObject else { return nil }
+        let keys = [
+            "last_assistant_message", "lastAssistantMessage",
+            "assistantPreamble", "assistant_preamble",
+            "assistant_response", "assistantResponse",
+            "last_agent_message", "lastAgentMessage",
+        ]
+        if let message = verbatimChatString(in: rawObject, keys: keys) { return message }
+        for nestedKey in ["notification", "data", "extra"] {
+            if let nested = rawObject[nestedKey] as? [String: Any],
+               let message = verbatimChatString(in: nested, keys: keys) {
+                return message
+            }
+        }
+        return nil
+    }
+
+    /// First non-empty string value for `keys`, trimmed only at the outer edges so interior
+    /// newlines and indentation survive (unlike ``normalizedSingleLine``, which flattens them).
+    private func verbatimChatString(in object: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let string = object[key] as? String {
+                let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
+    /// Spills the full chat reply to a per-event file under the temp dir and returns its path, so
+    /// the app can read the entire formatted response instead of the length-capped, single-lined
+    /// inline copy. Returns `nil` on any failure (the caller then relies on the inline field).
+    private func writeChatReplyOverflowFile(message: String, requestId: String) -> String? {
+        let dir = (NSTemporaryDirectory() as NSString).appendingPathComponent("cmux-chat-replies")
+        let safeId = String(requestId.prefix(120).map { ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") ? $0 : "_" })
+        guard !safeId.isEmpty else { return nil }
+        let path = (dir as NSString).appendingPathComponent(safeId + ".txt")
+        do {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            try message.write(toFile: path, atomically: true, encoding: .utf8)
+            return path
+        } catch {
+            return nil
+        }
     }
 
     private func feedContextForEvent(
@@ -28834,7 +28916,11 @@ export default function cmuxPiSessionExtension(pi: ExtensionAPI) {
                     in: rawObject,
                     keys: ["assistantPreamble", "assistant_preamble", "last_assistant_message", "lastAssistantMessage"]
                 ),
-                maxLength: 1_000
+                // Chat-room fork: this context field is the agent's final message as shown
+                // in the chat (design §3.8). 1 000 chars clipped longer replies; match the
+                // 8 000-char compaction cap so the full reply reaches the chat bridge while
+                // staying under the 16 KiB event-line budget. See claudeHookCompactFieldLimit.
+                maxLength: 8_000
             )
         }
 
