@@ -3,7 +3,7 @@
 **base commit hash**：961cc2b5157b1388e253734bfe37389b3492be32
 **branch name**：feat/chat-room
 **创建日期**：2026-06-07
-**状态**：create-plan-in-progress
+**状态**：review-plan-in-progress
 **前置任务（如适用）**：聊天室核心（rooms + agent tabs + 回复路由 + 会话恢复）**须在 Phase -1 先证实可用**——审查指出 dogfood 曾出现 agent 完成却 `0 / N replied`，且本计划每个 phase 都以「聊天回复仍正常」为门控，故删除前必须先证明 `@all` 回复路由 + reload/会话恢复工作（原始设计：`plans/2026-06-06-cmux-ai-chat-room-design.md`）
 **后续任务（如适用）**：内部标识符全量 `cmux→bus` 重命名（仅在采纳「完整重命名」决策时，作为独立 XXXL 计划）
 
@@ -140,7 +140,7 @@
 
 列出所有未解决的选择项和问题，并提供推荐选项。在开发者解决这些事项之前，不要执行计划。
 
-**当前计划完整程度**：90%（D1–D9 全部决策归档、开放决策清零；四路代码审查的已验证 blocker 已折回——Phase 0 改为持久化边界宽松解码 + 恢复契约、AppleScript/Examples/claude-teams/Rovo 的耦合已澄清、Phase 8 拆 8a/8b/8c、Phase 9 拆更名 vs WorkspaceGroup、新增 Phase -1 回归门控。剩余 10% = 开发者逐项勾选「需要修改/添加的文件」复选框 + 跑通 Phase -1 回归。**状态仍为 `create-plan-in-progress`**——审查尚未发 `review-plan-complete`，须经人工 `/review-plan` 通过后才进入执行。）
+**当前计划完整程度**：90%（D1–D9 全部决策归档、开放决策清零；四路代码审查的已验证 blocker 已折回——Phase 0 改为持久化边界宽松解码 + 恢复契约、AppleScript/Examples/claude-teams/Rovo 的耦合已澄清、Phase 8 拆 8a/8b/8c、Phase 9 拆更名 vs WorkspaceGroup、新增 Phase -1 回归门控。剩余 10% = 开发者逐项勾选「需要修改/添加的文件」复选框 + 跑通 Phase -1 回归。**状态 `review-plan-in-progress`**——审查进行中，尚未发 `review-plan-complete`，须经 `/review-plan` 通过后才进入执行。）
 
 > **注意**：初始生成计划时，此完整程度应留空。随着开发者做出更多决策，AI 应更新此百分比。
 
