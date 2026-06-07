@@ -2113,6 +2113,10 @@ struct ContentView: View {
                     Group {
                         if tab.isChatRoom {
                             ChatRoomHostView(workspace: tab, tabManager: tabManager)
+                        } else if tab.workspaceRole == .agent && tab.agentKindRaw == nil {
+                            // Kindless placeholder (e.g. cmux's default workspace on a fresh start with
+                            // no rooms): show the empty state instead of a bare bash terminal.
+                            ChatRoomEmptyStateView()
                         } else {
                             WorkspaceContentView(
                                 workspace: tab,
@@ -2394,18 +2398,9 @@ struct ContentView: View {
                     fullscreenControls
                 }
 
-                // Draggable folder icon + focused command name
-                if let directory = focusedDirectory {
-                    DetachedFolderDragIcon(directory: directory)
-                        .frame(width: 16, height: 16)
-                        .padding(.leading, -6)
-                }
-
-                Text(titlebarText)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(fakeTitlebarTextColor(appearance: appearance))
-                    .lineLimit(1)
-                    .allowsHitTesting(false)
+                // Chat-room fork: the titlebar no longer shows the folder icon + workspace name —
+                // the active room/agent context already lives in the sidebar and channel header.
+                // The strip stays for window dragging + traffic-light spacing.
 
                 Spacer()
 
@@ -10566,6 +10561,10 @@ struct VerticalTabsSidebar: View {
     /// has no TabItemView, so no implicit per-row publisher subscription
     /// would otherwise fire on `cd` while it's not selected.
     @State private var anchorCwdRevision: Int = 0
+    /// Bumped when an agent's lifecycle changes (`ChatRoomController.lifecycleChangedNotification`), so
+    /// the chat-room agent rows rebuild their status-badge snapshots without needing a tab selection.
+    /// Lifecycle transitions are infrequent (running/idle/needsInput), so this does not thrash layout.
+    @State private var chatLifecycleVersion: Int = 0
     @AppStorage(WorkspacePresentationModeSettings.modeKey)
     private var workspacePresentationMode = WorkspacePresentationModeSettings.defaultMode.rawValue
     @AppStorage(CmuxExtensionSidebarSelection.defaultsKey)
@@ -11045,6 +11044,9 @@ struct VerticalTabsSidebar: View {
             guard let frozenTabId = frozenShortcutHintsTabId,
                   !tabIds.contains(frozenTabId) else { return }
             frozenShortcutHintsTabId = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ChatRoomController.lifecycleChangedNotification)) { _ in
+            chatLifecycleVersion &+= 1
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -12340,10 +12342,55 @@ struct VerticalTabsSidebar: View {
         return nil
     }
 
+    /// Closures the chat-room rows use for selection / rename / close / move (kept as closures so the
+    /// rows stay value-fed and never reference `tabManager`/the controller directly).
+    private func chatSidebarActions() -> ChatSidebarActions {
+        let manager = tabManager
+        return ChatSidebarActions(
+            select: { id in
+                if let ws = manager.tabs.first(where: { $0.id == id }) { manager.selectTab(ws) }
+            },
+            rename: { id, name in
+                guard let ws = manager.tabs.first(where: { $0.id == id }) else { return }
+                if ws.workspaceRole == .chatRoom, let crid = ws.chatRoomID {
+                    manager.renameRoom(chatRoomID: crid, to: name)
+                } else {
+                    ws.setCustomTitle(name)
+                }
+            },
+            closeWorkspace: { id in
+                // The close gate (§4.10) routes a room → closeRoom (keep-≥1 + agent cascade) and an
+                // agent → onAgentClosed, so every caller just goes through closeWorkspace.
+                guard let ws = manager.tabs.first(where: { $0.id == id }) else { return }
+                manager.closeWorkspace(ws)
+            },
+            newAgent: { chatRoomID in ChatRoomController.shared?.promptNewAgent(roomID: chatRoomID) },
+            moveAgent: { agentID, chatRoomID in manager.setRoom(ofAgent: agentID, toRoom: chatRoomID) },
+            rooms: {
+                manager.chatRoomWorkspaces.compactMap { ws in
+                    ws.chatRoomID.map { (chatRoomID: $0, name: ws.roomName ?? ws.title) }
+                }
+            }
+        )
+    }
+
     @ViewBuilder
     private func workspaceRows(renderContext: WorkspaceListRenderContext) -> some View {
+        // Reading `chatLifecycleVersion` registers this view as a dependency so an agent lifecycle
+        // change rebuilds the snapshots below (which bake in the live status badge) — otherwise the
+        // badge only refreshes when some other change (e.g. tab selection) re-evaluates the sidebar.
+        let _ = chatLifecycleVersion
         let renderItems = SidebarWorkspaceRenderItem.chatRoomRenderItems(
-            tabs: renderContext.tabs
+            tabs: renderContext.tabs,
+            selectedWorkspaceID: tabManager.selectedWorkspace?.id,
+            badgedRoomIDs: ChatRoomController.shared?.badgedRoomIDs ?? []
+        )
+        let chatActions = chatSidebarActions()
+        // Honor Settings → Sidebar (font size, path display, branch layout) in the chat-room rows.
+        let chatStyle = ChatSidebarRowStyle(
+            fontScale: renderContext.tabItemSettings.sidebarFontScale,
+            lastSegmentPathOnly: renderContext.tabItemSettings.usesLastSegmentPath,
+            branchOnOwnLine: renderContext.tabItemSettings.usesVerticalBranchLayout
         )
         let shouldCollectWorkspaceDropTargets = SidebarDropPlanner.shouldCollectWorkspaceDropTargets(
             draggedTabId: dragState.draggedTabId,
@@ -12374,6 +12421,10 @@ struct VerticalTabsSidebar: View {
                         title: title,
                         onAdd: chatRoomSidebarAddAction(for: title, renderContext: renderContext)
                     )
+                case .roomRow(let snapshot):
+                    ChatRoomRowView(snapshot: snapshot, style: chatStyle, actions: chatActions)
+                case .agentRow(let snapshot):
+                    ChatAgentRowView(snapshot: snapshot, style: chatStyle, actions: chatActions)
                 }
             }
         }

@@ -20,6 +20,9 @@ enum WorkspacePresentationModeSettings {
         case minimal
     }
 
+    // Chat-room fork: keep the standard titlebar band — it carries the reliable `WindowDragHandleView`
+    // so the window stays draggable. The band is left **empty** (the folder icon + workspace-name text
+    // are removed in `customTitlebar`); the active room/agent context lives in the sidebar + channel.
     static let defaultMode: Mode = .standard
 
     static func mode(for rawValue: String?) -> Mode {

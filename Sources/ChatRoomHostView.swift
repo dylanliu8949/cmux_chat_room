@@ -37,6 +37,31 @@ struct ChatRoomHostView: View {
     }
 }
 
+/// Shown in the content area when there are no chat rooms yet (fresh start) — prompts the user to
+/// create their first room from the sidebar `+`.
+struct ChatRoomEmptyStateView: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.secondary)
+            Text(String(localized: "chatroom.empty.title", defaultValue: "No chat rooms yet"))
+                .font(.system(size: 15, weight: .semibold))
+            Text(String(localized: "chatroom.empty.subtitle",
+                        defaultValue: "Click + next to “CHAT ROOMS” in the sidebar to create your first room, then add agents to it."))
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            Button(String(localized: "chatroom.empty.create", defaultValue: "Create a chat room")) {
+                ChatRoomController.shared?.promptNewRoom()
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// A chat-room sidebar section/sub-section header with an optional `+` action.
 struct ChatRoomSidebarSectionHeader: View {
     let title: String

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Foundation
 import Bonsplit
+import CmuxChatRoomCore
 import CmuxFileWatch
 import CmuxGit
 import CmuxProcess
@@ -1065,6 +1066,9 @@ class TabManager: ObservableObject {
     weak var window: NSWindow?
 
     @Published var tabs: [Workspace] = []
+    /// Re-entrancy bypass for the chat-room close gate: set while `closeRoom` force-closes a room
+    /// workspace so `closeWorkspace`'s gate doesn't recurse back into `closeRoom`. See §4.10.
+    var chatRoomCloseBypass = false
     /// Named groupings of workspaces shown as collapsible sections in the sidebar.
     /// Group order in this array defines section order in the sidebar.
     /// Each member workspace stores its `groupId` on the `Workspace` model.
@@ -5203,6 +5207,19 @@ class TabManager: ObservableObject {
     }
 
     func closeWorkspace(_ workspace: Workspace, recordHistory: Bool = true) {
+        // Chat-room close policy (spec §4.10) — gated at the lowest mutator so every entrypoint
+        // (sidebar X, ⌘W/menu, command palette, socket, AppleScript, config) is covered uniformly.
+        if !chatRoomCloseBypass {
+            if workspace.workspaceRole == .chatRoom {
+                // Route a direct room close through the dedicated flow (keep-≥1 + agent cascade).
+                if let crid = workspace.chatRoomID { _ = closeRoom(chatRoomID: crid) }
+                return
+            }
+            if workspace.workspaceRole == .agent {
+                // Reconcile the coordinator's in-flight chat work before the tab disappears.
+                ChatRoomController.shared?.coordinator.onAgentClosed(AgentID(raw: workspace.id))
+            }
+        }
         guard tabs.count > 1 else { return }
         sentryBreadcrumb("workspace.close", data: ["tabCount": tabs.count - 1])
         if recordHistory,

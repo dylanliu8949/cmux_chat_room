@@ -33,8 +33,8 @@ import CmuxChatRoomCore
         await f.0.onLifecycleChange(AgentLifecycleChange(agent: f.agent, state: .idle))
         let injected = await f.2.injected
         #expect(injected.count == 1)
-        let (id, _) = ChatPromptMarker.extract(from: injected[0].text)
-        #expect(id != nil)
+        // The held body is injected verbatim — no marker is added to the prompt.
+        #expect(injected[0].text == "held")
     }
 
     @Test func heldPromptOnClosedTabResolvesTabClosed() async {
@@ -43,5 +43,15 @@ import CmuxChatRoomCore
         await f.0.send(in: f.room, "held", to: [AgentMention(agentID: f.agent)], origin: .userMention)
         f.0.onAgentClosed(f.agent)
         #expect((f.0.channels[f.room] ?? [])[0].outcomes[f.agent] == .tabClosed)
+    }
+
+    @Test func lifecycleChangeBumpsVersionForChannelRefresh() async {
+        let f = await fixture()
+        #expect(f.0.lifecycleVersion == 0)
+        // Transition INTO needsInput must also bump (so the channel re-reads live status).
+        await f.0.onLifecycleChange(AgentLifecycleChange(agent: f.agent, state: .needsInput))
+        #expect(f.0.lifecycleVersion == 1)
+        await f.0.onLifecycleChange(AgentLifecycleChange(agent: f.agent, state: .running))
+        #expect(f.0.lifecycleVersion == 2)
     }
 }

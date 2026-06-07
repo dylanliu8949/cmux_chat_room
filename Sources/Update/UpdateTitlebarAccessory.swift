@@ -980,23 +980,8 @@ struct TitlebarControlsView: View {
             .background(NotificationsAnchorView { viewModel.notificationsAnchorView = $0 })
             .safeHelp(KeyboardShortcutSettings.Action.showNotifications.tooltip(String(localized: "titlebar.notifications.tooltip", defaultValue: "Show notifications")))
 
-            TitlebarControlButton(
-                config: config,
-                foregroundColor: foregroundColor,
-                accessibilityIdentifier: "titlebarControl.newTab",
-                accessibilityLabel: String(localized: "titlebar.newWorkspace.accessibilityLabel", defaultValue: "New Workspace"),
-                action: {
-                #if DEBUG
-                cmuxDebugLog("titlebar.newTab")
-                #endif
-                onNewTab()
-            },
-                rightClickAction: { anchorView, event in
-                    _ = AppDelegate.shared?.showNewWorkspaceContextMenu(anchorView: anchorView, event: event)
-                }) {
-                iconLabel(systemName: "plus", config: config, iconGeometryKeyPrefix: "titlebarControl_newTabIcon")
-            }
-            .safeHelp(KeyboardShortcutSettings.Action.newTab.tooltip(String(localized: "titlebar.newWorkspace.tooltip", defaultValue: "New workspace")))
+            // Chat-room fork: no global "new workspace" button — agents/rooms are created from the
+            // sidebar section "+" controls only (there are no plain non-agent terminals).
 
             TitlebarControlButton(
                 config: config,

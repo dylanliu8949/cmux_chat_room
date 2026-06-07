@@ -1,10 +1,10 @@
 internal import CmuxChatRoomCore
 
-/// A chat prompt held back because its target was `needsInput` at send time.
+/// A chat prompt held back because its target was `needsInput` at send time. When the agent leaves
+/// `needsInput` the coordinator injects `body` and binds the resulting ``ChatTurn``.
 struct HeldPrompt {
-    let requestID: ChatRequestID
     let exchangeID: ExchangeID
     let roomID: ChatRoomID
     let agent: AgentID
-    let bodyWithMarker: String
+    let body: String
 }

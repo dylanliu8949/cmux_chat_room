@@ -20,15 +20,15 @@ import CmuxChatRoomCore
         return (coord, rooms, roster, life, inj, notif, hist, room, agent, snap)
     }
 
-    @Test func chatOriginCompletionRoutesToExchange() async {
+    @Test func completionRoutesToExchangeBoundAtSend() async {
         let f = await makeFixture()
         await f.0.send(in: f.room, "review this", to: [AgentMention(agentID: f.agent)], origin: .userMention)
 
+        // No marker in the injected prompt — correlation was bound at inject time.
         let injectedText = await f.4.lastText()
-        #expect(injectedText != nil)
-        let surface = SurfaceID(raw: UUID())
-        f.0.handle(.promptSubmitted(surface, rawPromptText: injectedText!))
-        f.0.handle(.turnCompleted(surface, finalMessage: "All done."))
+        #expect(injectedText == "review this")
+
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "All done."))
 
         let exchanges = f.0.channels[f.room] ?? []
         #expect(exchanges.count == 1)
@@ -40,42 +40,43 @@ import CmuxChatRoomCore
         }
     }
 
-    @Test func directTurnWithNoMarkerIsDropped() async {
+    @Test func completionWithNoPendingChatTurnIsDropped() async {
         let f = await makeFixture()
-        let surface = SurfaceID(raw: UUID())
-        f.0.handle(.promptSubmitted(surface, rawPromptText: "user typed this directly"))
-        f.0.handle(.turnCompleted(surface, finalMessage: "direct result"))
+        // The agent completes a turn the user drove directly in its tab — nothing was bound, so it is
+        // treated as a direct turn and dropped (no exchange even exists).
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "direct result"))
         #expect((f.0.channels[f.room] ?? []).isEmpty)
     }
 
-    @Test func directTurnCompletingFirstWhileChatPendingDoesNotAttach() async {
+    @Test func secondCompletionAfterSinglePendingIsDropped() async {
         let f = await makeFixture()
         await f.0.send(in: f.room, "chat prompt", to: [AgentMention(agentID: f.agent)], origin: .userMention)
-        let chatInjected = await f.4.lastText()!
-        let surface = SurfaceID(raw: UUID())
-
-        f.0.handle(.promptSubmitted(surface, rawPromptText: chatInjected))
-        f.0.handle(.promptSubmitted(surface, rawPromptText: "direct"))
-        f.0.handle(.turnCompleted(surface, finalMessage: "chat done"))
-        f.0.handle(.turnCompleted(surface, finalMessage: "direct done"))
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "chat reply"))
+        // A subsequent completion with an empty queue (e.g. a direct turn) does not attach anywhere.
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "later direct turn"))
 
         let ex = (f.0.channels[f.room] ?? [])[0]
-        if case let .replied(r) = ex.outcomes[f.agent] { #expect(r.markdownBody == "chat done") }
+        if case let .replied(r) = ex.outcomes[f.agent] { #expect(r.markdownBody == "chat reply") }
         else { Issue.record("chat reply not attached") }
     }
 
-    @Test func byteIdenticalDirectPromptDoesNotBind() async {
+    @Test func fifoPerAgentPopsInSendOrder() async {
         let f = await makeFixture()
-        await f.0.send(in: f.room, "do the thing", to: [AgentMention(agentID: f.agent)], origin: .userMention)
-        let surface = SurfaceID(raw: UUID())
-        f.0.handle(.promptSubmitted(surface, rawPromptText: "do the thing"))
-        f.0.handle(.turnCompleted(surface, finalMessage: "leaked?"))
+        await f.0.send(in: f.room, "first", to: [AgentMention(agentID: f.agent)], origin: .userMention)
+        await f.0.send(in: f.room, "second", to: [AgentMention(agentID: f.agent)], origin: .userMention)
 
-        let ex = (f.0.channels[f.room] ?? [])[0]
-        #expect(ex.outcomes[f.agent] == .pending)
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "reply to first"))
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "reply to second"))
+
+        let exchanges = f.0.channels[f.room] ?? []
+        #expect(exchanges.count == 2)
+        if case let .replied(r) = exchanges[0].outcomes[f.agent] { #expect(r.markdownBody == "reply to first") }
+        else { Issue.record("first") }
+        if case let .replied(r) = exchanges[1].outcomes[f.agent] { #expect(r.markdownBody == "reply to second") }
+        else { Issue.record("second") }
     }
 
-    @Test func fifoIsPerSurfaceAcrossTwoAgents() async {
+    @Test func completionsRouteToOwningAgent() async {
         let rooms = FakeRoomWorkspace(); let roster = FakeRoster(); let life = FakeLifecycle()
         let inj = FakeInjector(); let notif = FakeNotifier(); let hist = InMemoryHistoryStore()
         let room = ChatRoomID(raw: UUID())
@@ -87,15 +88,9 @@ import CmuxChatRoomCore
                                      lifecycle: life, injector: inj, notifier: notif, history: hist)
 
         await coord.send(in: room, "q", to: [AgentMention(agentID: a1), AgentMention(agentID: a2)], origin: .userMention)
-        let injected = await inj.injected
-        let text1 = injected.first(where: { $0.agent == a1 })!.text
-        let text2 = injected.first(where: { $0.agent == a2 })!.text
-
-        let surf1 = SurfaceID(raw: UUID()); let surf2 = SurfaceID(raw: UUID())
-        coord.handle(.promptSubmitted(surf1, rawPromptText: text1))
-        coord.handle(.promptSubmitted(surf2, rawPromptText: text2))
-        coord.handle(.turnCompleted(surf2, finalMessage: "from codex"))
-        coord.handle(.turnCompleted(surf1, finalMessage: "from claude"))
+        // Completions arrive out of order; each agent's queue is independent.
+        coord.handle(.turnCompleted(a2, finalMessage: "from codex"))
+        coord.handle(.turnCompleted(a1, finalMessage: "from claude"))
 
         let ex = (coord.channels[room] ?? [])[0]
         if case let .replied(r) = ex.outcomes[a1] { #expect(r.markdownBody == "from claude") } else { Issue.record("a1") }

@@ -17,13 +17,11 @@ import CmuxChatRoomCore
                                      lifecycle: life, injector: inj, notifier: notif, history: hist)
 
         await coord.send(in: roomA, "from A", to: [AgentMention(agentID: agent)], origin: .userMention)
-        let text = await inj.lastText()!
         await coord.move(agent, to: roomB)
         #expect(await rooms.moved.contains(where: { $0.0 == agent && $0.1 == roomB }))
 
-        let surf = SurfaceID(raw: UUID())
-        coord.handle(.promptSubmitted(surf, rawPromptText: text))
-        coord.handle(.turnCompleted(surf, finalMessage: "reply"))
+        // The in-flight turn was bound to roomA at send time; the completion still lands in roomA.
+        coord.handle(.turnCompleted(agent, finalMessage: "reply"))
         #expect((coord.channels[roomA] ?? []).count == 1)
         #expect((coord.channels[roomB] ?? []).isEmpty)
     }

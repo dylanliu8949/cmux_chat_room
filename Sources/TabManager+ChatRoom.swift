@@ -151,43 +151,54 @@ extension TabManager {
         }
     }
 
-    /// The shell command that starts each agent CLI.
+    /// The shell command that starts each agent CLI so its hooks fire back into cmux.
+    ///
+    /// **Claude:** must launch the **bundled `claude` wrapper** (sibling of the bundled cmux CLI), which
+    /// injects `--session-id`/`--settings` so Claude Code hooks reach this app. Bare `claude` resolves
+    /// to the real binary with no hooks — the shell-integration `claude` function is not reliably in
+    /// effect for this auto-injected launch line, so we invoke the wrapper by absolute path (falling
+    /// back to PATH `claude` only if the bundled wrapper is unavailable).
+    ///
+    /// **Codex / Cursor:** do not auto-inject — their hooks must be installed into their config
+    /// (`~/.codex/hooks.json`, …) first, else they never call `cmux hooks …` and turns never reach the
+    /// channel. `--yes` is REQUIRED: without it the installer prints a diff and waits for confirmation
+    /// on stdin; with output redirected to `/dev/null` that prompt is invisible and never answered, so
+    /// the hooks file is never written. `${CMUX_BUNDLED_CLI_PATH:-cmux}` prefers the bundled CLI.
     static func launchCommand(for kind: AgentKind) -> String {
+        let cli = "${CMUX_BUNDLED_CLI_PATH:-cmux}"
         switch kind {
-        case .claudeCode: return "claude"
-        case .codex: return "codex"
-        case .cursor: return "cursor-agent"
+        case .claudeCode:
+            // Resolve the bundled `claude` wrapper from `Bundle.main` (deterministic — `CMUX_BUNDLED_CLI_PATH`
+            // can point at a standalone build-products `cmux`, whose sibling has no `claude`). The wrapper
+            // injects `--session-id`/`--settings` so Claude Code hooks reach this app; bare `claude` is the
+            // real binary with no hooks. Single-quote the path for the shell (paths contain spaces).
+            if let wrapper = Bundle.main.resourceURL?.appendingPathComponent("bin/claude").path,
+               FileManager.default.isExecutableFile(atPath: wrapper) {
+                return "'\(wrapper)'"
+            }
+            return "claude"
+        case .codex: return "\(cli) hooks codex install --yes >/dev/null 2>&1; codex"
+        case .cursor: return "\(cli) hooks cursor install --yes >/dev/null 2>&1; cursor-agent"
         }
     }
 
     // MARK: Close
 
     /// Closes a room: terminates its member agents, then the room workspace. Refuses if it would
-    /// leave zero rooms. No filesystem side effects. Returns `true` if closed.
+    /// leave zero rooms (keep ≥1). No filesystem side effects (cmux manages no worktrees). Returns
+    /// `true` if closed. The room-workspace close sets ``chatRoomCloseBypass`` so the `closeWorkspace`
+    /// gate (§4.10) doesn't recurse back here; member agents close *through* the gate, which reconciles
+    /// the coordinator via `onAgentClosed`.
     @discardableResult
     func closeRoom(chatRoomID: UUID) -> Bool {
         guard chatRoomWorkspaces.count > 1 else { return false }   // keep ≥1 room
         guard let room = roomWorkspace(forChatRoomID: chatRoomID) else { return false }
-        let members = agentWorkspaces(inRoom: chatRoomID)
-        for member in members {
-            ChatRoomController.shared?.coordinator.onAgentClosed(AgentID(raw: member.id))
-            closeWorkspaceForChatRoom(member, force: true)
+        for member in agentWorkspaces(inRoom: chatRoomID) {
+            closeWorkspace(member)   // gate path → onAgentClosed + teardown
         }
-        closeWorkspaceForChatRoom(room, force: true)
-        return true
-    }
-
-    /// Close gate that refuses removing the last chat room unless forced. Used by the room-close flow
-    /// and by the close-tab entrypoints for chat-room workspaces.
-    @discardableResult
-    func closeWorkspaceForChatRoom(_ workspace: Workspace, force: Bool) -> Bool {
-        if workspace.workspaceRole == .chatRoom, !force, chatRoomWorkspaces.count <= 1 {
-            return false
-        }
-        if workspace.workspaceRole == .agent {
-            ChatRoomController.shared?.coordinator.onAgentClosed(AgentID(raw: workspace.id))
-        }
-        closeWorkspace(workspace)
+        chatRoomCloseBypass = true
+        defer { chatRoomCloseBypass = false }
+        closeWorkspace(room)
         return true
     }
 }

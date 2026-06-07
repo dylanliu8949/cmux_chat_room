@@ -82,6 +82,7 @@
 		C4A710030000000000000001 /* ChatRoomController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710030000000000000002 /* ChatRoomController.swift */; };
 		C4A710050000000000000001 /* ChatRoomHostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710050000000000000002 /* ChatRoomHostView.swift */; };
 		C4A710040000000000000001 /* ChatRoomSeams.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710040000000000000002 /* ChatRoomSeams.swift */; };
+		C4A710060000000000000001 /* ChatRoomSidebarRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710060000000000000002 /* ChatRoomSidebarRows.swift */; };
 		C4A710010000000000000001 /* ChatRoomWorkspaceRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A710010000000000000002 /* ChatRoomWorkspaceRole.swift */; };
 		F3000000A1B2C3D4E5F60718 /* CJKIMEInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */; };
 		D3571002A1B2C3D4E5F60718 /* CJKIMEMarkedSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3571003A1B2C3D4E5F60718 /* CJKIMEMarkedSelectionTests.swift */; };
@@ -801,6 +802,7 @@
 		C4A710030000000000000002 /* ChatRoomController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomController.swift; sourceTree = "<group>"; };
 		C4A710050000000000000002 /* ChatRoomHostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomHostView.swift; sourceTree = "<group>"; };
 		C4A710040000000000000002 /* ChatRoomSeams.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomSeams.swift; sourceTree = "<group>"; };
+		C4A710060000000000000002 /* ChatRoomSidebarRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomSidebarRows.swift; sourceTree = "<group>"; };
 		C4A710010000000000000002 /* ChatRoomWorkspaceRole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomWorkspaceRole.swift; sourceTree = "<group>"; };
 		F3000001A1B2C3D4E5F60718 /* CJKIMEInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CJKIMEInputTests.swift; sourceTree = "<group>"; };
 		D3571003A1B2C3D4E5F60718 /* CJKIMEMarkedSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CJKIMEMarkedSelectionTests.swift; sourceTree = "<group>"; };
@@ -1653,6 +1655,7 @@
 				C4A710030000000000000002 /* ChatRoomController.swift */,
 				C4A710040000000000000002 /* ChatRoomSeams.swift */,
 				C4A710050000000000000002 /* ChatRoomHostView.swift */,
+				C4A710060000000000000002 /* ChatRoomSidebarRows.swift */,
 				F0C05170000000000000001 /* FocusHistory.swift */,
 				C0DEFB100000000000000002 /* FocusSurfaceBroadcaster.swift */,
 				C10D51700000000000000001 /* ClosedItemHistory.swift */,
@@ -2517,6 +2520,7 @@
 				C4A710030000000000000001 /* ChatRoomController.swift in Sources */,
 				C4A710050000000000000001 /* ChatRoomHostView.swift in Sources */,
 				C4A710040000000000000001 /* ChatRoomSeams.swift in Sources */,
+				C4A710060000000000000001 /* ChatRoomSidebarRows.swift in Sources */,
 				C4A710010000000000000001 /* ChatRoomWorkspaceRole.swift in Sources */,
 				C46790000000000000000003 /* CLIForwardingLaunchRouter.swift in Sources */,
 				C10D51700000000000000002 /* ClosedItemHistory.swift in Sources */,

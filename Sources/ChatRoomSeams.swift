@@ -136,11 +136,28 @@ final class AppInjector: PromptInjecting {
         guard let ws = tabManager?.agentWorkspace(id: agent.raw),
               let panelId = ws.focusedPanelId,
               let panel = ws.terminalPanel(for: panelId)
-        else { return false }
-        switch panel.sendInputResult(text + "\r") {
-        case .sent, .queued: return true
-        default: return false
+        else {
+#if DEBUG
+            cmuxDebugLog("chatroom.inject agent=\(agent.raw.uuidString.prefix(8)) FAIL: no agent workspace / focused terminal panel")
+#endif
+            return false
         }
+        // Insert the body (including the trailing correlation marker) through the paste path so
+        // bracketed paste mode lands the multi-line text atomically — no embedded newline submits
+        // early. Then deliver a single discrete Return so the TUI submits the whole prompt as one
+        // turn. `sendInputResult` cannot be used here: it expands every "\n"/"\r" into a burst of
+        // Return key events, which agent TUIs (Claude/Codex) coalesce as a paste and never submit.
+        guard panel.sendText(text) else {
+#if DEBUG
+            cmuxDebugLog("chatroom.inject agent=\(agent.raw.uuidString.prefix(8)) FAIL: sendText (paste) rejected")
+#endif
+            return false
+        }
+        let submitted = panel.sendNamedKey("enter")
+#if DEBUG
+        cmuxDebugLog("chatroom.inject agent=\(agent.raw.uuidString.prefix(8)) panel=\(panelId.uuidString.prefix(8)) chars=\(text.count) paste=ok submit(enter)=\(submitted)")
+#endif
+        return submitted
     }
 }
 

@@ -33,10 +33,7 @@ import CmuxChatRoomCore
                                      lifecycle: life, injector: inj, notifier: notif, history: hist)
 
         await coord.send(in: roomB, "for B", to: [AgentMention(agentID: aB)], origin: .userMention)
-        let text = await inj.lastText()!
-        let surf = SurfaceID(raw: UUID())
-        coord.handle(.promptSubmitted(surf, rawPromptText: text))
-        coord.handle(.turnCompleted(surf, finalMessage: "B reply"))
+        coord.handle(.turnCompleted(aB, finalMessage: "B reply"))
 
         #expect((coord.channels[roomA] ?? []).isEmpty)
         #expect((coord.channels[roomB] ?? []).count == 1)

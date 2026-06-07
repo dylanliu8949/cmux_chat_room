@@ -37,7 +37,8 @@ final class ChatRoomController: ObservableObject {
         let notifier = AppNotifier()
         coordinator = RoomsCoordinator(
             roomsReading: roomSeam, roomsManaging: roomSeam, roster: rosterSeam,
-            lifecycle: lifecycleSeam, injector: injector, notifier: notifier, history: history
+            lifecycle: lifecycleSeam, injector: injector, notifier: notifier, history: history,
+            diagnostic: Self.makeDiagnosticSink()
         )
         notifier.onBadge = { [weak self] roomID in self?.badge(roomID) }
         observeNotifications()
@@ -58,7 +59,14 @@ final class ChatRoomController: ObservableObject {
 
     /// Ensures at least one chat room exists (idempotent).
     func bootstrapDefaultRoom() {
-        tabManager?.ensureDefaultRoomExists()
+        // Intentionally does NOT auto-create a room. The app starts with **no chat rooms**; the user
+        // creates the first one via the "CHAT ROOMS" `+`. (We still migrate any room-less agents from
+        // a legacy session into a room so they aren't orphaned, but we never synthesize an empty
+        // "general" room on a fresh start.)
+        guard !(tabManager?.agentWorkspaces.contains(where: { $0.roomID == nil }) ?? false) else {
+            tabManager?.ensureDefaultRoomExists()
+            return
+        }
     }
 
     /// Clears a room's unread badge (call when it becomes active).
@@ -142,28 +150,71 @@ final class ChatRoomController: ObservableObject {
         })
     }
 
-    private func handleRawFeedEvent(_ event: WorkstreamEvent) {
-        guard let tabManager,
-              let wsIDString = event.workspaceId,
-              let wsID = UUID(uuidString: wsIDString),
-              let workspace = tabManager.tabs.first(where: { $0.id == wsID }),
-              workspace.workspaceRole == .agent,
-              let panelId = workspace.focusedPanelId
-        else { return }
-        let surface = SurfaceID(raw: panelId)
+    /// A diagnostic sink wired to the unified debug log in DEBUG builds, `nil` in release (so the
+    /// coordinator skips building diagnostic strings entirely).
+    private static func makeDiagnosticSink() -> ((String) -> Void)? {
+#if DEBUG
+        return { cmuxDebugLog("chatroom.coord \($0)") }
+#else
+        return nil
+#endif
+    }
 
-        switch event.hookEventName {
-        case .userPromptSubmit:
-            // The marker survives whitespace-collapse, so the convenience accessor suffices for
-            // binding; the displayed body comes from the stored OutgoingPrompt, not this text.
-            let raw = event.rawPromptText ?? event.submittedPromptMessage ?? ""
-            coordinator.handle(.promptSubmitted(surface, rawPromptText: raw))
-        case .stop, .subagentStop:
-            guard let final = event.rawAssistantFinalMessage ?? event.assistantFinalMessage else { return }
-            coordinator.handle(.turnCompleted(surface, finalMessage: final))
-        default:
-            break
+    private func handleRawFeedEvent(_ event: WorkstreamEvent) {
+#if DEBUG
+        let wsShort = (event.workspaceId ?? "nil").prefix(8)
+        cmuxDebugLog("chatroom.bridge rawFeedEvent hook=\(String(describing: event.hookEventName)) ws=\(wsShort)")
+#endif
+        guard let tabManager else {
+#if DEBUG
+            cmuxDebugLog("chatroom.bridge drop: no tabManager")
+#endif
+            return
         }
+        guard let wsIDString = event.workspaceId, let wsID = UUID(uuidString: wsIDString) else {
+#if DEBUG
+            cmuxDebugLog("chatroom.bridge drop: missing/invalid workspaceId")
+#endif
+            return
+        }
+        guard let workspace = tabManager.tabs.first(where: { $0.id == wsID }) else {
+#if DEBUG
+            cmuxDebugLog("chatroom.bridge drop: workspace \(wsIDString.prefix(8)) not found")
+#endif
+            return
+        }
+        guard workspace.workspaceRole == .agent else {
+#if DEBUG
+            cmuxDebugLog("chatroom.bridge drop: ws \(wsIDString.prefix(8)) role=\(String(describing: workspace.workspaceRole)) not .agent")
+#endif
+            return
+        }
+        // Correlation is keyed by agent (one agent per tab in v1) — the agent IS the workspace, so no
+        // surface/panel lookup is needed. Normalize the hook and let the unit-tested
+        // `AgentTurnEvent.from(hook:)` make the routing decision so the app runs exactly the tested
+        // logic (only top-level `stop` with a final message completes a turn; `subagentStop` does not).
+        let agent = AgentID(raw: wsID)
+        let kind: AgentHookKind
+        switch event.hookEventName {
+        case .userPromptSubmit: kind = .promptSubmit
+        case .stop: kind = .stop
+        case .subagentStop: kind = .subagentStop
+        case .sessionStart: kind = .sessionStart
+        default: kind = .other
+        }
+        let finalMessage = event.rawAssistantFinalMessage ?? event.assistantFinalMessage
+        guard let turn = AgentTurnEvent.from(
+            hook: AgentHookEvent(kind: kind, agent: agent, finalMessage: finalMessage)
+        ) else {
+#if DEBUG
+            cmuxDebugLog("chatroom.bridge ignore hook=\(String(describing: event.hookEventName)) kind=\(kind.rawValue) hasFinal=\(finalMessage != nil)")
+#endif
+            return
+        }
+#if DEBUG
+        cmuxDebugLog("chatroom.bridge -> handle agent=\(wsIDString.prefix(8)) kind=\(kind.rawValue) finalLen=\(finalMessage?.count ?? 0)")
+#endif
+        coordinator.handle(turn)
     }
 
     private func handleLifecycleChange(workspaceID: UUID) {

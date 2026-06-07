@@ -44,10 +44,7 @@ import CmuxChatRoomCore
         let f = await fixture()
         await f.0.send(in: f.room, "q", to: [AgentMention(agentID: f.agent)], origin: .userMention)
         await f.1.set([AgentIdentitySnapshot(agentID: f.agent, title: "A", kind: .claudeCode, cwdDisplay: "~/a", branch: "feature")], inRoom: f.room)
-        let text = await f.2.lastText()!
-        let surf = SurfaceID(raw: UUID())
-        f.0.handle(.promptSubmitted(surf, rawPromptText: text))
-        f.0.handle(.turnCompleted(surf, finalMessage: "done"))
+        f.0.handle(.turnCompleted(f.agent, finalMessage: "done"))
         if case let .replied(r) = (f.0.channels[f.room] ?? [])[0].outcomes[f.agent] {
             #expect(r.from.branch == "main")
         } else { Issue.record("no reply") }
