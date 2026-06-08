@@ -117,7 +117,12 @@ struct ChatRoomRowView: View {
             Image(systemName: snapshot.isCollapsed ? "chevron.right" : "chevron.down")
                 .font(.system(size: 9 * s, weight: .bold))
                 .foregroundStyle(.secondary)
-                .frame(width: 10 * s, alignment: .center)
+                .frame(width: 16 * s, height: 18 * s, alignment: .center)
+                // Collapse/expand is scoped to the chevron only — tapping the name (below)
+                // selects the room without toggling its agent list.
+                .contentShape(Rectangle())
+                .onTapGesture { actions.toggleCollapse(snapshot.chatRoomID) }
+                .accessibilityAddTraits(.isButton)
                 .accessibilityLabel(snapshot.isCollapsed
                     ? String(localized: "chatroom.a11y.expandRoom", defaultValue: "expand room")
                     : String(localized: "chatroom.a11y.collapseRoom", defaultValue: "collapse room"))
@@ -152,9 +157,9 @@ struct ChatRoomRowView: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(snapshot.isSelected ? color.opacity(0.6) : .clear, lineWidth: 1))
         )
         .contentShape(Rectangle())
-        // Single tap selects the room (shows its channel) AND toggles collapse of its agent rows —
-        // the chevron + name are one target, per the requested behavior.
-        .onTapGesture { actions.select(snapshot.id); actions.toggleCollapse(snapshot.chatRoomID) }
+        // Single tap on the row (name area) selects the room and shows its channel. Collapse is
+        // handled by the chevron's own tap target above, so clicking the name never collapses.
+        .onTapGesture { actions.select(snapshot.id) }
         .onTapGesture(count: 2) { beginEdit() }
         .contextMenu {
             Button(String(localized: "chatroom.action.rename", defaultValue: "Rename")) { beginEdit() }
