@@ -1385,34 +1385,21 @@ func resolveTerminalOpenURLTarget(_ rawValue: String) -> TerminalOpenURLTarget? 
     if let parsed = URL(string: trimmed),
        let scheme = parsed.scheme?.lowercased() {
         if scheme == "http" || scheme == "https" {
-            guard BrowserInsecureHTTPSettings.normalizeHost(parsed.host ?? "") != nil else {
+            guard HostNormalization.normalizeHost(parsed.host ?? "") != nil else {
                 #if DEBUG
                 cmuxDebugLog("link.resolve result=external(invalidHost) url=\(parsed)")
                 #endif
                 return .external(parsed)
             }
             #if DEBUG
-            cmuxDebugLog("link.resolve result=embeddedBrowser url=\(parsed)")
+            cmuxDebugLog("link.resolve result=external(web) url=\(parsed)")
             #endif
-            return .embeddedBrowser(parsed)
+            return .external(parsed)
         }
         #if DEBUG
         cmuxDebugLog("link.resolve result=external(scheme=\(scheme)) url=\(parsed)")
         #endif
         return .external(parsed)
-    }
-
-    if let webURL = resolveBrowserNavigableURL(trimmed) {
-        guard BrowserInsecureHTTPSettings.normalizeHost(webURL.host ?? "") != nil else {
-            #if DEBUG
-            cmuxDebugLog("link.resolve result=external(bareHost-invalidHost) url=\(webURL)")
-            #endif
-            return .external(webURL)
-        }
-        #if DEBUG
-        cmuxDebugLog("link.resolve result=embeddedBrowser(bareHost) url=\(webURL)")
-        #endif
-        return .embeddedBrowser(webURL)
     }
 
     guard let fallback = URL(string: trimmed) else {
@@ -4235,61 +4222,7 @@ class GhosttyApp {
         sourcePanelId: UUID,
         host: String
     ) -> Bool {
-        guard BrowserAvailabilitySettings.isEnabled() else {
-            #if DEBUG
-            cmuxDebugLog("link.openURL deferred embedded but cmuxBrowser=disabled, opening externally url=\(url)")
-            #endif
-            return NSWorkspace.shared.open(url)
-        }
-
-        guard let app = AppDelegate.shared,
-              let resolved = app.workspaceContainingPanel(
-                panelId: sourcePanelId,
-                preferredWorkspaceId: sourceWorkspaceId
-              ) else {
-            #if DEBUG
-            cmuxDebugLog(
-                "link.openURL deferred embedded but workspace lookup failed, opening externally " +
-                "tabId=\(sourceWorkspaceId) surfaceId=\(sourcePanelId) url=\(url)"
-            )
-            #endif
-            return NSWorkspace.shared.open(url)
-        }
-
-        let workspace = resolved.workspace
-        #if DEBUG
-        if workspace.id != sourceWorkspaceId {
-            cmuxDebugLog(
-                "link.openURL workspace.remap sourceTab=\(sourceWorkspaceId) " +
-                "resolvedTab=\(workspace.id) surfaceId=\(sourcePanelId)"
-            )
-        }
-        #endif
-
-        let openedInBrowser: Bool
-        if let targetPane = workspace.preferredRightSideTargetPane(fromPanelId: sourcePanelId) {
-            #if DEBUG
-            cmuxDebugLog("link.openURL opening in existing browser pane=\(targetPane)")
-            #endif
-            openedInBrowser = workspace.newBrowserSurface(inPane: targetPane, url: url, focus: true) != nil
-        } else {
-            #if DEBUG
-            cmuxDebugLog("link.openURL opening as new browser split from surface=\(sourcePanelId)")
-            #endif
-            openedInBrowser = workspace.newBrowserSplit(from: sourcePanelId, orientation: .horizontal, url: url) != nil
-        }
-
-        guard openedInBrowser else {
-            #if DEBUG
-            cmuxDebugLog(
-                "link.openURL deferred embedded browser creation failed, opening externally " +
-                "host=\(host) url=\(url)"
-            )
-            #endif
-            return NSWorkspace.shared.open(url)
-        }
-
-        return true
+        return NSWorkspace.shared.open(url)
     }
 
     private func splitDirection(from direction: ghostty_action_split_direction_e) -> SplitDirection? {
@@ -4865,102 +4798,14 @@ class GhosttyApp {
                 // Fall through to the existing NSWorkspace path below.
             }
 
-            if !BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowser() {
-                #if DEBUG
-                cmuxDebugLog("link.openURL cmuxBrowser=disabled, opening externally url=\(target.url)")
-                #endif
-                return performOnMain {
-                    NSWorkspace.shared.open(target.url)
-                }
-            }
             switch target {
-            case let .external(url):
+            case let .external(url), let .embeddedBrowser(url):
                 #if DEBUG
-                cmuxDebugLog("link.openURL target=external, opening externally url=\(url)")
+                cmuxDebugLog("link.openURL opening externally url=\(url)")
                 #endif
                 return performOnMain {
                     NSWorkspace.shared.open(url)
                 }
-            case let .embeddedBrowser(url):
-                if BrowserLinkOpenSettings.shouldOpenExternally(url) {
-                    #if DEBUG
-                    cmuxDebugLog("link.openURL target=embedded but shouldOpenExternally=true url=\(url)")
-                    #endif
-                    return performOnMain {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                guard let host = BrowserInsecureHTTPSettings.normalizeHost(url.host ?? "") else {
-                    #if DEBUG
-                    cmuxDebugLog("link.openURL target=embedded but normalizeHost=nil host=\(url.host ?? "nil") url=\(url)")
-                    #endif
-                    return performOnMain {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-
-                // If a host whitelist is configured and this host isn't in it, open externally.
-                if !BrowserLinkOpenSettings.hostMatchesWhitelist(host) {
-                    #if DEBUG
-                    cmuxDebugLog("link.openURL target=embedded but hostWhitelist miss host=\(host) url=\(url)")
-                    #endif
-                    return performOnMain {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                let sourceWorkspaceId = callbackTabId ?? surfaceView.tabId
-                let sourcePanelId = callbackSurfaceId ?? surfaceView.terminalSurface?.id
-                guard let sourceWorkspaceId,
-                      let sourcePanelId else {
-                    #if DEBUG
-                    cmuxDebugLog("link.openURL target=embedded but tabId/surfaceId=nil")
-                    #endif
-                    return false
-                }
-                #if DEBUG
-                cmuxDebugLog(
-                    "link.openURL target=embedded, opening in browser pane " +
-                    "host=\(host) url=\(url) tabId=\(sourceWorkspaceId) surfaceId=\(sourcePanelId)"
-                )
-                #endif
-                let canAttemptEmbeddedOpen = performOnMain {
-                    BrowserAvailabilitySettings.isEnabled() &&
-                    AppDelegate.shared?.workspaceContainingPanel(
-                        panelId: sourcePanelId,
-                        preferredWorkspaceId: sourceWorkspaceId
-                    ) != nil
-                }
-                guard canAttemptEmbeddedOpen else {
-                    #if DEBUG
-                    cmuxDebugLog(
-                        "link.openURL embedded preflight failed, opening externally " +
-                        "tabId=\(sourceWorkspaceId) surfaceId=\(sourcePanelId) url=\(url)"
-                    )
-                    #endif
-                    return performOnMain {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-
-                // Browser split creation changes focus, which unfocuses the source terminal and
-                // calls back into Ghostty. Defer that work until this open_url callback returns.
-                // From here cmux owns the open attempt and the deferred path falls back externally.
-                Task { @MainActor [url, sourceWorkspaceId, sourcePanelId, host] in
-                    let didOpen = Self.openEmbeddedBrowserLink(
-                        url: url,
-                        sourceWorkspaceId: sourceWorkspaceId,
-                        sourcePanelId: sourcePanelId,
-                        host: host
-                    )
-                    guard didOpen else {
-                        #if DEBUG
-                        cmuxDebugLog("link.openURL deferred open failed url=\(url)")
-                        #endif
-                        NSSound.beep()
-                        return
-                    }
-                }
-                return true
             }
         default:
             return false

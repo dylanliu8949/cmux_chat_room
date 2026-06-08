@@ -3,22 +3,6 @@ import AppKit
 extension AppDelegate {
     func clearRecentlyClosedHistory(preferredTabManager: TabManager? = nil) {
         ClosedItemHistoryStore.shared.removeAll()
-
-        var clearedManagers: Set<ObjectIdentifier> = []
-        func clear(_ manager: TabManager?) {
-            guard let manager else { return }
-            guard clearedManagers.insert(ObjectIdentifier(manager)).inserted else { return }
-            manager.clearRecentlyClosedBrowserPanelHistory()
-        }
-
-        clear(preferredTabManager)
-        clear(tabManager)
-        for context in mainWindowContexts.values {
-            clear(context.tabManager)
-        }
-        for route in recoverableMainWindowRoutes() {
-            clear(route.tabManager)
-        }
     }
 
     @discardableResult
@@ -42,46 +26,7 @@ extension AppDelegate {
             )
         }
 
-        for manager in recentlyClosedLegacyBrowserManagers(preferredTabManager: preferredTabManager) {
-            guard let closedAt = manager.mostRecentLegacyClosedBrowserPanelClosedAt() else {
-                continue
-            }
-            if restoreStoreItem(closedAt) {
-                return true
-            }
-            if manager.reopenMostRecentlyClosedBrowserPanelFromLegacyStack() {
-                return true
-            }
-        }
-
         return restoreStoreItem(nil)
-    }
-
-    private func recentlyClosedLegacyBrowserManagers(preferredTabManager: TabManager?) -> [TabManager] {
-        var managers: [TabManager] = []
-        var seen: Set<ObjectIdentifier> = []
-
-        func append(_ manager: TabManager?) {
-            guard let manager else { return }
-            guard manager.mostRecentLegacyClosedBrowserPanelClosedAt() != nil else { return }
-            guard seen.insert(ObjectIdentifier(manager)).inserted else { return }
-            managers.append(manager)
-        }
-
-        append(preferredTabManager)
-        append(tabManager)
-        for context in mainWindowContexts.values {
-            append(context.tabManager)
-        }
-        for route in recoverableMainWindowRoutes() {
-            append(route.tabManager)
-        }
-
-        return managers.sorted { lhs, rhs in
-            let lhsDate = lhs.mostRecentLegacyClosedBrowserPanelClosedAt() ?? .distantPast
-            let rhsDate = rhs.mostRecentLegacyClosedBrowserPanelClosedAt() ?? .distantPast
-            return lhsDate > rhsDate
-        }
     }
 
     @discardableResult

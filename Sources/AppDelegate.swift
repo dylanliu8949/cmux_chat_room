@@ -790,9 +790,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             let shouldClose = shouldClose?() ?? true
-            if shouldClose {
-                WebViewInspectorTeardown.closeAllInspectors(in: sender)
-            }
             return shouldClose
         }
     }
@@ -1265,12 +1262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(handleReactGrabDidCopySelection(_:)),
-            name: .reactGrabDidCopySelection,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(handleFeedRequestFocus(_:)),
             name: .feedRequestFocus,
             object: nil
@@ -1381,7 +1372,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         refreshGhosttyGotoSplitShortcuts()
         installGhosttyConfigObserver()
         installWindowResponderSwizzles()
-        installBrowserAddressBarFocusObservers()
         installShortcutMonitor()
         installShortcutDefaultsObserver()
         if !isRunningUnderXCTest {
@@ -1417,24 +1407,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         // In UI tests, `WindowGroup` occasionally fails to materialize a window quickly on the VM.
         // If there are no windows shortly after launch, force-create one so XCUITest can proceed.
         if isRunningUnderXCTest {
-            if let rawVariant = env["CMUX_UI_TEST_BROWSER_IMPORT_HINT_VARIANT"] {
-                UserDefaults.standard.set(
-                    BrowserImportHintSettings.variant(for: rawVariant).rawValue,
-                    forKey: BrowserImportHintSettings.variantKey
-                )
-            }
-            if let rawShow = env["CMUX_UI_TEST_BROWSER_IMPORT_HINT_SHOW"] {
-                UserDefaults.standard.set(
-                    rawShow == "1",
-                    forKey: BrowserImportHintSettings.showOnBlankTabsKey
-                )
-            }
-            if let rawDismissed = env["CMUX_UI_TEST_BROWSER_IMPORT_HINT_DISMISSED"] {
-                UserDefaults.standard.set(
-                    rawDismissed == "1",
-                    forKey: BrowserImportHintSettings.dismissedKey
-                )
-            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                 guard let self else { return }
                 if NSApp.windows.isEmpty {
@@ -1448,25 +1420,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                     window.orderFrontRegardless()
                 }
                 self.writeUITestDiagnosticsIfNeeded(stage: "afterForceWindow")
-            }
-            if env["CMUX_UI_TEST_BROWSER_IMPORT_HINT_OPEN_BLANK_BROWSER"] == "1" {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-                    guard let self else { return }
-                    _ = self.openBrowserAndFocusAddressBar(insertAtEnd: true)
-                }
-            }
-            if env["CMUX_UI_TEST_BROWSER_IMPORT_HINT_OPEN_SETTINGS"] == "1" {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
-                    self?.openPreferencesWindow(
-                        debugSource: "uiTest.browserImportHint",
-                        navigationTarget: .browser
-                    )
-                }
-            }
-            if env["CMUX_UI_TEST_BROWSER_IMPORT_AUTO_OPEN"] == "1" {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    BrowserDataImportCoordinator.shared.presentImportDialog()
-                }
             }
         }
 #endif
@@ -1765,7 +1718,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             hasDirtyWorkspaces: hasDirtyWorkspaces,
             buildFlavor: buildFlavor
         ) {
-            closeAllWebInspectorsBeforeAppTeardown()
             let reason: String
             if isQuitWarningConfirmed {
                 reason = "confirmed"
@@ -1798,7 +1750,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let shouldQuit = response == .alertFirstButtonReturn
             if shouldQuit {
                 self.isQuitWarningConfirmed = true
-                self.closeAllWebInspectorsBeforeAppTeardown()
                 StartupBreadcrumbLog.append("appDelegate.shouldTerminate.reply", fields: ["shouldQuit": "1"])
             } else {
                 // Reset so that the next quit attempt can show the dialog again.
@@ -1839,15 +1790,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return false
     }
 
-    @discardableResult
-    private func closeAllWebInspectorsBeforeAppTeardown() -> Int {
-        WebViewInspectorTeardown.closeAllInspectors(in: NSApp.windows)
-    }
-
     func applicationWillTerminate(_ notification: Notification) {
         StartupBreadcrumbLog.append("appDelegate.willTerminate.begin")
         isTerminatingApp = true
-        closeAllWebInspectorsBeforeAppTeardown()
         _ = saveSessionSnapshotIncludingProcessDetectedIndexes(includeScrollback: true, removeWhenEmpty: false)
         ClosedItemHistoryStore.shared.flushPendingSaves()
         stopSessionAutosaveTimer()
@@ -1857,7 +1802,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         TerminalController.shared.stop()
         GhosttyPasteboardHelper.cleanupAllOwnedTemporaryImageFiles()
         VSCodeServeWebController.shared.stop()
-        BrowserProfileStore.shared.flushPendingSaves()
         if TelemetrySettings.enabledForCurrentLaunch {
             PostHogAnalytics.shared.flush()
         }
@@ -4920,10 +4864,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         markPending: Bool
     ) {
         let targetWindow = preferredWindow ?? NSApp.keyWindow ?? NSApp.mainWindow
-        if let targetWindow,
-           let context = contextForMainWindow(targetWindow) {
-            _ = context.tabManager.setFocusedBrowserFocusModeActive(false, reason: "commandPaletteRequest.\(source)")
-        }
         if markPending {
             markCommandPaletteOpenRequested(for: targetWindow)
         }
@@ -5106,11 +5046,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func setCommandPaletteVisible(_ visible: Bool, for window: NSWindow) {
         guard let windowId = mainWindowId(for: window) else { return }
-        if visible, let context = contextForMainWindow(window) {
-            _ = context.tabManager.setFocusedBrowserFocusModeActive(false, reason: "commandPaletteVisible")
-        }
         let wasVisible = commandPaletteVisibilityByWindowId.updateValue(visible, forKey: windowId) ?? false
-        postCommandPaletteVisibilityDidChangeIfNeeded(wasVisible: wasVisible, visible: visible, window: window, windowId: windowId)
         // Opening (false -> true) always resolves pending-open.
         // Closing (true -> false) also clears stale pending state.
         // Ignore repeated false updates so a stale sync cannot erase an in-flight open request.
@@ -7267,13 +7203,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         let targetTabManager = preferredTabManager
             ?? preferredMainWindowContextForWorkspaceCreation(debugSource: "inlineVSCode.open.target")?.tabManager
-        guard let targetTabManager else {
+        guard targetTabManager != nil else {
             return false
         }
 
-        let targetWorkspaceId = targetTabManager.selectedWorkspace?.id
-            ?? targetTabManager.tabs.first?.id
-            ?? targetTabManager.addWorkspace(select: true).id
         let normalizedDirectoryURL = directoryURL.standardizedFileURL
 
         VSCodeServeWebController.shared.ensureServeWebURL(vscodeApplicationURL: vscodeApplicationURL) { serveWebURL in
@@ -7286,14 +7219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 return
             }
 
-            guard targetTabManager.openBrowser(
-                inWorkspace: targetWorkspaceId,
-                url: openFolderURL,
-                preferSplitRight: true
-            ) != nil else {
-                NSSound.beep()
-                return
-            }
+            NSWorkspace.shared.open(openFolderURL)
         }
 
         return true
@@ -8731,69 +8657,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ])
     }
 
-    @objc private func handleReactGrabDidCopySelection(_ notification: Notification) {
-        let browserPanelId = notification.userInfo?[ReactGrabPastebackNotificationKey.browserPanelId] as? UUID
-        guard let workspaceId = notification.userInfo?[ReactGrabPastebackNotificationKey.workspaceId] as? UUID,
-              let returnPanelId = notification.userInfo?[ReactGrabPastebackNotificationKey.returnPanelId] as? UUID,
-              let content = notification.userInfo?[ReactGrabPastebackNotificationKey.content] as? String else {
-#if DEBUG
-            cmuxDebugLog(
-                "reactGrab.pasteback h3.didCopy.drop " +
-                "reason=missingNotificationFields " +
-                "workspace=\(Self.debugShortId(notification.userInfo?[ReactGrabPastebackNotificationKey.workspaceId] as? UUID)) " +
-                "browser=\(Self.debugShortId(browserPanelId)) " +
-                "return=\(Self.debugShortId(notification.userInfo?[ReactGrabPastebackNotificationKey.returnPanelId] as? UUID)) " +
-                "hasContent=\((notification.userInfo?[ReactGrabPastebackNotificationKey.content] as? String) != nil ? 1 : 0)"
-            )
-#endif
-            return
-        }
-
-        guard let manager = tabManagerFor(tabId: workspaceId),
-              let workspace = manager.tabs.first(where: { $0.id == workspaceId }) else {
-#if DEBUG
-            cmuxDebugLog(
-                "reactGrab.pasteback h3.didCopy.drop " +
-                "reason=missingWorkspace workspace=\(Self.debugShortId(workspaceId)) " +
-                "browser=\(Self.debugShortId(browserPanelId)) return=\(Self.debugShortId(returnPanelId))"
-            )
-#endif
-            return
-        }
-
-        guard workspace.terminalPanel(for: returnPanelId) != nil else {
-#if DEBUG
-            cmuxDebugLog(
-                "reactGrab.pasteback h3.didCopy.drop " +
-                "reason=missingReturnTerminal workspace=\(Self.debugShortId(workspaceId)) " +
-                "browser=\(Self.debugShortId(browserPanelId)) return=\(Self.debugShortId(returnPanelId)) " +
-                "focused=\(Self.debugShortId(workspace.focusedPanelId))"
-            )
-#endif
-            return
-        }
-
-#if DEBUG
-        cmuxDebugLog(
-            "reactGrab.pasteback h3.didCopy " +
-            "workspace=\(Self.debugShortId(workspaceId)) " +
-            "browser=\(Self.debugShortId(browserPanelId)) " +
-            "return=\(Self.debugShortId(returnPanelId)) " +
-            "focusedBefore=\(Self.debugShortId(workspace.focusedPanelId)) len=\(content.count)"
-        )
-#endif
-        manager.focusTab(workspaceId, surfaceId: returnPanelId, suppressFlash: true)
-#if DEBUG
-        cmuxDebugLog(
-            "reactGrab.pasteback h1.focusRequested " +
-            "workspace=\(Self.debugShortId(workspaceId)) " +
-            "return=\(Self.debugShortId(returnPanelId)) " +
-            "focusedAfterRequest=\(Self.debugShortId(workspace.focusedPanelId))"
-        )
-#endif
-        sendTextWhenReady(content, to: workspace, preferredPanelId: returnPanelId)
-    }
-
     nonisolated private static func debugShortId(_ id: UUID?) -> String {
         id.map { String($0.uuidString.prefix(5)) } ?? "nil"
     }
@@ -9771,7 +9634,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         didSetupGotoSplitUITest = true
         let env = ProcessInfo.processInfo.environment
         if env["CMUX_UI_TEST_GOTO_SPLIT_RECORD_ONLY"] == "1" {
-            installGotoSplitUITestFocusObserversIfNeeded()
             startGotoSplitRecordOnlyRecorder()
             return
         }
@@ -9808,8 +9670,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             )
         }
 
-        installGotoSplitUITestFocusObserversIfNeeded()
-
         // On the VM, launching/initializing multiple windows can occasionally take longer than a
         // few seconds; keep the deadline generous so the test doesn't flake.
         let deadline = Date().addingTimeInterval(20.0)
@@ -9834,32 +9694,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             guard let tabManager = self.tabManager else { return }
 
             let tab = tabManager.addTab()
-            guard let initialPanelId = tab.focusedPanelId else {
+            guard tab.focusedPanelId != nil else {
                 self.writeGotoSplitTestData(["setupError": "Missing initial panel id"])
                 return
             }
 
-            let requestedBrowserURL = env["CMUX_UI_TEST_GOTO_SPLIT_BROWSER_URL"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let url = requestedBrowserURL.flatMap { rawURL in
-                guard !rawURL.isEmpty else { return nil }
-                return URL(string: rawURL)
-            } ?? URL(string: "https://example.com")
-            guard let url else {
-                self.writeGotoSplitTestData(["setupError": "Invalid browser URL"])
-                return
-            }
-            guard let browserPanelId = tabManager.newBrowserSplit(
-                tabId: tab.id,
-                fromPanelId: initialPanelId,
-                orientation: .horizontal,
-                url: url
-            ) else {
-                self.writeGotoSplitTestData(["setupError": "Failed to create browser split"])
-                return
-            }
-
-            self.focusWebViewForGotoSplitUITest(tab: tab, browserPanelId: browserPanelId)
+            // The browser panel was removed; this UI-test path no longer creates a
+            // browser split. Report that the scenario is unsupported.
+            self.writeGotoSplitTestData(["setupError": "Browser split unsupported"])
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
@@ -10132,21 +9974,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             if let terminal = workspace.terminalPanel(for: focusedPanelId) {
                 updates["focusedPanelKind"] = "terminal"
                 updates["focusedTerminalFindNeedle"] = terminal.searchState?.needle ?? ""
-                updates["focusedBrowserFindNeedle"] = ""
-            } else if let browser = workspace.browserPanel(for: focusedPanelId) {
-                updates["focusedPanelKind"] = "browser"
-                updates["focusedBrowserFindNeedle"] = browser.searchState?.needle ?? ""
-                updates["focusedTerminalFindNeedle"] = ""
             } else {
                 updates["focusedPanelKind"] = "other"
                 updates["focusedTerminalFindNeedle"] = ""
-                updates["focusedBrowserFindNeedle"] = ""
             }
         } else {
             updates["focusedPanelId"] = ""
             updates["focusedPanelKind"] = "none"
             updates["focusedTerminalFindNeedle"] = ""
-            updates["focusedBrowserFindNeedle"] = ""
         }
 
         let terminalWithFind = workspace.panels.values
@@ -10156,131 +9991,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         updates["terminalFindNeedle"] = terminalWithFind?.searchState?.needle ?? ""
         updates["terminalFindVisible"] = terminalWithFind == nil ? "false" : "true"
 
-        let browserWithFind = workspace.panels.values
-            .compactMap { $0 as? BrowserPanel }
-            .first(where: { $0.searchState != nil })
-        updates["browserFindPanelId"] = browserWithFind?.id.uuidString ?? ""
-        updates["browserFindNeedle"] = browserWithFind?.searchState?.needle ?? ""
-        updates["browserFindSelected"] = browserWithFind?.searchState?.selected.map {
-            String($0 + 1)
-        } ?? ""
-        updates["browserFindTotal"] = browserWithFind?.searchState?.total.map(String.init) ?? ""
-        updates["browserFindVisible"] = browserWithFind == nil ? "false" : "true"
-
         let currentResponder = (NSApp.keyWindow ?? NSApp.mainWindow)?.firstResponder
         updates["firstResponderTerminalPanelId"] =
             cmuxOwningGhosttyView(for: currentResponder)?.terminalSurface?.id.uuidString ?? ""
 
         updates.merge(cmuxFindResponderSnapshot()) { _, new in new }
         return updates
-    }
-
-    private func focusWebViewForGotoSplitUITest(tab: Workspace, browserPanelId: UUID) {
-        guard let browserPanel = tab.browserPanel(for: browserPanelId) else {
-            writeGotoSplitTestData([
-                "webViewFocused": "false",
-                "setupError": "Browser panel missing"
-            ])
-            return
-        }
-
-        var resolved = false
-        var observers: [NSObjectProtocol] = []
-        var panelsCancellable: AnyCancellable?
-
-        func cleanup() {
-            observers.forEach { NotificationCenter.default.removeObserver($0) }
-            observers.removeAll()
-            panelsCancellable?.cancel()
-        }
-
-        func recordFocusedState() {
-            guard !resolved else { return }
-            guard let panel = tab.browserPanel(for: browserPanelId) else {
-                resolved = true
-                cleanup()
-                writeGotoSplitTestData([
-                    "webViewFocused": "false",
-                    "setupError": "Browser panel missing"
-                ])
-                return
-            }
-
-            tab.focusPanel(browserPanelId)
-
-            guard isWebViewFocused(panel),
-                  let (browserPaneId, terminalPaneId) = paneIdsForGotoSplitUITest(
-                    tab: tab,
-                    browserPanelId: browserPanelId
-                  ) else {
-                return
-            }
-
-            resolved = true
-            cleanup()
-            self.startGotoSplitUITestRecorder(browserPanelId: browserPanelId)
-            writeGotoSplitTestData([
-                "browserPanelId": browserPanelId.uuidString,
-                "browserPaneId": browserPaneId.description,
-                "terminalPaneId": terminalPaneId.description,
-                "initialPaneCount": String(tab.bonsplitController.allPaneIds.count),
-                "focusedPaneId": tab.bonsplitController.focusedPaneId?.description ?? "",
-                "ghosttyGotoSplitLeftShortcut": ghosttyGotoSplitLeftShortcut?.displayString ?? "",
-                "ghosttyGotoSplitRightShortcut": ghosttyGotoSplitRightShortcut?.displayString ?? "",
-                "ghosttyGotoSplitUpShortcut": ghosttyGotoSplitUpShortcut?.displayString ?? "",
-                "ghosttyGotoSplitDownShortcut": ghosttyGotoSplitDownShortcut?.displayString ?? "",
-                "webViewFocused": "true"
-            ])
-            if ProcessInfo.processInfo.environment["CMUX_UI_TEST_GOTO_SPLIT_INPUT_SETUP"] == "1" {
-                setupFocusedInputForGotoSplitUITest(panel: panel)
-            }
-        }
-
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .browserDidBecomeFirstResponderWebView,
-            object: nil,
-            queue: .main
-        ) { _ in
-            recordFocusedState()
-        })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .ghosttyDidFocusSurface,
-            object: nil,
-            queue: .main
-        ) { note in
-            guard let surfaceId = note.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID,
-                  surfaceId == browserPanelId else { return }
-            recordFocusedState()
-        })
-        panelsCancellable = tab.$panels
-            .map { _ in () }
-            .sink { _ in recordFocusedState() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
-            guard let self else { return }
-            if !resolved {
-                cleanup()
-                self.writeGotoSplitTestData([
-                    "webViewFocused": "false",
-                    "setupError": "Timed out waiting for WKWebView focus"
-                ])
-            }
-        }
-
-        recordFocusedState()
-    }
-
-    private func startGotoSplitUITestRecorder(browserPanelId: UUID) {
-        guard isGotoSplitUITestRecordingEnabled() else { return }
-        gotoSplitUITestRecorder?.cancel()
-        gotoSplitUITestRecorder = nil
-
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now(), repeating: .milliseconds(100))
-        timer.setEventHandler { [weak self] in
-            self?.recordGotoSplitUITestState(browserPanelId: browserPanelId)
-        }
-        gotoSplitUITestRecorder = timer
-        timer.resume()
     }
 
     private func startGotoSplitRecordOnlyRecorder() {
@@ -10298,569 +10014,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         gotoSplitUITestRecorder = timer
         timer.resume()
-    }
-
-    private func recordGotoSplitUITestState(browserPanelId: UUID) {
-        guard let tabManager,
-              let workspace = tabManager.selectedWorkspace,
-              let browserPanel = workspace.browserPanel(for: browserPanelId) else {
-            return
-        }
-
-        var updates = gotoSplitFindStateSnapshot(for: workspace)
-        updates["browserPageTitle"] = browserPanel.webView.title?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        updates["browserPageURL"] = browserPanel.preferredURLStringForOmnibar() ?? ""
-        updates["browserFocusModeActive"] = browserPanel.isBrowserFocusModeActive ? "true" : "false"
-        updates["browserFocusModeExitArmed"] = browserPanel.isBrowserFocusModeExitArmed ? "true" : "false"
-        writeGotoSplitTestData(updates)
-    }
-
-    private func paneIdsForGotoSplitUITest(tab: Workspace, browserPanelId: UUID) -> (browser: PaneID, terminal: PaneID)? {
-        let paneIds = tab.bonsplitController.allPaneIds
-        guard paneIds.count >= 2 else { return nil }
-
-        var browserPane: PaneID?
-        var terminalPane: PaneID?
-        for paneId in paneIds {
-            guard let selected = tab.bonsplitController.selectedTab(inPane: paneId),
-                  let panelId = tab.panelIdFromSurfaceId(selected.id) else { continue }
-            if panelId == browserPanelId {
-                browserPane = paneId
-            } else if terminalPane == nil {
-                terminalPane = paneId
-            }
-        }
-
-        guard let browserPane, let terminalPane else { return nil }
-        return (browserPane, terminalPane)
-    }
-
-    private func installGotoSplitUITestFocusObserversIfNeeded() {
-        guard gotoSplitUITestObservers.isEmpty else { return }
-
-        gotoSplitUITestObservers.append(NotificationCenter.default.addObserver(
-            forName: .browserFocusAddressBar,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.recordGotoSplitUITestWebViewFocus(panelId: panelId, key: "webViewFocusedAfterAddressBarFocus")
-            self.recordGotoSplitUITestActiveElement(panelId: panelId, keyPrefix: "addressBarFocus")
-        })
-
-        gotoSplitUITestObservers.append(NotificationCenter.default.addObserver(
-            forName: .browserDidExitAddressBar,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.recordGotoSplitUITestWebViewFocus(panelId: panelId, key: "webViewFocusedAfterAddressBarExit")
-            self.recordGotoSplitUITestActiveElement(panelId: panelId, keyPrefix: "addressBarExit")
-        })
-
-    }
-
-    private func recordGotoSplitUITestWebViewFocus(panelId: UUID, key: String) {
-        guard let tabManager,
-              let tab = tabManager.selectedWorkspace,
-              let panel = tab.browserPanel(for: panelId) else {
-            return
-        }
-
-        guard key.contains("Exit") else {
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.writeGotoSplitTestData([
-                    key: self.isWebViewFocused(panel) ? "true" : "false",
-                    "\(key)PanelId": panelId.uuidString
-                ])
-            }
-            return
-        }
-
-        var resolved = false
-        var observers: [NSObjectProtocol] = []
-        var panelsCancellable: AnyCancellable?
-
-        func cleanup() {
-            observers.forEach { NotificationCenter.default.removeObserver($0) }
-            observers.removeAll()
-            panelsCancellable?.cancel()
-            panelsCancellable = nil
-        }
-
-        @MainActor
-        func finish(with focused: Bool) {
-            guard !resolved else { return }
-            resolved = true
-            cleanup()
-            self.writeGotoSplitTestData([
-                key: focused ? "true" : "false",
-                "\(key)PanelId": panelId.uuidString
-            ])
-        }
-
-        @MainActor
-        func evaluate() {
-            guard !resolved,
-                  let currentTabManager = self.tabManager,
-                  let currentTab = currentTabManager.selectedWorkspace,
-                  let currentPanel = currentTab.browserPanel(for: panelId) else {
-                return
-            }
-            guard self.isWebViewFocused(currentPanel) else { return }
-            finish(with: true)
-        }
-
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .browserDidBecomeFirstResponderWebView,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard notification.object as? WKWebView === panel.webView else { return }
-            Task { @MainActor in evaluate() }
-        })
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .ghosttyDidFocusSurface,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard let surfaceId = notification.userInfo?[GhosttyNotificationKey.surfaceId] as? UUID,
-                  surfaceId == panelId else { return }
-            Task { @MainActor in evaluate() }
-        })
-        panelsCancellable = tab.$panels
-            .map { _ in () }
-            .sink { _ in
-                Task { @MainActor in evaluate() }
-            }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                guard !resolved else { return }
-                let focused = (self.tabManager?.selectedWorkspace?.browserPanel(for: panelId)).map(self.isWebViewFocused) ?? false
-                finish(with: focused)
-            }
-        }
-        Task { @MainActor in evaluate() }
-    }
-
-    private func setupFocusedInputForGotoSplitUITest(panel: BrowserPanel) {
-        let script = """
-        (() => {
-          const snapshot = () => {
-            const active = document.activeElement;
-            return {
-              focused: false,
-              id: "",
-              secondaryId: "",
-              secondaryCenterX: -1,
-              secondaryCenterY: -1,
-              activeId: active && typeof active.id === "string" ? active.id : "",
-              activeTag: active && active.tagName ? active.tagName.toLowerCase() : "",
-              trackerInstalled: window.__cmuxAddressBarFocusTrackerInstalled === true,
-              trackedStateId:
-                window.__cmuxAddressBarFocusState &&
-                typeof window.__cmuxAddressBarFocusState.id === "string"
-                  ? window.__cmuxAddressBarFocusState.id
-                  : "",
-              readyState: String(document.readyState || "")
-            };
-          };
-          const seed = () => {
-            const ensureInput = (id, value) => {
-              const existing = document.getElementById(id);
-              const input = (existing && existing.tagName && existing.tagName.toLowerCase() === "input")
-                ? existing
-                : (() => {
-                    const created = document.createElement("input");
-                    created.id = id;
-                    created.type = "text";
-                    created.value = value;
-                    return created;
-                  })();
-              input.autocapitalize = "off";
-              input.autocomplete = "off";
-              input.spellcheck = false;
-              input.style.display = "block";
-              input.style.width = "100%";
-              input.style.margin = "0";
-              input.style.padding = "8px 10px";
-              input.style.border = "1px solid #5f6368";
-              input.style.borderRadius = "6px";
-              input.style.boxSizing = "border-box";
-              input.style.fontSize = "14px";
-              input.style.fontFamily = "system-ui, -apple-system, sans-serif";
-              input.style.background = "white";
-              input.style.color = "black";
-              return input;
-            };
-
-            let container = document.getElementById("cmux-ui-test-focus-container");
-            if (!container || !container.tagName || container.tagName.toLowerCase() !== "div") {
-              container = document.createElement("div");
-              container.id = "cmux-ui-test-focus-container";
-              document.body.appendChild(container);
-            }
-            container.style.position = "fixed";
-            container.style.left = "24px";
-            container.style.top = "24px";
-            container.style.width = "min(520px, calc(100vw - 48px))";
-            container.style.display = "grid";
-            container.style.rowGap = "12px";
-            container.style.padding = "12px";
-            container.style.background = "rgba(255,255,255,0.92)";
-            container.style.border = "1px solid rgba(95,99,104,0.55)";
-            container.style.borderRadius = "8px";
-            container.style.boxShadow = "0 2px 10px rgba(0,0,0,0.2)";
-            container.style.zIndex = "2147483647";
-
-            const input = ensureInput("cmux-ui-test-focus-input", "cmux-ui-focus-primary");
-            const secondaryInput = ensureInput("cmux-ui-test-focus-input-secondary", "cmux-ui-focus-secondary");
-            if (input.parentElement !== container) {
-              container.appendChild(input);
-            }
-            if (secondaryInput.parentElement !== container) {
-              container.appendChild(secondaryInput);
-            }
-
-            input.focus({ preventScroll: true });
-            if (typeof input.setSelectionRange === "function") {
-              const end = input.value.length;
-              input.setSelectionRange(end, end);
-            }
-
-            let trackedFocusId = input.getAttribute("data-cmux-addressbar-focus-id");
-            if (!trackedFocusId) {
-              trackedFocusId = "cmux-ui-test-focus-input-tracked";
-              input.setAttribute("data-cmux-addressbar-focus-id", trackedFocusId);
-            }
-            const selectionStart = typeof input.selectionStart === "number" ? input.selectionStart : null;
-            const selectionEnd = typeof input.selectionEnd === "number" ? input.selectionEnd : null;
-            if (
-              !window.__cmuxAddressBarFocusState ||
-              typeof window.__cmuxAddressBarFocusState.id !== "string" ||
-              window.__cmuxAddressBarFocusState.id !== trackedFocusId
-            ) {
-              window.__cmuxAddressBarFocusState = { id: trackedFocusId, selectionStart, selectionEnd };
-            }
-
-            const secondaryRect = secondaryInput.getBoundingClientRect();
-            const viewportWidth = Math.max(Number(window.innerWidth) || 0, 1);
-            const viewportHeight = Math.max(Number(window.innerHeight) || 0, 1);
-            const secondaryCenterX = Math.min(
-              0.98,
-              Math.max(0.02, (secondaryRect.left + (secondaryRect.width / 2)) / viewportWidth)
-            );
-            const secondaryCenterY = Math.min(
-              0.98,
-              Math.max(0.02, (secondaryRect.top + (secondaryRect.height / 2)) / viewportHeight)
-            );
-            const active = document.activeElement;
-            return {
-              focused: active === input,
-              id: input.id || "",
-              secondaryId: secondaryInput.id || "",
-              secondaryCenterX,
-              secondaryCenterY,
-              activeId: active && typeof active.id === "string" ? active.id : "",
-              activeTag: active && active.tagName ? active.tagName.toLowerCase() : "",
-              trackerInstalled: window.__cmuxAddressBarFocusTrackerInstalled === true,
-              trackedStateId:
-                window.__cmuxAddressBarFocusState &&
-                typeof window.__cmuxAddressBarFocusState.id === "string"
-                  ? window.__cmuxAddressBarFocusState.id
-                  : "",
-              readyState: String(document.readyState || "")
-            };
-          };
-          const ready = () =>
-            window.__cmuxAddressBarFocusTrackerInstalled === true &&
-            String(document.readyState || "") === "complete";
-
-          if (ready()) {
-            try {
-              return seed();
-            } catch (_) {
-              return snapshot();
-            }
-          }
-
-          return new Promise((resolve) => {
-            let finished = false;
-            let observer = null;
-            const cleanups = [];
-            const finish = (value) => {
-              if (finished) return;
-              finished = true;
-              if (observer) observer.disconnect();
-              for (const cleanup of cleanups) {
-                try { cleanup(); } catch (_) {}
-              }
-              resolve(value);
-            };
-            const maybeFinish = () => {
-              if (!ready()) return;
-              try {
-                finish(seed());
-              } catch (_) {
-                finish(snapshot());
-              }
-            };
-            const addListener = (target, eventName, options) => {
-              if (!target || typeof target.addEventListener !== "function") return;
-              const handler = () => maybeFinish();
-              target.addEventListener(eventName, handler, options);
-              cleanups.push(() => target.removeEventListener(eventName, handler, options));
-            };
-            try {
-              observer = new MutationObserver(() => maybeFinish());
-              observer.observe(document.documentElement || document, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true
-              });
-            } catch (_) {}
-            addListener(document, "readystatechange", true);
-            addListener(window, "load", true);
-            const timeoutId = window.setTimeout(() => finish(snapshot()), 4000);
-            cleanups.push(() => window.clearTimeout(timeoutId));
-            maybeFinish();
-          });
-        })();
-        """
-
-        panel.webView.evaluateJavaScript(script) { [weak self] result, _ in
-            guard let self else { return }
-            let payload = result as? [String: Any]
-            let focused = (payload?["focused"] as? Bool) ?? false
-            let inputId = (payload?["id"] as? String) ?? ""
-            let secondaryInputId = (payload?["secondaryId"] as? String) ?? ""
-            let secondaryCenterX = (payload?["secondaryCenterX"] as? NSNumber)?.doubleValue ?? -1
-            let secondaryCenterY = (payload?["secondaryCenterY"] as? NSNumber)?.doubleValue ?? -1
-            let activeId = (payload?["activeId"] as? String) ?? ""
-            let trackerInstalled = (payload?["trackerInstalled"] as? Bool) ?? false
-            let trackedStateId = (payload?["trackedStateId"] as? String) ?? ""
-            let readyState = (payload?["readyState"] as? String) ?? ""
-            var secondaryClickOffsetX = -1.0
-            var secondaryClickOffsetY = -1.0
-            if let window = panel.webView.window {
-                let webFrame = panel.webView.convert(panel.webView.bounds, to: nil)
-                let contentHeight = Double(window.contentView?.bounds.height ?? 0)
-                if webFrame.width > 1,
-                   webFrame.height > 1,
-                   contentHeight > 1,
-                   secondaryCenterX > 0,
-                   secondaryCenterX < 1,
-                   secondaryCenterY > 0,
-                   secondaryCenterY < 1 {
-                    let xInContent = Double(webFrame.minX) + (secondaryCenterX * Double(webFrame.width))
-                    let yFromTopInWeb = secondaryCenterY * Double(webFrame.height)
-                    let yInContent = Double(webFrame.maxY) - yFromTopInWeb
-                    let yFromTopInContent = contentHeight - yInContent
-                    let titlebarHeight = max(0, Double(window.frame.height) - contentHeight)
-                    secondaryClickOffsetX = xInContent
-                    secondaryClickOffsetY = titlebarHeight + yFromTopInContent
-                }
-            }
-            if focused,
-               !inputId.isEmpty,
-               !secondaryInputId.isEmpty,
-               inputId == activeId,
-               trackerInstalled,
-               !trackedStateId.isEmpty,
-               secondaryCenterX > 0,
-               secondaryCenterX < 1,
-               secondaryCenterY > 0,
-               secondaryCenterY < 1,
-               secondaryClickOffsetX > 0,
-               secondaryClickOffsetY > 0 {
-                self.writeGotoSplitTestData([
-                    "webInputFocusSeeded": "true",
-                    "webInputFocusElementId": inputId,
-                    "webInputFocusSecondaryElementId": secondaryInputId,
-                    "webInputFocusSecondaryCenterX": "\(secondaryCenterX)",
-                    "webInputFocusSecondaryCenterY": "\(secondaryCenterY)",
-                    "webInputFocusSecondaryClickOffsetX": "\(secondaryClickOffsetX)",
-                    "webInputFocusSecondaryClickOffsetY": "\(secondaryClickOffsetY)",
-                    "webInputFocusActiveElementId": activeId,
-                    "webInputFocusTrackerInstalled": trackerInstalled ? "true" : "false",
-                    "webInputFocusTrackedStateId": trackedStateId,
-                    "webInputFocusReadyState": readyState
-                ])
-                return
-            }
-            self.writeGotoSplitTestData([
-                "webInputFocusSeeded": "false",
-                "setupError": "Timed out focusing page input for omnibar restore test"
-            ])
-        }
-    }
-
-    private func recordGotoSplitUITestActiveElement(panelId: UUID, keyPrefix: String) {
-        guard let tabManager,
-              let tab = tabManager.selectedWorkspace,
-              let panel = tab.browserPanel(for: panelId) else {
-            return
-        }
-
-        let expectedInputId = keyPrefix == "addressBarExit" ? gotoSplitUITestExpectedInputId() : nil
-        let capture: @MainActor @Sendable () -> Void = { [weak self] in
-            guard let self else { return }
-            self.evaluateGotoSplitUITestActiveElement(
-                panel: panel,
-                awaitingInputId: expectedInputId
-            ) { snapshot in
-                self.writeGotoSplitTestData([
-                    "\(keyPrefix)PanelId": panelId.uuidString,
-                    "\(keyPrefix)ActiveElementId": snapshot["id"] ?? "",
-                    "\(keyPrefix)ActiveElementTag": snapshot["tag"] ?? "",
-                    "\(keyPrefix)ActiveElementType": snapshot["type"] ?? "",
-                    "\(keyPrefix)ActiveElementEditable": snapshot["editable"] ?? "false",
-                    "\(keyPrefix)TrackedFocusStateId": snapshot["trackedFocusStateId"] ?? "",
-                    "\(keyPrefix)FocusTrackerInstalled": snapshot["focusTrackerInstalled"] ?? "false"
-                ])
-            }
-        }
-
-        if expectedInputId == nil {
-            DispatchQueue.main.async {
-                Task { @MainActor in capture() }
-            }
-        } else {
-            Task { @MainActor in capture() }
-        }
-    }
-
-    private func evaluateGotoSplitUITestActiveElement(
-        panel: BrowserPanel,
-        awaitingInputId: String? = nil,
-        completion: @escaping ([String: String]) -> Void
-    ) {
-        let expectedInputIdLiteral = awaitingInputId?.javaScriptStringLiteral ?? "null"
-        let script = """
-        (() => {
-          const expectedInputId = \(expectedInputIdLiteral);
-          const snapshot = () => {
-            try {
-              const active = document.activeElement;
-              if (!active) {
-                return {
-                  id: "",
-                  tag: "",
-                  type: "",
-                  editable: "false",
-                  trackedFocusStateId: "",
-                  focusTrackerInstalled: window.__cmuxAddressBarFocusTrackerInstalled === true ? "true" : "false"
-                };
-              }
-              const tag = (active.tagName || "").toLowerCase();
-              const type = (active.type || "").toLowerCase();
-              const editable =
-                !!active.isContentEditable ||
-                tag === "textarea" ||
-                (tag === "input" && type !== "hidden");
-              return {
-                id: typeof active.id === "string" ? active.id : "",
-                tag,
-                type,
-                editable: editable ? "true" : "false",
-                trackedFocusStateId:
-                  window.__cmuxAddressBarFocusState &&
-                  typeof window.__cmuxAddressBarFocusState.id === "string"
-                    ? window.__cmuxAddressBarFocusState.id
-                    : "",
-                focusTrackerInstalled:
-                  window.__cmuxAddressBarFocusTrackerInstalled === true ? "true" : "false"
-              };
-            } catch (_) {
-              return {
-                id: "",
-                tag: "",
-                type: "",
-                editable: "false",
-                trackedFocusStateId: "",
-                focusTrackerInstalled: "false"
-              };
-            }
-          };
-          const matchesExpectation = (state) =>
-            !expectedInputId || (typeof expectedInputId === "string" && state.id === expectedInputId);
-
-          const initial = snapshot();
-          if (matchesExpectation(initial)) {
-            return initial;
-          }
-
-          return new Promise((resolve) => {
-            let finished = false;
-            let observer = null;
-            const cleanups = [];
-            const finish = (value) => {
-              if (finished) return;
-              finished = true;
-              if (observer) observer.disconnect();
-              for (const cleanup of cleanups) {
-                try { cleanup(); } catch (_) {}
-              }
-              resolve(value);
-            };
-            const maybeFinish = () => {
-              const state = snapshot();
-              if (matchesExpectation(state)) {
-                finish(state);
-              }
-            };
-            const addListener = (target, eventName, options) => {
-              if (!target || typeof target.addEventListener !== "function") return;
-              const handler = () => maybeFinish();
-              target.addEventListener(eventName, handler, options);
-              cleanups.push(() => target.removeEventListener(eventName, handler, options));
-            };
-            try {
-              observer = new MutationObserver(() => maybeFinish());
-              observer.observe(document.documentElement || document, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true
-              });
-            } catch (_) {}
-            addListener(document, "focusin", true);
-            addListener(document, "focusout", true);
-            addListener(document, "selectionchange", true);
-            addListener(document, "readystatechange", true);
-            addListener(window, "load", true);
-            const timeoutId = window.setTimeout(() => finish(snapshot()), 1500);
-            cleanups.push(() => window.clearTimeout(timeoutId));
-            maybeFinish();
-          });
-        })();
-        """
-
-        panel.webView.evaluateJavaScript(script) { result, _ in
-            let payload = result as? [String: Any]
-            completion([
-                "id": (payload?["id"] as? String) ?? "",
-                "tag": (payload?["tag"] as? String) ?? "",
-                "type": (payload?["type"] as? String) ?? "",
-                "editable": (payload?["editable"] as? String) ?? "false",
-                "trackedFocusStateId": (payload?["trackedFocusStateId"] as? String) ?? "",
-                "focusTrackerInstalled": (payload?["focusTrackerInstalled"] as? String) ?? "false"
-            ])
-        }
-    }
-
-    private func gotoSplitUITestExpectedInputId() -> String? {
-        let env = ProcessInfo.processInfo.environment
-        guard let path = env["CMUX_UI_TEST_GOTO_SPLIT_PATH"], !path.isEmpty else { return nil }
-        return loadGotoSplitTestData(at: path)["webInputFocusElementId"]
     }
 
     private func recordGotoSplitMoveIfNeeded(direction: NavigationDirection) {
@@ -10911,25 +10064,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard let workspace = (tabManager ?? self.tabManager)?.selectedWorkspace else { return }
 
         func snapshot(for workspace: Workspace) -> ([String: String], Bool) {
-            let browserPanel = workspace.panels.values.compactMap { $0 as? BrowserPanel }.first
             let otherTerminal = workspace.panels.values.compactMap { $0 as? TerminalPanel }.first
-            let browserSnapshot = browserPanel.flatMap { BrowserWindowPortalRegistry.debugSnapshot(for: $0.webView) }
 
             var updates = self.gotoSplitFindStateSnapshot(for: workspace)
             updates["splitZoomedAfterToggle"] = workspace.bonsplitController.isSplitZoomed ? "true" : "false"
             updates["zoomedPaneIdAfterToggle"] = workspace.bonsplitController.zoomedPaneId?.description ?? ""
-            updates["browserPanelIdAfterToggle"] = browserPanel?.id.uuidString ?? ""
-            updates["browserContainerHiddenAfterToggle"] = browserSnapshot.map { $0.containerHidden ? "true" : "false" } ?? ""
-            updates["browserVisibleFlagAfterToggle"] = browserSnapshot.map { $0.visibleInUI ? "true" : "false" } ?? ""
-            updates["browserFrameAfterToggle"] = browserSnapshot.map {
-                String(
-                    format: "%.1f,%.1f %.1fx%.1f",
-                    $0.frameInWindow.origin.x,
-                    $0.frameInWindow.origin.y,
-                    $0.frameInWindow.size.width,
-                    $0.frameInWindow.size.height
-                )
-            } ?? ""
             updates["otherTerminalPanelIdAfterToggle"] = otherTerminal?.id.uuidString ?? ""
             updates["otherTerminalHostHiddenAfterToggle"] = otherTerminal.map { $0.hostedView.isHidden ? "true" : "false" } ?? ""
             updates["otherTerminalVisibleFlagAfterToggle"] = otherTerminal.map { $0.hostedView.debugPortalVisibleInUI ? "true" : "false" } ?? ""
@@ -10946,19 +10085,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
             let settled: Bool = {
                 if workspace.bonsplitController.isSplitZoomed {
-                    if let focusedPanelId = workspace.focusedPanelId,
-                       workspace.terminalPanel(for: focusedPanelId) != nil {
-                        guard let browserSnapshot else { return false }
-                        return browserSnapshot.containerHidden && !browserSnapshot.visibleInUI
-                    }
                     guard let otherTerminal else { return true }
                     return otherTerminal.hostedView.isHidden && !otherTerminal.hostedView.debugPortalVisibleInUI
                 }
-                let browserRestored = browserSnapshot.map { !$0.containerHidden && $0.visibleInUI } ?? true
-                let terminalRestored = otherTerminal.map {
+                return otherTerminal.map {
                     !$0.hostedView.isHidden && $0.hostedView.debugPortalVisibleInUI
                 } ?? true
-                return browserRestored && terminalRestored
             }()
 
             return (updates, settled)
@@ -12453,13 +11585,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return false
         }
 
-        if browserFocusModePanelForShortcutEvent(event) != nil {
-#if DEBUG
-            cmuxDebugLog("browser.focusMode.shortcutMonitor.bypass \(debugShortcutRouteSnapshot(event: event))")
-#endif
-            return false
-        }
-
         let normalizedFlags = flags.subtracting([.numericPad, .function, .capsLock])
         let commandPaletteTargetWindow = commandPaletteWindowForShortcutEvent(event)
         let isPlainEscape = normalizedFlags.isEmpty && event.keyCode == 53
@@ -12811,32 +11936,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // Ctrl+D belongs to the focused terminal surface; never treat it as an app shortcut.
             return false
         }
-        // Chrome-like omnibar navigation while holding Ctrl+N / Ctrl+P.
-        if let delta = controlOmnibarSelectionDelta(
-            hasFocusedAddressBar: hasFocusedAddressBarInShortcutContext,
-            flags: flags,
-            chars: chars
-        ),
-           let focusedAddressBarPanelIdInShortcutContext {
-            dispatchBrowserOmnibarSelectionMove(panelId: focusedAddressBarPanelIdInShortcutContext, delta: delta)
-            startBrowserOmnibarSelectionRepeatIfNeeded(
-                panelId: focusedAddressBarPanelIdInShortcutContext,
-                keyCode: event.keyCode,
-                delta: delta
-            )
-            return true
-        }
-
-        if let delta = browserOmnibarSelectionDeltaForArrowNavigation(
-            hasFocusedAddressBar: hasFocusedAddressBarInShortcutContext,
-            flags: event.modifierFlags,
-            keyCode: event.keyCode
-        ),
-           let focusedAddressBarPanelIdInShortcutContext {
-            dispatchBrowserOmnibarSelectionMove(panelId: focusedAddressBarPanelIdInShortcutContext, delta: delta)
-            return true
-        }
-
         // Fast path for normal typing and terminal navigation keys (for example Up-arrow
         // history): after command-palette/notification handling and browser omnibar
         // arrow navigation above, most plain key events have no app-level shortcut behavior.
@@ -13331,22 +12430,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
 
-        if matchConfiguredShortcut(event: event, action: .splitBrowserRight) {
-#if DEBUG
-            cmuxDebugLog("shortcut.action name=splitBrowserRight \(debugShortcutRouteSnapshot(event: event))")
-#endif
-            _ = performBrowserSplitShortcut(direction: .right)
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .splitBrowserDown) {
-#if DEBUG
-            cmuxDebugLog("shortcut.action name=splitBrowserDown \(debugShortcutRouteSnapshot(event: event))")
-#endif
-            _ = performBrowserSplitShortcut(direction: .down)
-            return true
-        }
-
         // Surface navigation (legacy Ctrl+Tab support)
         if matchTabShortcut(event: event, shortcut: StoredShortcut(key: "\t", command: false, shift: false, option: false, control: true)) {
             tabManager?.selectNextSurface()
@@ -13369,22 +12452,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
 
-        if matchConfiguredShortcut(event: event, action: .focusBrowserAddressBar) {
-            if let focusedPanel = tabManager?.focusedBrowserPanel {
-                focusBrowserAddressBar(in: focusedPanel)
-                return true
-            }
-
-            if let browserAddressBarFocusedPanelId,
-               focusBrowserAddressBar(panelId: browserAddressBarFocusedPanelId) {
-                return true
-            }
-
-            if openBrowserAndFocusAddressBar(insertAtEnd: true) != nil {
-                return true
-            }
-        }
-
         if matchConfiguredShortcut(event: event, action: .focusHistoryBack) {
             let routedManager = preferredMainWindowContextForShortcutRouting(event: event)?.tabManager ?? tabManager
             if routedManager?.navigateBack() != true {
@@ -13399,93 +12466,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 NSSound.beep()
             }
             return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .toggleBrowserFocusMode) {
-            // Reached only when focus mode is off (the active-focus-mode bypass
-            // returns earlier), so this enters focus mode for the focused browser.
-            // Exit stays double-Escape, which is forwarded to the page first.
-            guard let focusedBrowserPanel = shortcutEventBrowserPanel(event),
-                  focusedBrowserPanel.canToggleBrowserFocusMode else {
-                return false
-            }
-            _ = focusedBrowserPanel.toggleBrowserFocusMode(reason: "configuredShortcut", focusWebView: true)
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .browserBack) {
-            guard let focusedBrowserPanel = shortcutEventBrowserPanel(event) else {
-                return false
-            }
-            focusedBrowserPanel.goBack()
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .browserForward) {
-            guard let focusedBrowserPanel = shortcutEventBrowserPanel(event) else {
-                return false
-            }
-            focusedBrowserPanel.goForward()
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .browserReload) {
-            guard let focusedBrowserPanel = shortcutEventBrowserPanel(event) else {
-                return false
-            }
-            reloadBrowserPanelForShortcut(focusedBrowserPanel)
-            return true
-        }
-
-        // Safari defaults:
-        // - Option+Command+I => Show/Toggle Web Inspector
-        // - Option+Command+C => Show JavaScript Console
-        if matchConfiguredShortcut(event: event, action: .toggleBrowserDeveloperTools) {
-#if DEBUG
-            logDeveloperToolsShortcutSnapshot(phase: "toggle.pre", event: event)
-#endif
-            let didHandle = shortcutEventBrowserPanel(event)?.toggleDeveloperTools() ?? false
-#if DEBUG
-            logDeveloperToolsShortcutSnapshot(phase: "toggle.post", event: event, didHandle: didHandle)
-            DispatchQueue.main.async { [weak self] in
-                self?.logDeveloperToolsShortcutSnapshot(phase: "toggle.tick", didHandle: didHandle)
-            }
-#endif
-            if !didHandle { NSSound.beep() }
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .showBrowserJavaScriptConsole) {
-#if DEBUG
-            logDeveloperToolsShortcutSnapshot(phase: "console.pre", event: event)
-#endif
-            let didHandle = shortcutEventBrowserPanel(event)?.showDeveloperToolsConsole() ?? false
-#if DEBUG
-            logDeveloperToolsShortcutSnapshot(phase: "console.post", event: event, didHandle: didHandle)
-            DispatchQueue.main.async { [weak self] in
-                self?.logDeveloperToolsShortcutSnapshot(phase: "console.tick", didHandle: didHandle)
-            }
-#endif
-            if !didHandle { NSSound.beep() }
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .toggleReactGrab) {
-            let didHandle = tabManager?.toggleReactGrabFromCurrentFocus() ?? false
-            if !didHandle { NSSound.beep() }
-            return true
-        }
-
-        if matchConfiguredShortcut(event: event, action: .browserZoomIn) {
-            return shortcutEventBrowserPanel(event)?.zoomIn() ?? false
-        }
-
-        if matchConfiguredShortcut(event: event, action: .browserZoomOut) {
-            return shortcutEventBrowserPanel(event)?.zoomOut() ?? false
-        }
-
-        if matchConfiguredShortcut(event: event, action: .browserZoomReset) {
-            return shortcutEventBrowserPanel(event)?.resetZoom() ?? false
         }
 
         if matchConfiguredShortcut(event: event, action: .markdownZoomIn) {
@@ -13505,27 +12485,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
 
         if matchConfiguredShortcut(event: event, action: .findNext) {
-            guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-                return false
-            }
             restoreFocusedMainPanelFocusForShortcut(event: event)
             tabManager?.findNext()
             return true
         }
 
         if matchConfiguredShortcut(event: event, action: .findPrevious) {
-            guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-                return false
-            }
             restoreFocusedMainPanelFocusForShortcut(event: event)
             tabManager?.findPrevious()
             return true
         }
 
         if matchConfiguredShortcut(event: event, action: .hideFind) {
-            guard !shouldLetFocusedBrowserOwnFindShortcut(event) else {
-                return false
-            }
             restoreFocusedMainPanelFocusForShortcut(event: event)
             tabManager?.hideFind()
             return true
@@ -13594,138 +12565,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return true
     }
 
-#if DEBUG
-    private func logBrowserZoomShortcutTrace(
-        stage: String,
-        event: NSEvent,
-        flags: NSEvent.ModifierFlags,
-        chars: String,
-        action: BrowserZoomShortcutAction? = nil,
-        handled: Bool? = nil
-    ) {
-        guard browserZoomShortcutTraceCandidate(
-            flags: flags,
-            chars: chars,
-            keyCode: event.keyCode,
-            literalChars: event.characters
-        ) else {
-            return
-        }
-
-        let keyWindow = NSApp.keyWindow
-        let firstResponderType = keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let panel = tabManager?.focusedBrowserPanel
-        let panelToken = panel.map { String($0.id.uuidString.prefix(8)) } ?? "nil"
-        let panelZoom = panel?.webView.pageZoom ?? -1
-        var line =
-            "zoom.shortcut stage=\(stage) event=\(NSWindow.keyDescription(event)) " +
-            "chars='\(chars)' flags=\(browserZoomShortcutTraceFlagsString(flags)) " +
-            "action=\(browserZoomShortcutTraceActionString(action)) keyWin=\(keyWindow?.windowNumber ?? -1) " +
-            "fr=\(firstResponderType) panel=\(panelToken) zoom=\(String(format: "%.3f", panelZoom)) " +
-            "addrBarId=\(browserAddressBarFocusedPanelId?.uuidString.prefix(8) ?? "nil")"
-        if let handled {
-            line += " handled=\(handled ? 1 : 0)"
-        }
-        cmuxDebugLog(line)
-    }
-
-    private func browserFocusStateSnapshot() -> String {
-        let selected = tabManager?.selectedTabId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        let focused = tabManager?.selectedWorkspace?.focusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        let addressBar = browserAddressBarFocusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        let keyWindow = NSApp.keyWindow?.windowNumber ?? -1
-        let firstResponderType = NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        return "selected=\(selected) focused=\(focused) addr=\(addressBar) keyWin=\(keyWindow) fr=\(firstResponderType)"
-    }
-
-    private func redactedDebugURL(_ url: URL?) -> String {
-        guard let url else { return "nil" }
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return "<invalid>"
-        }
-        components.user = nil
-        components.password = nil
-        components.query = nil
-        components.fragment = nil
-        return components.string ?? "<redacted>"
-    }
-#endif
-
-    @discardableResult
-    private func focusBrowserAddressBar(panelId: UUID) -> Bool {
-        guard let tabManager,
-              let workspace = tabManager.selectedWorkspace,
-              let panel = workspace.browserPanel(for: panelId) else {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.route panel=\(panelId.uuidString.prefix(5)) " +
-                "result=miss \(browserFocusStateSnapshot())"
-            )
-#endif
-            return false
-        }
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.addressBar.route panel=\(panel.id.uuidString.prefix(5)) " +
-            "workspace=\(workspace.id.uuidString.prefix(5)) result=hit \(browserFocusStateSnapshot())"
-        )
-#endif
-        workspace.focusPanel(panel.id)
-#if DEBUG
-        let focusedAfter = workspace.focusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        cmuxDebugLog(
-            "browser.focus.addressBar.route panel=\(panel.id.uuidString.prefix(5)) " +
-            "workspace=\(workspace.id.uuidString.prefix(5)) focusedAfter=\(focusedAfter)"
-        )
-#endif
-        focusBrowserAddressBar(in: panel)
-        return true
-    }
-
     @discardableResult
     func openBrowserAndFocusAddressBar(url: URL? = nil, insertAtEnd: Bool = false) -> UUID? {
-        guard BrowserAvailabilitySettings.isEnabled() else {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.openAndFocus result=blocked_browser_disabled " +
-                "insertAtEnd=\(insertAtEnd ? 1 : 0) url=\(redactedDebugURL(url))"
-            )
-#endif
-            return nil
-        }
-
-        let preferredProfileID =
-            tabManager?.focusedBrowserPanel?.profileID
-            ?? tabManager?.selectedWorkspace?.preferredBrowserProfileID
-        guard let panelId = tabManager?.openBrowser(
-            url: url,
-            preferredProfileID: preferredProfileID,
-            insertAtEnd: insertAtEnd
-        ) else {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.openAndFocus result=open_failed insertAtEnd=\(insertAtEnd ? 1 : 0) " +
-                "url=\(redactedDebugURL(url)) \(browserFocusStateSnapshot())"
-            )
-#endif
-            return nil
-        }
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.openAndFocus result=open_ok panel=\(panelId.uuidString.prefix(5)) " +
-            "insertAtEnd=\(insertAtEnd ? 1 : 0) url=\(redactedDebugURL(url))"
-        )
-#endif
-#if DEBUG
-        let didFocus = focusBrowserAddressBar(panelId: panelId)
-        cmuxDebugLog(
-            "browser.focus.openAndFocus result=focus_request panel=\(panelId.uuidString.prefix(5)) " +
-            "focused=\(didFocus ? 1 : 0) \(browserFocusStateSnapshot())"
-        )
-#else
-        _ = focusBrowserAddressBar(panelId: panelId)
-#endif
-        return panelId
+        // cmux browser removed; opening a browser/address bar is a no-op.
+        return nil
     }
 
     @discardableResult
@@ -13748,422 +12591,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )?.id
     }
 
-    private func focusBrowserAddressBar(in panel: BrowserPanel) {
-#if DEBUG
-        let requestId = panel.requestAddressBarFocus(selectionIntent: .selectAll)
-        cmuxDebugLog(
-            "browser.focus.addressBar.request panel=\(panel.id.uuidString.prefix(5)) " +
-            "request=\(requestId.uuidString.prefix(8)) \(browserFocusStateSnapshot())"
-        )
-#else
-        _ = panel.requestAddressBarFocus(selectionIntent: .selectAll)
-#endif
-        browserAddressBarFocusedPanelId = panel.id
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.addressBar.sticky panel=\(panel.id.uuidString.prefix(5)) " +
-            "request=\(requestId.uuidString.prefix(8)) \(browserFocusStateSnapshot())"
-        )
-#endif
-        NotificationCenter.default.post(name: .browserFocusAddressBar, object: panel.id)
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.addressBar.notify panel=\(panel.id.uuidString.prefix(5)) " +
-            "request=\(requestId.uuidString.prefix(8))"
-        )
-#endif
-    }
-
-    func focusedBrowserAddressBarPanelId() -> UUID? {
-        browserAddressBarFocusedPanelId
-    }
-
-    func focusedBrowserOmnibarField(for event: NSEvent, in window: NSWindow?) -> OmnibarNativeTextField? {
-        let panelId = focusedBrowserAddressBarPanelIdForShortcutEvent(event)
-        return browserOmnibarField(panelId: panelId, in: window)
-    }
-
-    func clearBrowserAddressBarFocus(panelId: UUID, reason: String) {
-        guard browserAddressBarFocusedPanelId == panelId else { return }
-        browserAddressBarFocusedPanelId = nil
-        stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-        cmuxDebugLog("addressBar CLEAR panelId=\(panelId.uuidString.prefix(8)) reason=\(reason)")
-#endif
-    }
-
-    func focusedBrowserAddressBarPanelIdForShortcutEvent(_ event: NSEvent) -> UUID? {
-        let shortcutWindow = resolvedShortcutEventWindow(event) ?? NSApp.keyWindow ?? NSApp.mainWindow
-        let shortcutResponder = shortcutWindow?.firstResponder
-        let responderPanelId = isBrowserOmnibarResponder(shortcutResponder)
-            ? browserOmnibarPanelId(for: shortcutResponder)
-            : nil
-
-        guard let context = preferredMainWindowContextForShortcutRouting(event: event) else {
-#if DEBUG
-            let candidatePanelId = responderPanelId ?? browserAddressBarFocusedPanelId
-            guard let candidatePanelId else { return nil }
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(candidatePanelId.uuidString.prefix(5)) " +
-                "accepted=0 reason=no_context event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return nil
-        }
-
-        let intentPanelId = browserAddressBarIntentPanelId(in: context, window: shortcutWindow)
-        guard let panelId = responderPanelId ?? browserAddressBarFocusedPanelId ?? intentPanelId else { return nil }
-
-        guard let workspace = context.tabManager.selectedWorkspace else {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=0 reason=no_workspace event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return nil
-        }
-
-        guard let panel = workspace.browserPanel(for: panelId) else {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=0 reason=panel_not_in_workspace workspace=\(workspace.id.uuidString.prefix(5)) " +
-                "event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return nil
-        }
-
-        if let responderPanelId {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(responderPanelId.uuidString.prefix(5)) " +
-                "accepted=1 reason=omnibar_responder workspace=\(workspace.id.uuidString.prefix(5)) " +
-                "event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return responderPanelId
-        }
-
-        if intentPanelId == panelId, browserAddressBarFocusedPanelId == nil {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=1 reason=addressbar_intent workspace=\(workspace.id.uuidString.prefix(5)) " +
-                "event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return panelId
-        }
-
-        let liveOmnibarFieldExists = browserOmnibarField(panelId: panelId, in: shortcutWindow) != nil
-        let trackedPanelMatchesShortcutResponder = browserPanel(panel, ownsShortcutResponder: shortcutResponder, in: shortcutWindow)
-        let trackingContext = BrowserAddressBarTrackingContext(
-            trackedPanelMatchesWebView: trackedPanelMatchesShortcutResponder,
-            omnibarResponderActive: false,
-            preferredFocusIntentIsAddressBar: panel.preferredFocusIntent == .addressBar,
-            suppressesWebViewFocus: panel.shouldSuppressWebViewFocus(),
-            pointerInitiatedWebFocus: false,
-            liveOmnibarFieldExists: liveOmnibarFieldExists
-        )
-        if shouldPreserveBrowserAddressBarTrackingDuringWebViewFocus(trackingContext) {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=1 reason=tracked_omnibar_field workspace=\(workspace.id.uuidString.prefix(5)) " +
-                "event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return panelId
-        }
-
-        if shouldPreserveBrowserAddressBarTrackingDuringTransientShortcutResponder(
-            for: panel,
-            responder: shortcutResponder,
-            in: shortcutWindow,
-            liveOmnibarFieldExists: liveOmnibarFieldExists
-        ) {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-                "accepted=1 reason=transient_omnibar_focus workspace=\(workspace.id.uuidString.prefix(5)) " +
-                "event=\(NSWindow.keyDescription(event))"
-            )
-#endif
-            return panelId
-        }
-
-#if DEBUG
-        let focusedPanel = workspace.focusedPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil"
-        cmuxDebugLog(
-            "browser.focus.addressBar.shortcutContext panel=\(panelId.uuidString.prefix(5)) " +
-            "accepted=0 reason=responder_not_omnibar responder=\(shortcutResponder.map { String(describing: type(of: $0)) } ?? "nil") " +
-            "pending=\(panel.pendingAddressBarFocusRequestId != nil ? 1 : 0) focusedPanel=\(focusedPanel) " +
-            "event=\(NSWindow.keyDescription(event))"
-        )
-#endif
+    func focusedBrowserOmnibarField(for event: NSEvent, in window: NSWindow?) -> NSView? {
         return nil
     }
 
-    private func shouldPreserveBrowserAddressBarTrackingDuringTransientShortcutResponder(
-        for panel: BrowserPanel,
-        responder: NSResponder?,
-        in window: NSWindow?,
-        liveOmnibarFieldExists: Bool
-    ) -> Bool {
-        guard browserAddressBarFocusedPanelId == panel.id else { return false }
-        guard panel.preferredFocusIntent == .addressBar else { return false }
-        guard panel.shouldSuppressWebViewFocus() ||
-            liveOmnibarFieldExists ||
-            panel.pendingAddressBarFocusRequestId != nil else {
-            return false
-        }
-
-        guard let responder else { return true }
-        if let window, responder === window {
-            return true
-        }
-        if responder is NSWindow {
-            return true
-        }
-        if browserOmnibarPanelId(for: responder) == panel.id {
-            return true
-        }
-        if cmuxOwningGhosttyView(for: responder) != nil {
-            return false
-        }
-        if responder is NSTextView || responder is NSTextField {
-            return false
-        }
-        if let window, panel.ownedFocusIntent(for: responder, in: window) != nil {
-            return false
-        }
-        return false
-    }
-
-    private func browserAddressBarIntentPanelId(
-        in context: MainWindowContext,
-        window: NSWindow?
-    ) -> UUID? {
-        guard let workspace = context.tabManager.selectedWorkspace,
-              let focusedPanelId = workspace.focusedPanelId,
-              let panel = workspace.browserPanel(for: focusedPanelId),
-              panel.preferredFocusIntent == .addressBar,
-              let field = browserOmnibarField(panelId: panel.id, in: window) else {
-            return nil
-        }
-
-        guard panel.shouldSuppressWebViewFocus() || field.currentEditor() != nil else {
-            return nil
-        }
-        return panel.id
-    }
-
-    private func browserPanel(
-        _ panel: BrowserPanel,
-        ownsShortcutResponder responder: NSResponder?,
-        in window: NSWindow?
-    ) -> Bool {
-        guard let responder, let window else { return false }
-        if browserOmnibarPanelId(for: responder) == panel.id {
-            return true
-        }
-        if case .browser(.webView)? = panel.ownedFocusIntent(for: responder, in: window) {
-            return true
-        }
-        return false
-    }
-
-    private func browserOmnibarOwnerView(for responder: NSResponder?) -> NSView? {
-        guard let responder else { return nil }
-
-        if let textView = responder as? NSTextView,
-           textView.isFieldEditor,
-           let delegateView = textView.delegate as? NSView,
-           delegateView.identifier == browserOmnibarTextFieldIdentifier {
-            return delegateView
-        }
-
-        let ownerView = keyRoutingOwnerView(for: responder)
-        guard ownerView?.identifier == browserOmnibarTextFieldIdentifier else { return nil }
-        return ownerView
-    }
-
-    private func isBrowserOmnibarResponder(_ responder: NSResponder?) -> Bool {
-        guard let ownerView = browserOmnibarOwnerView(for: responder) else { return false }
-
-        if let fieldEditor = responder as? NSTextView,
-           fieldEditor.isFieldEditor {
-            return (ownerView as? NSTextField)?.currentEditor() === fieldEditor
-        }
-
-        return true
-    }
-
-    private func shouldPreserveBrowserAddressBarTracking(
-        for panel: BrowserPanel,
-        trackedPanelMatchesWebView: Bool,
-        pointerInitiatedWebFocus: Bool = false,
-        in window: NSWindow? = nil
-    ) -> Bool {
-        guard browserAddressBarFocusedPanelId == panel.id else { return false }
-        let resolvedWindow = window ?? panel.webView.window
-        let trackingContext = BrowserAddressBarTrackingContext(
-            trackedPanelMatchesWebView: trackedPanelMatchesWebView,
-            omnibarResponderActive: isBrowserOmnibarResponder(resolvedWindow?.firstResponder),
-            preferredFocusIntentIsAddressBar: panel.preferredFocusIntent == .addressBar,
-            suppressesWebViewFocus: panel.shouldSuppressWebViewFocus(),
-            pointerInitiatedWebFocus: pointerInitiatedWebFocus,
-            liveOmnibarFieldExists: browserOmnibarField(panelId: panel.id, in: resolvedWindow) != nil
-        )
-        return shouldPreserveBrowserAddressBarTrackingDuringWebViewFocus(trackingContext)
-    }
-
-    @discardableResult
-    func requestBrowserAddressBarFocus(panelId: UUID) -> Bool {
-        focusBrowserAddressBar(panelId: panelId)
-    }
-
-    private func controlOmnibarSelectionDelta(
-        hasFocusedAddressBar: Bool,
-        flags: NSEvent.ModifierFlags,
-        chars: String
-    ) -> Int? {
-        browserOmnibarSelectionDeltaForControlNavigation(
-            hasFocusedAddressBar: hasFocusedAddressBar,
-            flags: flags,
-            chars: chars
-        )
-    }
-
-    private func dispatchBrowserOmnibarSelectionMove(panelId: UUID, delta: Int) {
-        guard delta != 0 else { return }
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.omnibar.selectionMove panel=\(panelId.uuidString.prefix(5)) " +
-            "delta=\(delta) repeatKey=\(browserOmnibarRepeatKeyCode.map(String.init) ?? "nil")"
-        )
-#endif
-        NotificationCenter.default.post(
-            name: .browserMoveOmnibarSelection,
-            object: panelId,
-            userInfo: ["delta": delta]
-        )
-    }
-
-    private func startBrowserOmnibarSelectionRepeatIfNeeded(panelId: UUID, keyCode: UInt16, delta: Int) {
-        guard delta != 0 else { return }
-
-        if browserOmnibarRepeatPanelId == panelId,
-           browserOmnibarRepeatKeyCode == keyCode,
-           browserOmnibarRepeatDelta == delta {
-#if DEBUG
-            cmuxDebugLog(
-                "browser.focus.omnibar.repeat.start panel=\(panelId.uuidString.prefix(5)) " +
-                "key=\(keyCode) delta=\(delta) result=reuse"
-            )
-#endif
-            return
-        }
-
-        stopBrowserOmnibarSelectionRepeat()
-        browserOmnibarRepeatPanelId = panelId
-        browserOmnibarRepeatKeyCode = keyCode
-        browserOmnibarRepeatDelta = delta
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.omnibar.repeat.start panel=\(panelId.uuidString.prefix(5)) " +
-            "key=\(keyCode) delta=\(delta) result=armed"
-        )
-#endif
-
-        let start = DispatchWorkItem { [weak self] in
-            self?.scheduleBrowserOmnibarSelectionRepeatTick()
-        }
-        browserOmnibarRepeatStartWorkItem = start
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: start)
-    }
-
-    private func scheduleBrowserOmnibarSelectionRepeatTick() {
-        browserOmnibarRepeatStartWorkItem = nil
-        guard let panelId = browserOmnibarRepeatPanelId else {
-#if DEBUG
-            cmuxDebugLog("browser.focus.omnibar.repeat.tick result=stop_no_focused_address_bar")
-#endif
-            stopBrowserOmnibarSelectionRepeat()
-            return
-        }
-        guard browserOmnibarRepeatKeyCode != nil else { return }
-
-#if DEBUG
-        cmuxDebugLog(
-            "browser.focus.omnibar.repeat.tick panel=\(panelId.uuidString.prefix(5)) " +
-            "delta=\(browserOmnibarRepeatDelta)"
-        )
-#endif
-        dispatchBrowserOmnibarSelectionMove(panelId: panelId, delta: browserOmnibarRepeatDelta)
-
-        let tick = DispatchWorkItem { [weak self] in
-            self?.scheduleBrowserOmnibarSelectionRepeatTick()
-        }
-        browserOmnibarRepeatTickWorkItem = tick
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.055, execute: tick)
-    }
-
-    private func stopBrowserOmnibarSelectionRepeat() {
-#if DEBUG
-        let previousPanelId = browserOmnibarRepeatPanelId
-        let previousKeyCode = browserOmnibarRepeatKeyCode
-        let previousDelta = browserOmnibarRepeatDelta
-#endif
-        browserOmnibarRepeatStartWorkItem?.cancel()
-        browserOmnibarRepeatTickWorkItem?.cancel()
-        browserOmnibarRepeatStartWorkItem = nil
-        browserOmnibarRepeatTickWorkItem = nil
-        browserOmnibarRepeatPanelId = nil
-        browserOmnibarRepeatKeyCode = nil
-        browserOmnibarRepeatDelta = 0
-#if DEBUG
-        if previousKeyCode != nil || previousDelta != 0 {
-            cmuxDebugLog(
-                "browser.focus.omnibar.repeat.stop panel=\(previousPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil") " +
-                "key=\(previousKeyCode.map(String.init) ?? "nil") " +
-                "delta=\(previousDelta)"
-            )
-        }
-#endif
+    func focusedBrowserAddressBarPanelIdForShortcutEvent(_ event: NSEvent) -> UUID? {
+        return nil
     }
 
     private func handleBrowserOmnibarSelectionRepeatLifecycleEvent(_ event: NSEvent) {
-        guard browserOmnibarRepeatKeyCode != nil else { return }
-
-        switch event.type {
-        case .keyUp:
-            if event.keyCode == browserOmnibarRepeatKeyCode {
-#if DEBUG
-                cmuxDebugLog(
-                    "browser.focus.omnibar.repeat.lifecycle event=keyUp key=\(event.keyCode) " +
-                    "action=stop"
-                )
-#endif
-                stopBrowserOmnibarSelectionRepeat()
-            }
-        case .flagsChanged:
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if !browserOmnibarShouldContinueControlNavigationRepeat(flags: flags) {
-#if DEBUG
-                cmuxDebugLog(
-                    "browser.focus.omnibar.repeat.lifecycle event=flagsChanged " +
-                    "flags=\(flags.rawValue) action=stop"
-                )
-#endif
-                stopBrowserOmnibarSelectionRepeat()
-            }
-        default:
-            break
-        }
     }
+
+    private func stopBrowserOmnibarSelectionRepeat() {
+    }
+
 
     private func isLikelyWebInspectorResponder(_ responder: NSResponder?) -> Bool {
         cmuxIsLikelyWebInspectorResponder(responder)
@@ -14201,17 +12642,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let firstResponderType = firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
         let firstResponderPtr = firstResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
         let eventDescription = event.map(NSWindow.keyDescription) ?? "none"
-        if let browser = tabManager?.focusedBrowserPanel {
-            var line =
-                "browser.devtools shortcut=\(phase) panel=\(browser.id.uuidString.prefix(5)) " +
-                "\(browser.debugDeveloperToolsStateSummary()) \(browser.debugDeveloperToolsGeometrySummary()) " +
-                "keyWin=\(keyWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) event=\(eventDescription)"
-            if let didHandle {
-                line += " handled=\(didHandle ? 1 : 0)"
-            }
-            cmuxDebugLog(line)
-            return
-        }
         var line =
             "browser.devtools shortcut=\(phase) panel=nil keyWin=\(keyWindow?.windowNumber ?? -1) " +
             "fr=\(firstResponderType)@\(firstResponderPtr) event=\(eventDescription)"
@@ -14222,29 +12652,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 #endif
 
-    private func prepareFocusedBrowserDevToolsForSplit(directionLabel: String) {
-        guard let browser = tabManager?.focusedBrowserPanel else { return }
-        guard browser.shouldPreserveWebViewAttachmentDuringTransientHide() else { return }
-        guard let keyWindow = NSApp.keyWindow else { return }
-        guard isLikelyWebInspectorResponder(keyWindow.firstResponder) else { return }
-
-        let beforeResponder = keyWindow.firstResponder
-        let movedToWebView = keyWindow.makeFirstResponder(browser.webView)
-        let movedToNil = movedToWebView ? false : keyWindow.makeFirstResponder(nil)
-
-        #if DEBUG
-        let beforeType = beforeResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let beforePtr = beforeResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-        let afterResponder = keyWindow.firstResponder
-        let afterType = afterResponder.map { String(describing: type(of: $0)) } ?? "nil"
-        let afterPtr = afterResponder.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-        cmuxDebugLog(
-            "split.shortcut inspector.preflight dir=\(directionLabel) panel=\(browser.id.uuidString.prefix(5)) " +
-            "before=\(beforeType)@\(beforePtr) after=\(afterType)@\(afterPtr) " +
-            "moveWeb=\(movedToWebView ? 1 : 0) moveNil=\(movedToNil ? 1 : 0) \(browser.debugDeveloperToolsStateSummary())"
-        )
-        #endif
-    }
 
     @discardableResult
     func performSplitShortcut(direction: SplitDirection, preferredWindow: NSWindow? = nil) -> Bool {
@@ -14275,16 +12682,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return -1
         }()
         let splitContext = "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
-        if let browser = tabManager?.focusedBrowserPanel {
-            let webWindow = browser.webView.window?.windowNumber ?? -1
-            let webSuperview = browser.webView.superview.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-            cmuxDebugLog("split.shortcut dir=\(directionLabel) pre panel=\(browser.id.uuidString.prefix(5)) \(browser.debugDeveloperToolsStateSummary()) webWin=\(webWindow) webSuper=\(webSuperview) \(splitContext)")
-        } else {
-            cmuxDebugLog("split.shortcut dir=\(directionLabel) pre panel=nil \(splitContext)")
-        }
+        cmuxDebugLog("split.shortcut dir=\(directionLabel) pre panel=nil \(splitContext)")
         #endif
 
-        prepareFocusedBrowserDevToolsForSplit(directionLabel: directionLabel)
         let didCreateSplit: Bool = {
             if let terminalContext {
                 return terminalContext.tabManager.createSplit(
@@ -14310,65 +12710,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 }
                 return -1
             }()
+            _ = self
             let splitContext = "keyWin=\(keyWindow?.windowNumber ?? -1) mainWin=\(NSApp.mainWindow?.windowNumber ?? -1) fr=\(firstResponderType)@\(firstResponderPtr) frWin=\(firstResponderWindow)"
-            if let browser = self?.tabManager?.focusedBrowserPanel {
-                let webWindow = browser.webView.window?.windowNumber ?? -1
-                let webSuperview = browser.webView.superview.map { String(describing: Unmanaged.passUnretained($0).toOpaque()) } ?? "nil"
-                cmuxDebugLog("split.shortcut dir=\(directionLabel) post panel=\(browser.id.uuidString.prefix(5)) \(browser.debugDeveloperToolsStateSummary()) webWin=\(webWindow) webSuper=\(webSuperview) \(splitContext)")
-            } else {
-                cmuxDebugLog("split.shortcut dir=\(directionLabel) post panel=nil \(splitContext)")
-            }
+            cmuxDebugLog("split.shortcut dir=\(directionLabel) post panel=nil \(splitContext)")
         }
         recordGotoSplitSplitIfNeeded(direction: direction)
 #endif
         return didCreateSplit
-    }
-
-    @discardableResult
-    func performBrowserSplitShortcut(direction: SplitDirection) -> Bool {
-        guard BrowserAvailabilitySettings.isEnabled() else {
-#if DEBUG
-            cmuxDebugLog("split.browser.shortcut blocked reason=browser_disabled")
-#endif
-            return false
-        }
-
-        _ = synchronizeActiveMainWindowContext(preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow)
-
-        #if DEBUG
-        let directionLabel: String
-        switch direction {
-        case .left: directionLabel = "left"
-        case .right: directionLabel = "right"
-        case .up: directionLabel = "up"
-        case .down: directionLabel = "down"
-        }
-        let selectedTabBefore = tabManager?.selectedTabId?.uuidString.prefix(5) ?? "nil"
-        let focusedPanelBefore = tabManager?.selectedWorkspace?.focusedPanelId?.uuidString.prefix(5) ?? "nil"
-        cmuxDebugLog(
-            "split.browser.shortcut pre dir=\(directionLabel) " +
-            "tab=\(selectedTabBefore) focusedPanel=\(focusedPanelBefore)"
-        )
-        #endif
-
-        guard let panelId = tabManager?.createBrowserSplit(direction: direction) else {
-            #if DEBUG
-            cmuxDebugLog("split.browser.shortcut failed dir=\(directionLabel)")
-            #endif
-            return false
-        }
-
-        #if DEBUG
-        let selectedTabAfter = tabManager?.selectedTabId?.uuidString.prefix(5) ?? "nil"
-        let focusedPanelAfter = tabManager?.selectedWorkspace?.focusedPanelId?.uuidString.prefix(5) ?? "nil"
-        cmuxDebugLog(
-            "split.browser.shortcut post dir=\(directionLabel) " +
-            "created=\(panelId.uuidString.prefix(5)) tab=\(selectedTabAfter) focusedPanel=\(focusedPanelAfter)"
-        )
-        #endif
-
-        _ = focusBrowserAddressBar(panelId: panelId)
-        return true
     }
 
     /// Allow AppKit-backed browser surfaces (WKWebView) to route non-menu shortcuts
@@ -14650,11 +12998,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     fileprivate func shouldForwardBrowserSurfaceShortcutToTerminal(_ event: NSEvent) -> Bool {
-        return KeyboardShortcutSettings.Action.allCases.contains {
-            $0.shortcutContext == .browserPanel &&
-                !$0.isBrowserContentShortcut &&
-                matchConfiguredShortcut(event: event, shortcut: KeyboardShortcutSettings.shortcut(for: $0))
-        }
+        // The in-app browser surface has been removed, so no shortcut is bound to a
+        // browser-panel context that would need forwarding to the terminal.
+        return false
     }
 
     private func numberedConfiguredShortcutDigit(
@@ -15572,213 +13918,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         })
     }
 
-    private func installBrowserAddressBarFocusObservers() {
-        guard browserAddressBarFocusObserver == nil,
-              browserAddressBarBlurObserver == nil,
-              browserWebViewFirstResponderObserver == nil else { return }
-
-        browserAddressBarFocusObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidFocusAddressBar,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.browserPanel(for: panelId)?.beginSuppressWebViewFocusForAddressBar()
-            self.browserAddressBarFocusedPanelId = panelId
-            self.stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-            cmuxDebugLog("addressBar FOCUS panelId=\(panelId.uuidString.prefix(8))")
-#endif
-        }
-
-        browserAddressBarBlurObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidBlurAddressBar,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            guard let panelId = notification.object as? UUID else { return }
-            self.browserPanel(for: panelId)?.endSuppressWebViewFocusForAddressBar()
-            if self.browserAddressBarFocusedPanelId == panelId {
-                self.browserAddressBarFocusedPanelId = nil
-                self.stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-                cmuxDebugLog("addressBar BLUR panelId=\(panelId.uuidString.prefix(8))")
-#endif
-            }
-        }
-
-        browserWebViewFirstResponderObserver = NotificationCenter.default.addObserver(
-            forName: .browserDidBecomeFirstResponderWebView,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            MainActor.assumeIsolated {
-                self?.handleBrowserWebViewFirstResponderNotification(notification)
-            }
-        }
-    }
-
-    @MainActor
-    private func handleBrowserWebViewFirstResponderNotification(_ notification: Notification) {
-        guard let webView = notification.object as? CmuxWebView,
-              let panel = browserPanelOwning(webView) else { return }
-        let pointerInitiatedKey = BrowserFirstResponderNotificationUserInfoKey.pointerInitiated
-        let pointerInitiated = notification.userInfo?[pointerInitiatedKey] as? Bool ?? false
-
-        if let trackedPanelId = browserAddressBarFocusedPanelId,
-           trackedPanelId != panel.id,
-           let trackedPanel = browserPanel(for: trackedPanelId),
-           !shouldPreserveBrowserAddressBarTracking(
-               for: trackedPanel,
-               trackedPanelMatchesWebView: false,
-               pointerInitiatedWebFocus: pointerInitiated,
-               in: trackedPanel.webView.window
-           ) {
-            trackedPanel.endSuppressWebViewFocusForAddressBar()
-            browserAddressBarFocusedPanelId = nil
-            stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-            cmuxDebugLog(
-                "addressBar CLEAR panelId=\(trackedPanelId.uuidString.prefix(8)) " +
-                "reason=stale_other_panel_webViewFirstResponder"
-            )
-#endif
-        }
-
-        guard !shouldPreserveBrowserAddressBarTracking(
-            for: panel,
-            trackedPanelMatchesWebView: panel.webView === webView,
-            pointerInitiatedWebFocus: pointerInitiated,
-            in: webView.window
-        ) else {
-#if DEBUG
-            cmuxDebugLog(
-                "addressBar CLEAR panelId=\(panel.id.uuidString.prefix(8)) " +
-                "reason=skip_preserve_omnibar_handoff pointer=\(pointerInitiated ? 1 : 0)"
-            )
-#endif
-            return
-        }
-        panel.endSuppressWebViewFocusForAddressBar()
-        if browserAddressBarFocusedPanelId == panel.id {
-            browserAddressBarFocusedPanelId = nil
-            stopBrowserOmnibarSelectionRepeat()
-#if DEBUG
-            cmuxDebugLog(
-                "addressBar CLEAR panelId=\(panel.id.uuidString.prefix(8)) " +
-                "reason=webViewFirstResponder"
-            )
-#endif
-        }
-    }
-
-    private func browserPanel(for panelId: UUID) -> BrowserPanel? {
-        return workspaceContainingPanel(panelId: panelId)?.workspace.browserPanel(for: panelId)
-    }
-
-    func browserFindBarIsVisible(for webView: CmuxWebView) -> Bool {
-        browserPanelOwning(webView)?.searchState != nil
-    }
-
-    func isBrowserFocusModeActive(for webView: CmuxWebView) -> Bool {
-        browserPanelOwning(webView)?.isBrowserFocusModeActive == true
-    }
-
-    private func isWebViewFocused(_ panel: BrowserPanel) -> Bool {
-        guard let window = panel.webView.window else { return false }
-        guard let fr = window.firstResponder as? NSView else { return false }
-        return fr.isDescendant(of: panel.webView)
-    }
-
-    private func browserFocusModePanelForShortcutEvent(_ event: NSEvent) -> BrowserPanel? {
-        // Resolve the panel from the web view that owns the responder chain (the
-        // same resolver every other browser shortcut uses), not the selected pane:
-        // context-menu / web-view-focus entrypoints can focus a WKWebView without
-        // updating focusedPanelId. Then confirm that web view actually holds focus,
-        // so the bypass stops once focus moves to the sidebar/terminal (where the
-        // page can't run the double-Escape exit anyway and cmux shortcuts must work).
-        guard let panel = shortcutEventBrowserPanel(event),
-              panel.isBrowserFocusModeActive,
-              isWebViewFocused(panel) else {
-            return nil
-        }
-        return panel
-    }
-
-    func handleBrowserFocusModeKeyEvent(
-        _ event: NSEvent,
-        webView: CmuxWebView,
-        source: String
-    ) -> BrowserFocusModeKeyDecision {
-        browserPanelOwning(webView)?.handleBrowserFocusModeKeyEvent(event, reason: source) ?? .inactive
-    }
-
-    func browserFocusModeContextMenuState(for webView: CmuxWebView) -> (isActive: Bool, canToggle: Bool) {
-        guard let panel = browserPanelOwning(webView) else {
-            return (isActive: false, canToggle: false)
-        }
-        return (isActive: panel.isBrowserFocusModeActive, canToggle: panel.canToggleBrowserFocusMode)
-    }
-
-    @discardableResult
-    func toggleBrowserFocusModeFromContextMenu(for webView: CmuxWebView) -> Bool {
-        guard let panel = browserPanelOwning(webView) else { return false }
-        return panel.toggleBrowserFocusMode(reason: "contextMenu", focusWebView: true)
-    }
-
-    private func shouldLetFocusedBrowserOwnFindShortcut(_ event: NSEvent) -> Bool {
-        let shortcutWindow = resolvedShortcutEventWindow(event) ?? NSApp.keyWindow ?? NSApp.mainWindow
-        let shortcutResponder = shortcutWindow?.firstResponder
-        let owningWebView = tabManager?.focusedBrowserPanel?.webView as? CmuxWebView
-        guard let owningWebView else { return false }
-        return shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-            event,
-            responder: shortcutResponder,
-            owningWebView: owningWebView
-        )
-    }
-
-    private func browserPanelOwning(_ webView: CmuxWebView) -> BrowserPanel? {
-        var candidateManagers: [TabManager] = []
-        var seenManagers = Set<ObjectIdentifier>()
-
-        func appendCandidate(_ manager: TabManager?) {
-            guard let manager else { return }
-            let identifier = ObjectIdentifier(manager)
-            guard seenManagers.insert(identifier).inserted else { return }
-            candidateManagers.append(manager)
-        }
-
-        if let window = webView.window,
-           let context = contextForMainWindow(window) {
-            appendCandidate(context.tabManager)
-        }
-        appendCandidate(tabManager)
-        for context in mainWindowContexts.values {
-            appendCandidate(context.tabManager)
-        }
-
-        for manager in candidateManagers {
-            if let panel = browserPanelOwning(webView, in: manager) {
-                return panel
-            }
-        }
-        return nil
-    }
-
-    private func browserPanelOwning(_ webView: CmuxWebView, in manager: TabManager) -> BrowserPanel? {
-        for workspace in manager.tabs {
-            if let panel = workspace.panels.values
-                .compactMap({ $0 as? BrowserPanel })
-                .first(where: { $0.webView === webView }) {
-                return panel
-            }
-        }
-        return nil
-    }
-
     private func activateMainWindowContext(_ context: MainWindowContext?) {
         guard let context else {
             tabManager = nil
@@ -16297,14 +14436,6 @@ func cmuxIsWindowFirstResponderBypassActive() -> Bool {
     cmuxWindowFirstResponderBypassDepth > 0
 }
 
-private final class CmuxFieldEditorOwningWebViewBox: NSObject {
-    weak var webView: CmuxWebView?
-
-    init(webView: CmuxWebView?) {
-        self.webView = webView
-    }
-}
-
 private extension NSApplication {
     @objc func cmux_accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
         if Thread.isMainThread {
@@ -16402,38 +14533,7 @@ private extension AppDelegate {
         target: Any?,
         sender: Any?
     ) -> Bool {
-        guard Thread.isMainThread else { return false }
-
-        return MainActor.assumeIsolated {
-            guard Self.shouldInterceptWindowCloseAction(
-                action,
-                target: target,
-                sender: sender
-            ) else { return false }
-            guard let window = Self.actionWindow(
-                target: target,
-                sender: sender,
-                allowFallback: Self.allowsWindowFallback(for: action)
-            ),
-                  BrowserPanel.isDetachedInspectorWindow(window) else { return false }
-
-            for panel in allBrowserPanelsForInspectorWindowClose() {
-                if panel.closeDeveloperToolsFromDetachedInspectorWindowUserAction(
-                    window,
-                    source: "sendAction.\(NSStringFromSelector(action))"
-                ) {
-#if DEBUG
-                    cmuxDebugLog(
-                        "browser.devtools detachedClose.action panel=\(panel.id.uuidString.prefix(5)) " +
-                        "action=\(NSStringFromSelector(action)) window=\(window.windowNumber)"
-                    )
-#endif
-                    return true
-                }
-            }
-
-            return false
-        }
+        return false
     }
 
     private static func shouldInterceptWindowCloseAction(
@@ -16481,41 +14581,6 @@ private extension AppDelegate {
             return NSApp.keyWindow ?? NSApp.mainWindow
         }
         return allowFallback ? (NSApp.keyWindow ?? NSApp.mainWindow) : nil
-    }
-
-    private func allBrowserPanelsForInspectorWindowClose() -> [BrowserPanel] {
-        var candidateManagers: [TabManager] = []
-        var seenManagers = Set<ObjectIdentifier>()
-        var panels: [BrowserPanel] = []
-        var seenPanels = Set<ObjectIdentifier>()
-
-        func appendCandidate(_ manager: TabManager?) {
-            guard let manager else { return }
-            let identifier = ObjectIdentifier(manager)
-            guard seenManagers.insert(identifier).inserted else { return }
-            candidateManagers.append(manager)
-        }
-
-        appendCandidate(tabManager)
-        for context in mainWindowContexts.values {
-            appendCandidate(context.tabManager)
-        }
-        for route in recoverableMainWindowRoutes() {
-            appendCandidate(route.tabManager)
-        }
-
-        for manager in candidateManagers {
-            for workspace in manager.tabs {
-                for panel in workspace.panels.values {
-                    guard let browserPanel = panel as? BrowserPanel else { continue }
-                    let identifier = ObjectIdentifier(browserPanel)
-                    guard seenPanels.insert(identifier).inserted else { continue }
-                    panels.append(browserPanel)
-                }
-            }
-        }
-
-        return panels
     }
 
     @discardableResult
@@ -16639,10 +14704,6 @@ private extension NSWindow {
         }
 
         let currentEvent = Self.cmuxCurrentEvent(for: self)
-        let responderWebView = responder.flatMap {
-            Self.cmuxOwningWebView(for: $0, in: self, event: currentEvent)
-        }
-        var pointerInitiatedWebFocus = false
         var pointerInitiatedTerminalFocus = false
 
         if AppDelegate.shared?.shouldBlockFirstResponderChangeWhileCommandPaletteVisible(
@@ -16701,68 +14762,8 @@ private extension NSWindow {
             return false
         }
 
-        if let responder,
-           let webView = responderWebView,
-           !webView.allowsFirstResponderAcquisitionEffective {
-            let pointerInitiatedFocus = Self.cmuxShouldAllowPointerInitiatedWebViewFocus(
-                window: self,
-                webView: webView,
-                event: currentEvent
-            )
-            if pointerInitiatedFocus {
-                pointerInitiatedWebFocus = true
-#if DEBUG
-                cmuxDebugLog(
-                    "focus.guard allowPointerFirstResponder responder=\(String(describing: type(of: responder))) " +
-                    "window=\(ObjectIdentifier(self)) " +
-                    "web=\(ObjectIdentifier(webView)) " +
-                    "policy=\(webView.allowsFirstResponderAcquisition ? 1 : 0) " +
-                    "pointerDepth=\(webView.debugPointerFocusAllowanceDepth) " +
-                    "eventType=\(currentEvent.map { String(describing: $0.type) } ?? "nil")"
-                )
-#endif
-            } else {
-#if DEBUG
-                cmuxDebugLog(
-                    "focus.guard blockedFirstResponder responder=\(String(describing: type(of: responder))) " +
-                    "window=\(ObjectIdentifier(self)) " +
-                    "web=\(ObjectIdentifier(webView)) " +
-                    "policy=\(webView.allowsFirstResponderAcquisition ? 1 : 0) " +
-                    "pointerDepth=\(webView.debugPointerFocusAllowanceDepth) " +
-                    "eventType=\(currentEvent.map { String(describing: $0.type) } ?? "nil")"
-                )
-#endif
-                return false
-            }
-        }
-#if DEBUG
-        if let responder,
-           let webView = responderWebView {
-            cmuxDebugLog(
-                "focus.guard allowFirstResponder responder=\(String(describing: type(of: responder))) " +
-                "window=\(ObjectIdentifier(self)) " +
-                "web=\(ObjectIdentifier(webView)) " +
-                "policy=\(webView.allowsFirstResponderAcquisition ? 1 : 0) " +
-                "pointerDepth=\(webView.debugPointerFocusAllowanceDepth)"
-            )
-        }
-#endif
-        let result: Bool
-        if pointerInitiatedWebFocus, let webView = responderWebView {
-            // `NSWindow.makeFirstResponder` may run before `CmuxWebView.mouseDown(with:)`.
-            // Preserve pointer intent during this synchronous responder change.
-            result = webView.withPointerFocusAllowance {
-                cmux_makeFirstResponder(responder)
-            }
-        } else {
-            result = cmux_makeFirstResponder(responder)
-        }
+        let result = cmux_makeFirstResponder(responder)
         if result {
-            if let fieldEditor = responder as? NSTextView, fieldEditor.isFieldEditor {
-                Self.cmuxTrackFieldEditor(fieldEditor, owningWebView: responderWebView)
-            } else if let fieldEditor = self.firstResponder as? NSTextView, fieldEditor.isFieldEditor {
-                Self.cmuxTrackFieldEditor(fieldEditor, owningWebView: responderWebView)
-            }
             AppDelegate.shared?.syncKeyboardFocusAfterFirstResponderChange(in: self)
         } else if pointerInitiatedTerminalFocus {
             AppDelegate.shared?.syncKeyboardFocusAfterFirstResponderChange(in: self)
@@ -16780,11 +14781,8 @@ private extension NSWindow {
         var originalDispatchMs: Double = 0
         let typingTimingExtra: String? = {
             guard event.type == .keyDown else { return nil }
-            let responderWebView = self.firstResponder.flatMap {
-                Self.cmuxOwningWebView(for: $0, in: self, event: event)
-            }
             let firstResponderType = self.firstResponder.map { String(describing: type(of: $0)) } ?? "nil"
-            return "browser=\(responderWebView != nil ? 1 : 0) firstResponder=\(firstResponderType)"
+            return "browser=0 firstResponder=\(firstResponderType)"
         }()
         if event.type == .keyDown {
             CmuxTypingTiming.logEventDelay(path: "window.sendEvent", event: event)
@@ -16945,15 +14943,13 @@ private extension NSWindow {
         // (handleCustomShortcut) already handles app-level shortcuts, and anything
         // remaining should be menu items.
         let firstResponderGhosttyView = cmuxOwningGhosttyView(for: self.firstResponder)
-        let firstResponderWebView = self.firstResponder.flatMap {
-            Self.cmuxOwningWebView(for: $0, in: self, event: event)
-        }
+        let firstResponderWebView: NSView? = nil
         let firstResponderHasMarkedText = browserResponderHasMarkedText(self.firstResponder)
         let firstResponderIsCommandPaletteFieldEditor = Self.cmuxCommandPaletteOwnsFieldEditor(
             self.firstResponder as? NSTextView,
             in: self
         )
-        let firstResponderOmnibarPanelId = browserOmnibarPanelId(for: self.firstResponder)
+        let firstResponderOmnibarPanelId: UUID? = nil
         let firstResponderIsTextBoxInput = self.firstResponder is TextBoxInputTextView
         // A standalone editable document text view (e.g. the file-preview
         // editor's SavingTextView) owns arrow navigation through its own
@@ -17196,51 +15192,6 @@ private extension NSWindow {
             firstResponderHasMarkedText: firstResponderHasMarkedText,
             flags: event.modifierFlags
         ) {
-            if let focusedOmnibarField = AppDelegate.shared?.focusedBrowserOmnibarField(for: event, in: self),
-               browserOmnibarPanelId(for: self.firstResponder) == nil,
-               focusedOmnibarField.window === self {
-                if cmuxBrowserArrowForwardingDepth > 0 {
-#if DEBUG
-                    cmuxDebugLog("  → browser arrow omnibar restore reentry; using normal dispatch")
-#endif
-                    return cmux_performKeyEquivalent(with: event)
-                }
-                cmuxBrowserArrowForwardingDepth += 1
-                defer { cmuxBrowserArrowForwardingDepth = max(0, cmuxBrowserArrowForwardingDepth - 1) }
-
-                var currentEditorResponder: NSResponder? = focusedOmnibarField.currentEditor()
-                if currentEditorResponder == nil || self.firstResponder !== currentEditorResponder {
-                    guard self.makeFirstResponder(focusedOmnibarField) else {
-#if DEBUG
-                        cmuxDebugLog("  → browser arrow omnibar restore rejected")
-#endif
-                        return false
-                    }
-                    currentEditorResponder = focusedOmnibarField.currentEditor()
-                }
-
-                let omnibarResponder: NSResponder
-                if let currentEditorResponder, self.firstResponder === currentEditorResponder {
-                    omnibarResponder = currentEditorResponder
-                } else if self.firstResponder === focusedOmnibarField {
-                    omnibarResponder = focusedOmnibarField
-                } else {
-#if DEBUG
-                    cmuxDebugLog("  → browser arrow omnibar restore did not become first responder")
-#endif
-                    return false
-                }
-#if DEBUG
-                if browserResponderHasMarkedText(omnibarResponder) {
-                    cmuxDebugLog("  → browser arrow restored focused omnibar with marked text before keyDown")
-                } else {
-                    cmuxDebugLog("  → browser arrow restored focused omnibar before keyDown")
-                }
-#endif
-                omnibarResponder.keyDown(with: event)
-                return true
-            }
-
             // Match the Return/Enter forwarding guard: AppKit/WebKit can re-enter
             // performKeyEquivalent while the synthesized keyDown is in flight.
             if cmuxBrowserArrowForwardingDepth > 0 {
@@ -17255,54 +15206,6 @@ private extension NSWindow {
             cmuxDebugLog("  → browser arrow routed to firstResponder.keyDown")
 #endif
             self.firstResponder?.keyDown(with: event)
-            return true
-        }
-
-        if let firstResponderWebView,
-           AppDelegate.shared?.isBrowserFocusModeActive(for: firstResponderWebView) == true {
-            let handled = firstResponderWebView.performKeyEquivalent(with: event)
-#if DEBUG
-            cmuxDebugLog("  → browser focus mode routed before cmux/menu fallback handled=\(handled ? 1 : 0)")
-#endif
-            return handled
-        }
-
-        if let firstResponderWebView,
-           shouldRouteBrowserDocumentEditingCommandEquivalentThroughWebContentFirst(
-               event,
-               responder: self.firstResponder
-           ) {
-            let result = firstResponderWebView.performKeyEquivalent(with: event)
-#if DEBUG
-            cmuxDebugLog(
-                "  → browser document editing command preflight " +
-                (result ? "resolved before window menu path" : "left unclaimed; suppressing replay")
-            )
-#endif
-            // The focused web view has already received this editing shortcut once.
-            // `CmuxWebView.performKeyEquivalent` also runs the main-menu fallback
-            // before returning, so falling through here would only replay WebKit.
-            return true
-        }
-
-        if let firstResponderWebView,
-           shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-               event,
-               responder: self.firstResponder,
-               owningWebView: firstResponderWebView
-           ) {
-            let result = firstResponderWebView.performKeyEquivalent(with: event)
-#if DEBUG
-            if result {
-                cmuxDebugLog("  → browser find command resolved before window menu path")
-            } else {
-                cmuxDebugLog("  → browser find command preflight left unclaimed; suppressing replay")
-            }
-#endif
-            // The focused web view has already received this Find-family shortcut once.
-            // Do not fall through into the original NSWindow.performKeyEquivalent path,
-            // or WebKit can observe the same key equivalent a second time before AppKit
-            // reaches keyDown/menu fallback.
             return true
         }
 
@@ -17376,128 +15279,6 @@ private extension NSWindow {
         return parts.joined(separator: "+")
     }
 
-    private static func cmuxOwningWebView(for responder: NSResponder) -> CmuxWebView? {
-        if let webView = responder as? CmuxWebView {
-            return webView
-        }
-
-        if let view = responder as? NSView,
-           let webView = cmuxOwningWebView(for: view) {
-            return webView
-        }
-
-        // NSTextView.delegate is unsafe-unretained in AppKit. Reading it here while
-        // a responder chain is tearing down can trap with "unowned reference".
-        var current = responder.nextResponder
-        while let next = current {
-            if let webView = next as? CmuxWebView {
-                return webView
-            }
-            if let view = next as? NSView,
-               let webView = cmuxOwningWebView(for: view) {
-                return webView
-            }
-            current = next.nextResponder
-        }
-
-        return nil
-    }
-
-    private static func cmuxOwningWebView(
-        for responder: NSResponder,
-        in window: NSWindow,
-        event: NSEvent?
-    ) -> CmuxWebView? {
-        if browserOmnibarPanelId(for: responder) != nil {
-            return nil
-        }
-
-        // Browser find runs in the portal slot alongside the hosted WKWebView.
-        // Treat its native field editor chain as browser chrome, not as web content,
-        // so Cmd+F can move first responder into the find field while web focus is suppressed.
-        if BrowserWindowPortalRegistry.searchOverlayPanelId(for: responder, in: window) != nil {
-            return nil
-        }
-
-        if let webView = cmuxOwningWebView(for: responder) {
-            return webView
-        }
-
-        guard let textView = responder as? NSTextView, textView.isFieldEditor else {
-            return nil
-        }
-
-        if let event,
-           let hitWebView = cmuxPointerHitWebView(in: window, event: event) {
-            cmuxTrackFieldEditor(textView, owningWebView: hitWebView)
-            return hitWebView
-        }
-
-        return cmuxTrackedOwningWebView(for: textView)
-    }
-
-    private static func cmuxOwningWebView(for view: NSView) -> CmuxWebView? {
-        if let webView = view as? CmuxWebView {
-            return webView
-        }
-
-        var current: NSView? = view.superview
-        while let candidate = current {
-            if let webView = candidate as? CmuxWebView {
-                return webView
-            }
-            if String(describing: type(of: candidate)).contains("WindowBrowserSlotView"),
-               let portalWebView = cmuxUniqueBrowserWebView(in: candidate) {
-                // Portal-hosted browser chrome (for example the Cmd+F overlay) is a
-                // sibling of the hosted WKWebView inside WindowBrowserSlotView, not a
-                // descendant of it. Allow native text-entry controls in that slot to
-                // acquire first responder directly, but keep generic sibling views
-                // associated with the hosted web view so blocked browser focus policy
-                // still protects inspector/overlay chrome from stray focus changes.
-                if view === portalWebView || view.isDescendant(of: portalWebView) {
-                    return portalWebView
-                }
-                if cmuxAllowsPortalSlotTextEntryFocus(view) {
-                    return nil
-                }
-                return portalWebView
-            }
-            current = candidate.superview
-        }
-
-        return nil
-    }
-
-    private static func cmuxAllowsPortalSlotTextEntryFocus(_ view: NSView) -> Bool {
-        var current: NSView? = view
-        while let candidate = current {
-            if let textField = candidate as? NSTextField {
-                return textField.isEditable || textField.acceptsFirstResponder
-            }
-            if let textView = candidate as? NSTextView {
-                return textView.isEditable || textView.isSelectable || textView.isFieldEditor
-            }
-            current = candidate.superview
-        }
-        return false
-    }
-
-    private static func cmuxUniqueBrowserWebView(in root: NSView) -> CmuxWebView? {
-        var stack: [NSView] = [root]
-        var found: CmuxWebView?
-        while let current = stack.popLast() {
-            if let webView = current as? CmuxWebView {
-                if found == nil {
-                    found = webView
-                } else if found !== webView {
-                    return nil
-                }
-            }
-            stack.append(contentsOf: current.subviews)
-        }
-        return found
-    }
-
     private static func cmuxCurrentEvent(for window: NSWindow) -> NSEvent? {
 #if DEBUG
         if let override = cmuxFirstResponderGuardCurrentEventOverride {
@@ -17562,42 +15343,6 @@ private extension NSWindow {
         return cmuxTopHitViewForEvent(in: window, event: event)
     }
 
-    private static func cmuxTrackFieldEditor(_ fieldEditor: NSTextView, owningWebView webView: CmuxWebView?) {
-        if let webView {
-            objc_setAssociatedObject(
-                fieldEditor,
-                &cmuxFieldEditorOwningWebViewAssociationKey,
-                CmuxFieldEditorOwningWebViewBox(webView: webView),
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        } else {
-            objc_setAssociatedObject(
-                fieldEditor,
-                &cmuxFieldEditorOwningWebViewAssociationKey,
-                nil,
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        }
-    }
-
-    private static func cmuxTrackedOwningWebView(for fieldEditor: NSTextView) -> CmuxWebView? {
-        guard let box = objc_getAssociatedObject(
-            fieldEditor,
-            &cmuxFieldEditorOwningWebViewAssociationKey
-        ) as? CmuxFieldEditorOwningWebViewBox else {
-            return nil
-        }
-        guard let webView = box.webView else {
-            cmuxTrackFieldEditor(fieldEditor, owningWebView: nil)
-            return nil
-        }
-        return webView
-    }
-
-    private static func cmuxEventAllowsFirstResponderHitTesting(_ event: NSEvent) -> Bool {
-        WindowInputRoutingContext(event: event).allowsFirstResponderHitTesting
-    }
-
     private static func cmuxPointerEventTargetsWindow(_ event: NSEvent, _ window: NSWindow) -> Bool {
         if event.windowNumber != 0, event.windowNumber != window.windowNumber {
             return false
@@ -17608,23 +15353,8 @@ private extension NSWindow {
         return true
     }
 
-    private static func cmuxPointerHitWebView(in window: NSWindow, event: NSEvent) -> CmuxWebView? {
-        guard cmuxEventAllowsFirstResponderHitTesting(event) else { return nil }
-        guard cmuxPointerEventTargetsWindow(event, window) else { return nil }
-        if let portalWebView = BrowserWindowPortalRegistry.webViewAtWindowPoint(
-            event.locationInWindow,
-            in: window
-        ) as? CmuxWebView {
-            return portalWebView
-        }
-        guard let hitView = cmuxHitViewForCurrentEvent(in: window, event: event) else {
-            return nil
-        }
-        return cmuxOwningWebView(for: hitView)
-    }
-
     private static func cmuxPointerHitGhosttyView(in window: NSWindow, event: NSEvent) -> GhosttyNSView? {
-        guard cmuxEventAllowsFirstResponderHitTesting(event) else { return nil }
+        guard WindowInputRoutingContext(event: event).allowsFirstResponderHitTesting else { return nil }
         guard cmuxPointerEventTargetsWindow(event, window) else { return nil }
         guard let hitView = cmuxHitViewForCurrentEvent(in: window, event: event) else {
             return nil
@@ -17644,17 +15374,6 @@ private extension NSWindow {
         return hitGhosttyView === request.ghosttyView
     }
 
-    private static func cmuxShouldAllowPointerInitiatedWebViewFocus(
-        window: NSWindow,
-        webView: CmuxWebView,
-        event: NSEvent?
-    ) -> Bool {
-        guard let event,
-              let hitWebView = cmuxPointerHitWebView(in: window, event: event) else {
-            return false
-        }
-        return hitWebView === webView
-    }
 
 }
 

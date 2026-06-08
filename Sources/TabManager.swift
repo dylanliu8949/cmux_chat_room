@@ -736,38 +736,6 @@ final class NotificationBurstCoalescer {
     }
 }
 
-struct RecentlyClosedBrowserStack {
-    private(set) var entries: [ClosedBrowserPanelRestoreSnapshot] = []
-    let capacity: Int
-
-    init(capacity: Int) {
-        self.capacity = max(1, capacity)
-    }
-
-    var isEmpty: Bool {
-        entries.isEmpty
-    }
-
-    var mostRecentClosedAt: Date? {
-        entries.last?.closedAt
-    }
-
-    mutating func push(_ snapshot: ClosedBrowserPanelRestoreSnapshot) {
-        entries.append(snapshot)
-        if entries.count > capacity {
-            entries.removeFirst(entries.count - capacity)
-        }
-    }
-
-    mutating func pop() -> ClosedBrowserPanelRestoreSnapshot? {
-        entries.popLast()
-    }
-
-    mutating func removeSnapshots(forWorkspaceId workspaceId: UUID) {
-        entries.removeAll { $0.workspaceId == workspaceId }
-    }
-}
-
 #if DEBUG
 // Sample the actual IOSurface-backed terminal layer at vsync cadence so UI tests can reliably
 // catch a single compositor-frame blank flash and any transient compositor scaling (stretched text).
@@ -1209,7 +1177,6 @@ class TabManager: ObservableObject {
     }
     private var pendingPanelTitleUpdates: [PanelTitleUpdateKey: String] = [:]
     private let panelTitleUpdateCoalescer = NotificationBurstCoalescer(delay: 1.0 / 30.0)
-    private var recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
     private var workspaceGitProbeStateByKey: [WorkspaceGitProbeKey: WorkspaceGitProbeState] = [:]
     private var workspaceGitProbeTasksByKey: [WorkspaceGitProbeKey: Task<Void, Never>] = [:]
     private var workspaceGitTrackedDirectoryByKey: [WorkspaceGitProbeKey: String] = [:]
@@ -2336,16 +2303,6 @@ class TabManager: ObservableObject {
         )
     }
 
-    func wireClosedBrowserTracking(for workspace: Workspace) {
-        workspace.onClosedBrowserPanel = { [weak self] snapshot in
-            self?.recentlyClosedBrowsers.push(snapshot)
-        }
-    }
-
-    private func unwireClosedBrowserTracking(for workspace: Workspace) {
-        workspace.onClosedBrowserPanel = nil
-    }
-
     var selectedWorkspace: Workspace? {
         guard let selectedTabId else { return nil }
         return tabs.first(where: { $0.id == selectedTabId })
@@ -2371,7 +2328,7 @@ class TabManager: ObservableObject {
     }
 
     var isFindVisible: Bool {
-        selectedTerminalPanel?.searchState != nil || focusedBrowserPanel?.searchState != nil
+        selectedTerminalPanel?.searchState != nil
     }
 
     var canUseSelectionForFind: Bool {
@@ -2401,9 +2358,7 @@ class TabManager: ObservableObject {
 #endif
             return handled
         }
-        guard let browserPanel = focusedBrowserPanel else { return false }
-        browserPanel.startFind()
-        return browserPanel.searchState != nil
+        return false
     }
 
     func searchSelection() {
@@ -2426,8 +2381,6 @@ class TabManager: ObservableObject {
             _ = panel.performBindingAction("search:next")
             return
         }
-
-        focusedBrowserPanel?.findNext()
     }
 
     func findPrevious() {
@@ -2435,8 +2388,6 @@ class TabManager: ObservableObject {
             _ = panel.performBindingAction("search:previous")
             return
         }
-
-        focusedBrowserPanel?.findPrevious()
     }
 
     @discardableResult
@@ -2516,8 +2467,6 @@ class TabManager: ObservableObject {
             panel.searchState = nil
             return
         }
-
-        focusedBrowserPanel?.hideFind()
     }
 
     func makeWorkspaceForCreation(
@@ -2674,7 +2623,6 @@ class TabManager: ObservableObject {
             if title != nil {
                 newWorkspace.setCustomTitle(title)
             }
-            wireClosedBrowserTracking(for: newWorkspace)
             if eagerLoadTerminal && !select {
                 requestBackgroundWorkspaceLoad(for: newWorkspace.id)
             }
@@ -5246,8 +5194,6 @@ class TabManager: ObservableObject {
             workspace.teardownAllPanels()
         }
         workspace.teardownRemoteConnection()
-        unwireClosedBrowserTracking(for: workspace)
-        recentlyClosedBrowsers.removeSnapshots(forWorkspaceId: workspace.id)
         workspace.owningTabManager = nil
 
         if let index = tabs.firstIndex(where: { $0.id == workspace.id }) {
@@ -5310,8 +5256,6 @@ class TabManager: ObservableObject {
         // destination window — which has no matching WorkspaceGroup — doesn't
         // render it as an orphaned indented row with stale grouping state.
         removed.groupId = nil
-        unwireClosedBrowserTracking(for: removed)
-        recentlyClosedBrowsers.removeSnapshots(forWorkspaceId: removed.id)
         removed.owningTabManager = nil
         lastFocusedPanelByTab.removeValue(forKey: removed.id)
 
@@ -5332,7 +5276,6 @@ class TabManager: ObservableObject {
     /// Attach an existing workspace to this window.
     func attachWorkspace(_ workspace: Workspace, at index: Int? = nil, select: Bool = true) {
         workspace.owningTabManager = self
-        wireClosedBrowserTracking(for: workspace)
         let insertIndex: Int = {
             guard let index else { return tabs.count }
             return max(0, min(index, tabs.count))
@@ -5891,7 +5834,6 @@ class TabManager: ObservableObject {
         let panelKind: String = {
             guard let panel = tab.panels[panelId] else { return "missing" }
             if panel is TerminalPanel { return "terminal" }
-            if panel is BrowserPanel { return "browser" }
             return String(describing: type(of: panel))
         }()
         let closesWorkspaceOnLastSurfaceShortcut = shouldCloseWorkspaceOnLastSurfaceShortcut(tab, panelId: panelId)
@@ -6082,13 +6024,6 @@ class TabManager: ObservableObject {
         tabs.first(where: { $0.id == tabId })?.focusedPanelId
     }
 
-    /// Returns the focused panel if it's a BrowserPanel, nil otherwise
-    var focusedBrowserPanel: BrowserPanel? {
-        guard let tab = selectedWorkspace,
-              let panelId = tab.focusedPanelId else { return nil }
-        return tab.panels[panelId] as? BrowserPanel
-    }
-
     /// Returns the focused panel if it's a MarkdownPanel showing the rendered
     /// preview, nil otherwise. Zoom applies to the preview WKWebView, so the raw
     /// text-edit mode is deliberately excluded.
@@ -6098,37 +6033,6 @@ class TabManager: ObservableObject {
               let panel = tab.panels[panelId] as? MarkdownPanel,
               panel.displayMode == .preview else { return nil }
         return panel
-    }
-
-    @discardableResult
-    func zoomInFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.zoomIn() ?? false
-    }
-
-    @discardableResult
-    func zoomOutFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.zoomOut() ?? false
-    }
-
-    @discardableResult
-    func resetZoomFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.resetZoom() ?? false
-    }
-
-    var canToggleBrowserFocusModeForFocusedBrowser: Bool {
-        focusedBrowserPanel?.canToggleBrowserFocusMode == true
-    }
-
-    @discardableResult
-    func toggleBrowserFocusModeForFocusedBrowser(reason: String) -> Bool {
-        guard let browserPanel = focusedBrowserPanel else { return false }
-        return browserPanel.toggleBrowserFocusMode(reason: reason, focusWebView: true)
-    }
-
-    @discardableResult
-    func setFocusedBrowserFocusModeActive(_ active: Bool, reason: String) -> Bool {
-        guard let browserPanel = focusedBrowserPanel else { return false }
-        return browserPanel.setBrowserFocusModeActive(active, reason: reason, focusWebView: active)
     }
 
     @discardableResult
@@ -6144,75 +6048,6 @@ class TabManager: ObservableObject {
     @discardableResult
     func resetZoomFocusedMarkdown() -> Bool {
         focusedMarkdownPanel?.resetZoom() ?? false
-    }
-
-    @discardableResult
-    func toggleDeveloperToolsFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.toggleDeveloperTools() ?? false
-    }
-
-    @discardableResult
-    func showJavaScriptConsoleFocusedBrowser() -> Bool {
-        focusedBrowserPanel?.showDeveloperToolsConsole() ?? false
-    }
-
-    @discardableResult
-    func toggleOmnibarFocusedBrowser() -> Bool {
-        guard let panel = focusedBrowserPanel else { return false }
-        panel.toggleOmnibarVisibility()
-        return true
-    }
-
-    @discardableResult
-    func toggleReactGrabFromCurrentFocus() -> Bool {
-        guard let workspace = selectedWorkspace else { return false }
-
-        let snapshots = workspace.panels.values.map { panel in
-            ReactGrabShortcutPanelSnapshot(
-                id: panel.id,
-                panelType: panel.panelType,
-                isFocused: panel.id == workspace.focusedPanelId
-            )
-        }
-        guard let route = resolveReactGrabShortcutRoute(panels: snapshots),
-              let browserPanel = workspace.browserPanel(for: route.browserPanelId) else {
-            return false
-        }
-
-        if let returnTerminalPanelId = route.returnTerminalPanelId {
-            browserPanel.armReactGrabRoundTrip(returnTo: returnTerminalPanelId)
-        } else {
-            browserPanel.clearReactGrabRoundTrip(reason: "shortcut.noReturnTarget")
-        }
-
-        if workspace.focusedPanelId != browserPanel.id {
-            workspace.clearSplitZoom()
-            workspace.focusPanel(browserPanel.id)
-        }
-
-        let didRequestExplicitWebViewFocus = browserPanel.requestExplicitWebViewFocus()
-#if DEBUG
-        cmuxDebugLog(
-            "reactGrab.pasteback h1.focusRequestResult " +
-            "workspace=\(workspace.id.uuidString.prefix(5)) " +
-            "browser=\(browserPanel.id.uuidString.prefix(5)) " +
-            "return=\(route.returnTerminalPanelId.map { String($0.uuidString.prefix(5)) } ?? "nil") " +
-            "success=\(didRequestExplicitWebViewFocus ? 1 : 0)"
-        )
-#endif
-
-        Task { @MainActor [weak browserPanel] in
-            guard let browserPanel else { return }
-            if route.returnTerminalPanelId != nil {
-                await browserPanel.ensureReactGrabActive()
-            } else {
-                await browserPanel.toggleOrInjectReactGrab()
-            }
-            if !didRequestExplicitWebViewFocus {
-                _ = browserPanel.requestExplicitWebViewFocus()
-            }
-        }
-        return true
     }
 
     /// Backwards compatibility: returns the focused surface ID
@@ -6975,17 +6810,8 @@ class TabManager: ObservableObject {
     /// Create a new browser split from the currently focused panel.
     @discardableResult
     func createBrowserSplit(direction: SplitDirection, url: URL? = nil) -> UUID? {
-        guard let selectedTabId,
-              let tab = tabs.first(where: { $0.id == selectedTabId }),
-              let focusedPanelId = tab.focusedPanelId else { return nil }
-        tab.clearSplitZoom()
-        return newBrowserSplit(
-            tabId: selectedTabId,
-            fromPanelId: focusedPanelId,
-            orientation: direction.orientation,
-            insertFirst: direction.insertFirst,
-            url: url
-        )
+        // cmux browser has been removed; browser splits are no-ops.
+        return nil
     }
 
     /// Refresh Bonsplit right-side action button tooltips for all workspaces.
@@ -7568,17 +7394,7 @@ class TabManager: ObservableObject {
         focus: Bool = true,
         initialDividerPosition: CGFloat? = nil
     ) -> UUID? {
-        guard BrowserAvailabilitySettings.isEnabled() else { return nil }
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.newBrowserSplit(
-            from: fromPanelId,
-            orientation: orientation,
-            insertFirst: insertFirst,
-            url: url,
-            preferredProfileID: preferredProfileID,
-            focus: focus,
-            initialDividerPosition: initialDividerPosition
-        )?.id
+        return nil
     }
 
     /// Create a new browser surface in a pane
@@ -7588,159 +7404,13 @@ class TabManager: ObservableObject {
         url: URL? = nil,
         preferredProfileID: UUID? = nil
     ) -> UUID? {
-        guard BrowserAvailabilitySettings.isEnabled() else { return nil }
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.newBrowserSurface(
-            inPane: paneId,
-            url: url,
-            preferredProfileID: preferredProfileID
-        )?.id
+        return nil
     }
 
-    /// Get a browser panel by ID
-    func browserPanel(tabId: UUID, panelId: UUID) -> BrowserPanel? {
-        guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
-        return tab.browserPanel(for: panelId)
-    }
-
-    /// Open a browser in a specific workspace, optionally preferring a split-right layout.
-    @discardableResult
-    func openBrowser(
-        inWorkspace tabId: UUID,
-        url: URL? = nil,
-        preferSplitRight: Bool = false,
-        preferredProfileID: UUID? = nil,
-        insertAtEnd: Bool = false
-    ) -> UUID? {
-        guard BrowserAvailabilitySettings.isEnabled() else { return nil }
-        guard let workspace = tabs.first(where: { $0.id == tabId }) else { return nil }
-        if selectedTabId != tabId {
-            selectWorkspaceId(tabId, notificationDismissalContext: .explicitWorkspaceResume)
-        }
-
-        if preferSplitRight {
-            if let targetPaneId = workspace.topRightBrowserReusePane(),
-               let browserPanel = workspace.newBrowserSurface(
-                   inPane: targetPaneId,
-                   url: url,
-                   focus: true,
-                   insertAtEnd: insertAtEnd,
-                   preferredProfileID: preferredProfileID
-               ) {
-                rememberFocusedSurface(tabId: tabId, surfaceId: browserPanel.id)
-                return browserPanel.id
-            }
-
-            let splitSourcePanelId: UUID? = {
-                if let focusedPanelId = workspace.focusedPanelId,
-                   workspace.panels[focusedPanelId] != nil {
-                    return focusedPanelId
-                }
-                if let rememberedPanelId = lastFocusedPanelByTab[tabId],
-                   workspace.panels[rememberedPanelId] != nil {
-                    return rememberedPanelId
-                }
-                if let orderedPanelId = workspace.sidebarOrderedPanelIds().first(where: { workspace.panels[$0] != nil }) {
-                    return orderedPanelId
-                }
-                return workspace.panels.keys.sorted { $0.uuidString < $1.uuidString }.first
-            }()
-
-            if let splitSourcePanelId,
-               let browserPanel = workspace.newBrowserSplit(
-                   from: splitSourcePanelId,
-                   orientation: .horizontal,
-                   url: url,
-                   preferredProfileID: preferredProfileID,
-                   focus: true
-               ) {
-                rememberFocusedSurface(tabId: tabId, surfaceId: browserPanel.id)
-                return browserPanel.id
-            }
-        }
-
-        guard let paneId = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first,
-              let browserPanel = workspace.newBrowserSurface(
-                  inPane: paneId,
-                  url: url,
-                  focus: true,
-                  insertAtEnd: insertAtEnd,
-                  preferredProfileID: preferredProfileID
-              ) else {
-            return nil
-        }
-        rememberFocusedSurface(tabId: tabId, surfaceId: browserPanel.id)
-        return browserPanel.id
-    }
-
-    /// Open a browser in the currently focused pane (as a new surface)
-    @discardableResult
-    func openBrowser(
-        url: URL? = nil,
-        preferredProfileID: UUID? = nil,
-        insertAtEnd: Bool = false
-    ) -> UUID? {
-        guard let tabId = selectedTabId else { return nil }
-        return openBrowser(
-            inWorkspace: tabId,
-            url: url,
-            preferSplitRight: false,
-            preferredProfileID: preferredProfileID,
-            insertAtEnd: insertAtEnd
-        )
-    }
-
-    /// Reopen the most recently closed browser panel (Cmd+Shift+T).
-    /// No-op when no browser panel restore snapshot is available.
+    /// Reopen the most recently closed tab (Cmd+Shift+T).
     @discardableResult
     func reopenMostRecentlyClosedBrowserPanel() -> Bool {
-        if reopenMostRecentlyClosedItem() {
-            return true
-        }
-
-        return reopenMostRecentlyClosedBrowserPanelFromLegacyStack()
-    }
-
-    @discardableResult
-    func reopenMostRecentlyClosedBrowserPanelFromLegacyStack() -> Bool {
-        guard BrowserAvailabilitySettings.isEnabled() else { return false }
-
-        while let snapshot = recentlyClosedBrowsers.pop() {
-            // The legacy stack must restore into the workspace that originally owned the
-            // browser. If that workspace is gone, the snapshot is stale and we drop it
-            // instead of barging into whatever workspace happens to be selected now
-            // (which surfaced yesterday's browser inside today's unrelated workspaces).
-            guard let targetWorkspace = tabs.first(where: { $0.id == snapshot.workspaceId }) else {
-                continue
-            }
-            let preReopenFocusedPanelId = focusedPanelId(for: targetWorkspace.id)
-
-            if selectedTabId != targetWorkspace.id {
-                selectWorkspaceId(
-                    targetWorkspace.id,
-                    notificationDismissalContext: .explicitWorkspaceResume
-                )
-            }
-
-            if let reopenedPanelId = reopenClosedBrowserPanel(snapshot, in: targetWorkspace) {
-                enforceReopenedBrowserFocus(
-                    tabId: targetWorkspace.id,
-                    reopenedPanelId: reopenedPanelId,
-                    preReopenFocusedPanelId: preReopenFocusedPanelId
-                )
-                return true
-            }
-        }
-
-        return false
-    }
-
-    func clearRecentlyClosedBrowserPanelHistory() {
-        recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
-    }
-
-    func mostRecentLegacyClosedBrowserPanelClosedAt() -> Date? {
-        recentlyClosedBrowsers.mostRecentClosedAt
+        reopenMostRecentlyClosedItem()
     }
 
     @discardableResult
@@ -7873,106 +7543,6 @@ class TabManager: ObservableObject {
             recordFocusInHistory(workspaceId: workspace.id, panelId: nil, preservingForwardBranch: true)
         }
         return true
-    }
-
-    private func enforceReopenedBrowserFocus(
-        tabId: UUID,
-        reopenedPanelId: UUID,
-        preReopenFocusedPanelId: UUID?
-    ) {
-        // Keep workspace-switch restoration pinned to the reopened browser panel.
-        rememberFocusedSurface(tabId: tabId, surfaceId: reopenedPanelId)
-        enforceReopenedBrowserFocusIfNeeded(
-            tabId: tabId,
-            reopenedPanelId: reopenedPanelId,
-            preReopenFocusedPanelId: preReopenFocusedPanelId
-        )
-
-        // Some stale focus callbacks can land one runloop turn later. Re-assert focus in two
-        // consecutive turns, but only when focus drifted back to the pre-reopen panel.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.enforceReopenedBrowserFocusIfNeeded(
-                tabId: tabId,
-                reopenedPanelId: reopenedPanelId,
-                preReopenFocusedPanelId: preReopenFocusedPanelId
-            )
-            DispatchQueue.main.async { [weak self] in
-                self?.enforceReopenedBrowserFocusIfNeeded(
-                    tabId: tabId,
-                    reopenedPanelId: reopenedPanelId,
-                    preReopenFocusedPanelId: preReopenFocusedPanelId
-                )
-            }
-        }
-    }
-
-    private func enforceReopenedBrowserFocusIfNeeded(
-        tabId: UUID,
-        reopenedPanelId: UUID,
-        preReopenFocusedPanelId: UUID?
-    ) {
-        guard selectedTabId == tabId,
-              let tab = tabs.first(where: { $0.id == tabId }),
-              tab.panels[reopenedPanelId] != nil else {
-            return
-        }
-
-        rememberFocusedSurface(tabId: tabId, surfaceId: reopenedPanelId)
-
-        guard tab.focusedPanelId != reopenedPanelId else { return }
-
-        if let focusedPanelId = tab.focusedPanelId,
-           let preReopenFocusedPanelId,
-           focusedPanelId != preReopenFocusedPanelId {
-            return
-        }
-
-        tab.focusPanel(reopenedPanelId)
-    }
-
-    private func reopenClosedBrowserPanel(
-        _ snapshot: ClosedBrowserPanelRestoreSnapshot,
-        in workspace: Workspace
-    ) -> UUID? {
-        if let originalPane = workspace.bonsplitController.allPaneIds.first(where: { $0.id == snapshot.originalPaneId }),
-           let browserPanel = workspace.newBrowserSurface(
-               inPane: originalPane,
-               url: snapshot.url,
-               focus: true,
-               preferredProfileID: snapshot.profileID
-           ) {
-            let tabCount = workspace.bonsplitController.tabs(inPane: originalPane).count
-            let maxIndex = max(0, tabCount - 1)
-            let targetIndex = min(max(snapshot.originalTabIndex, 0), maxIndex)
-            _ = workspace.reorderSurface(panelId: browserPanel.id, toIndex: targetIndex)
-            return browserPanel.id
-        }
-
-        if let orientation = snapshot.fallbackSplitOrientation,
-           let fallbackAnchorPaneId = snapshot.fallbackAnchorPaneId,
-           let anchorPane = workspace.bonsplitController.allPaneIds.first(where: { $0.id == fallbackAnchorPaneId }),
-           let anchorTab = workspace.bonsplitController.selectedTab(inPane: anchorPane) ?? workspace.bonsplitController.tabs(inPane: anchorPane).first,
-           let anchorPanelId = workspace.panelIdFromSurfaceId(anchorTab.id),
-           let browserPanelId = workspace.newBrowserSplit(
-               from: anchorPanelId,
-               orientation: orientation,
-               insertFirst: snapshot.fallbackSplitInsertFirst,
-               url: snapshot.url,
-               preferredProfileID: snapshot.profileID
-           )?.id {
-            return browserPanelId
-        }
-
-        guard let focusedPane = workspace.bonsplitController.focusedPaneId ?? workspace.bonsplitController.allPaneIds.first else {
-            return nil
-        }
-        return workspace.newBrowserSurface(
-            inPane: focusedPane,
-            url: snapshot.url,
-            focus: true,
-            preferredProfileID: snapshot.profileID
-        )?.id
     }
 
     /// Flash the currently focused panel so the user can visually confirm focus.
@@ -9594,7 +9164,6 @@ extension TabManager {
         defer { isRestoringSessionSnapshot = false }
         let previousTabs = tabs
         for tab in previousTabs {
-            unwireClosedBrowserTracking(for: tab)
         }
         ClosedItemHistoryStore.shared.removePanelRecords(
             forWorkspaceIds: Set(previousTabs.map(\.id))
@@ -9621,7 +9190,6 @@ extension TabManager {
         workspaceCycleCooldownTask = nil
         isWorkspaceCycleHot = false
         selectionSideEffectsGeneration &+= 1
-        recentlyClosedBrowsers = RecentlyClosedBrowserStack(capacity: 20)
 
         // Build the new workspace list locally to avoid intermediate @Published
         // emissions (empty tabs, nil selectedTabId) that can leave SwiftUI's
@@ -9641,7 +9209,6 @@ extension TabManager {
             )
             workspace.owningTabManager = self
             let restoredPanelIds = workspace.restoreSessionSnapshot(workspaceSnapshot)
-            wireClosedBrowserTracking(for: workspace)
             newTabs.append(workspace)
             restoredPanelIdsByWorkspaceIndex.append(restoredPanelIds)
             restoredOriginalWorkspaceIds.append(workspaceSnapshot.workspaceId)
@@ -9652,7 +9219,6 @@ extension TabManager {
             Self.nextPortOrdinal += 1
             let fallback = Workspace(title: "Terminal 1", portOrdinal: ordinal)
             fallback.owningTabManager = self
-            wireClosedBrowserTracking(for: fallback)
             newTabs.append(fallback)
         }
 

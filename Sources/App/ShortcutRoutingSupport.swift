@@ -710,43 +710,6 @@ func shouldRouteBrowserDocumentEditingCommandEquivalentThroughWebContentFirst(
     return true
 }
 
-/// For browser content, let the page try browser-local Find-family commands before cmux's menu fallback.
-/// Cmd+F is excluded because cmux chooses terminal, browser, or right-sidebar
-/// find from the current focus owner.
-func shouldRouteBrowserFindCommandEquivalentThroughWebContentFirst(
-    _ event: NSEvent,
-    responder: NSResponder? = nil,
-    owningWebView: CmuxWebView? = nil
-) -> Bool {
-    guard let shortcut = browserFindCommandEquivalent(for: event) else {
-        return false
-    }
-
-    if case .find = shortcut {
-        return false
-    }
-
-    if case .findInDirectory = shortcut {
-        return false
-    }
-
-    if cmuxIsLikelyWebInspectorResponder(responder) {
-        return false
-    }
-
-    if shortcut.keepsCmuxBrowserFindBarOwnershipWhenVisible,
-       let owningWebView {
-        let browserFindBarIsVisible = MainActor.assumeIsolated {
-            AppDelegate.shared?.browserFindBarIsVisible(for: owningWebView) == true
-        }
-        if browserFindBarIsVisible {
-            return false
-        }
-    }
-
-    return true
-}
-
 func cmuxOwningGhosttyView(for responder: NSResponder?) -> GhosttyNSView? {
     guard let responder else { return nil }
     if let ghosttyView = responder as? GhosttyNSView {

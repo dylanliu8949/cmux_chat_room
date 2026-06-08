@@ -798,27 +798,8 @@ struct MarkdownWebRenderer: NSViewRepresentable {
                 return
             }
 
-            guard BrowserAvailabilitySettings.isEnabled() else {
-                NSWorkspace.shared.open(url)
-                return
-            }
-
-            guard let app = AppDelegate.shared,
-                  let location = app.workspaceContainingPanel(
-                      panelId: panelId,
-                      preferredWorkspaceId: workspaceId
-                  ),
-                  let paneId = location.workspace.paneId(forPanelId: panelId) else {
-                // No workspace context — last-resort fallback.
-                NSWorkspace.shared.open(url)
-                return
-            }
-
-            _ = location.workspace.newBrowserSurface(
-                inPane: paneId,
-                url: url,
-                focus: true
-            )
+            // 应用内浏览器已移除——http/https 链接一律交给系统默认处理器打开。
+            NSWorkspace.shared.open(url)
         }
 
         private func isInPageFragment(_ url: URL) -> Bool {

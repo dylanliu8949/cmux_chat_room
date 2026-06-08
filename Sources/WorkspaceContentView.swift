@@ -785,14 +785,6 @@ struct EmptyPanelView: View {
         _ = workspace.newTerminalSurface(inPane: paneId)
     }
 
-    private func createBrowser() {
-        #if DEBUG
-        cmuxDebugLog("emptyPane.newBrowser pane=\(paneId.id.uuidString.prefix(5))")
-        #endif
-        focusPane()
-        _ = workspace.newBrowserSurface(inPane: paneId)
-    }
-
     private var newSurfaceShortcut: StoredShortcut {
         let _ = keyboardShortcutSettingsObserver.revision
         return KeyboardShortcutSettings.shortcut(for: .newSurface)
@@ -848,12 +840,6 @@ struct EmptyPanelView: View {
                     action: createTerminal
                 )
 
-                emptyPaneActionButton(
-                    title: "Browser",
-                    systemImage: "globe",
-                    shortcut: openBrowserShortcut,
-                    action: createBrowser
-                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

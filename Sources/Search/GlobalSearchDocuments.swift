@@ -30,8 +30,6 @@ enum GlobalSearchDocuments {
     static func browseHit(for context: GlobalSearchPanelContext) -> SearchIndexHit {
         let kind: GlobalSearchKind
         switch context.panel.panelType {
-        case .browser:
-            kind = .browser
         case .markdown:
             kind = .markdown
         case .terminal, .filePreview, .rightSidebarTool, .project, .extensionBrowser:

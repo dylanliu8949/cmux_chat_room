@@ -102,10 +102,6 @@ enum CommandPaletteSettingsToggleCommands {
         let automation: @Sendable () -> String = {
             String(localized: "settings.section.automation", defaultValue: "Automation")
         }
-        let browser: @Sendable () -> String = { String(localized: "settings.section.browser", defaultValue: "Browser") }
-        let browserImport: @Sendable () -> String = {
-            String(localized: "settings.section.browserImport", defaultValue: "Browser Import")
-        }
         let globalHotkey: @Sendable () -> String = {
             String(localized: "settings.section.globalHotkey", defaultValue: "Global Hotkey")
         }
@@ -583,36 +579,6 @@ enum CommandPaletteSettingsToggleCommands {
                 }
             ),
             CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "openSidebarPullRequestLinksInCmuxBrowser",
-                settingsKey: "sidebar.openPullRequestLinksInCmuxBrowser",
-                title: {
-                    String(
-                        localized: "settings.app.openSidebarPRLinks",
-                        defaultValue: "Open Sidebar PR Links in cmux Browser"
-                    )
-                },
-                sectionTitle: sidebar,
-                keywords: ["sidebar.openPullRequestLinksInCmuxBrowser", "sidebar", "pull", "request", "pr", "browser", "link"],
-                defaultValue: BrowserLinkOpenSettings.defaultOpenSidebarPullRequestLinksInCmuxBrowser,
-                defaultsKey: BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowserKey,
-                isAvailable: sidebarPullRequestLinksAvailable
-            ),
-            CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "openSidebarPortLinksInCmuxBrowser",
-                settingsKey: "sidebar.openPortLinksInCmuxBrowser",
-                title: {
-                    String(
-                        localized: "settings.app.openSidebarPortLinks",
-                        defaultValue: "Open Sidebar Port Links in cmux Browser"
-                    )
-                },
-                sectionTitle: sidebar,
-                keywords: ["sidebar.openPortLinksInCmuxBrowser", "sidebar", "port", "localhost", "browser", "link"],
-                defaultValue: BrowserLinkOpenSettings.defaultOpenSidebarPortLinksInCmuxBrowser,
-                defaultsKey: BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowserKey,
-                isAvailable: sidebarPortLinksAvailable
-            ),
-            CommandPaletteSettingToggleDescriptor(
                 commandId: commandIdPrefix + "showSSHInSidebar",
                 settingsKey: "sidebar.showSSH",
                 title: {
@@ -760,71 +726,6 @@ enum CommandPaletteSettingsToggleCommands {
                 keywords: ["automation.kiroIntegration", "kiro", "cli", "hooks", "agent", "integration"],
                 defaultValue: KiroIntegrationSettings.defaultHooksEnabled,
                 defaultsKey: KiroIntegrationSettings.hooksEnabledKey
-            ),
-            CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "browserSearchSuggestions",
-                settingsKey: "browser.showSearchSuggestions",
-                title: {
-                    String(localized: "settings.browser.searchSuggestions", defaultValue: "Show Search Suggestions")
-                },
-                sectionTitle: browser,
-                keywords: ["browser.showSearchSuggestions", "browser", "search", "suggestions", "autocomplete", "address", "bar"],
-                defaultValue: BrowserSearchSettings.defaultSearchSuggestionsEnabled,
-                defaultsKey: BrowserSearchSettings.searchSuggestionsEnabledKey
-            ),
-            CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "openTerminalLinksInCmuxBrowser",
-                settingsKey: "browser.openTerminalLinksInCmuxBrowser",
-                title: {
-                    String(
-                        localized: "settings.browser.openTerminalLinks",
-                        defaultValue: "Open Terminal Links in cmux Browser"
-                    )
-                },
-                sectionTitle: browser,
-                keywords: ["browser.openTerminalLinksInCmuxBrowser", "browser", "terminal", "links", "url", "click"],
-                defaultValue: BrowserLinkOpenSettings.defaultOpenTerminalLinksInCmuxBrowser,
-                defaultsKey: BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey
-            ),
-            CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "interceptTerminalOpenCommandInCmuxBrowser",
-                settingsKey: "browser.interceptTerminalOpenCommandInCmuxBrowser",
-                title: {
-                    String(localized: "settings.browser.interceptOpen", defaultValue: "Intercept open http(s) in Terminal")
-                },
-                sectionTitle: browser,
-                keywords: ["browser.interceptTerminalOpenCommandInCmuxBrowser", "browser", "terminal", "open", "http", "https", "intercept"],
-                isOn: { defaults in
-                    if defaults.object(forKey: BrowserLinkOpenSettings.interceptTerminalOpenCommandInCmuxBrowserKey) != nil {
-                        return defaults.bool(forKey: BrowserLinkOpenSettings.interceptTerminalOpenCommandInCmuxBrowserKey)
-                    }
-                    if defaults.object(forKey: BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey) != nil {
-                        return defaults.bool(forKey: BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey)
-                    }
-                    return BrowserLinkOpenSettings.defaultInterceptTerminalOpenCommandInCmuxBrowser
-                },
-                setOn: { newValue, defaults, _ in
-                    defaults.set(newValue, forKey: BrowserLinkOpenSettings.interceptTerminalOpenCommandInCmuxBrowserKey)
-                }
-            ),
-            CommandPaletteSettingToggleDescriptor(
-                commandId: commandIdPrefix + "showBrowserImportHintOnBlankTabs",
-                settingsKey: "browser.showImportHintOnBlankTabs",
-                title: {
-                    String(
-                        localized: "settings.browser.import.hint.show",
-                        defaultValue: "Show import hint on blank browser tabs"
-                    )
-                },
-                sectionTitle: browserImport,
-                keywords: ["browser.showImportHintOnBlankTabs", "browser", "import", "hint", "blank", "tabs", "onboarding"],
-                defaultValue: BrowserImportHintSettings.defaultShowOnBlankTabs,
-                defaultsKey: BrowserImportHintSettings.showOnBlankTabsKey,
-                didSet: { newValue, defaults, _ in
-                    if newValue {
-                        defaults.set(false, forKey: BrowserImportHintSettings.dismissedKey)
-                    }
-                }
             ),
             CommandPaletteSettingToggleDescriptor(
                 commandId: commandIdPrefix + "systemWideHotkey",

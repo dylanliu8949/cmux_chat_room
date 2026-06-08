@@ -1320,16 +1320,8 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
 
     func testV2SurfaceCloseCommandsRecordRecentlyClosedHistory() throws {
         ClosedItemHistoryStore.shared.removeAll()
-        let defaults = UserDefaults.standard
-        let previousBrowserDisabled = defaults.object(forKey: BrowserAvailabilitySettings.disabledKey)
-        BrowserAvailabilitySettings.setDisabled(true)
         defer {
             ClosedItemHistoryStore.shared.removeAll()
-            if let previousBrowserDisabled {
-                defaults.set(previousBrowserDisabled, forKey: BrowserAvailabilitySettings.disabledKey)
-            } else {
-                defaults.removeObject(forKey: BrowserAvailabilitySettings.disabledKey)
-            }
             TerminalController.shared.setActiveTabManager(nil)
         }
 
@@ -1338,12 +1330,6 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         let pane = try XCTUnwrap(workspace.bonsplitController.allPaneIds.first)
         let terminalPanel = try XCTUnwrap(workspace.newTerminalSurface(inPane: pane, focus: true))
         workspace.setPanelCustomTitle(panelId: terminalPanel.id, title: "Socket Terminal")
-        let browserPanel = try XCTUnwrap(workspace.newBrowserSurface(
-            inPane: pane,
-            focus: true,
-            creationPolicy: .restoration
-        ))
-        workspace.setPanelCustomTitle(panelId: browserPanel.id, title: "Socket Browser")
         TerminalController.shared.setActiveTabManager(manager)
 
         let terminalClose = try handleV2Request(
@@ -1356,48 +1342,10 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
         XCTAssertEqual(terminalClose["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(terminalClose)")
         XCTAssertNil(workspace.panels[terminalPanel.id])
 
-        let browserClose = try handleV2Request(
-            method: "browser.tab.close",
-            params: [
-                "workspace_id": workspace.id.uuidString,
-                "surface_id": browserPanel.id.uuidString
-            ]
-        )
-        XCTAssertEqual(browserClose["ok"] as? Bool, true, "Unexpected JSON-RPC response: \(browserClose)")
-        XCTAssertNil(workspace.panels[browserPanel.id])
-
         XCTAssertEqual(
             ClosedItemHistoryStore.shared.menuSnapshot().items.map(\.title),
-            ["Socket Browser", "Socket Terminal"]
+            ["Socket Terminal"]
         )
-    }
-
-    func testBrowserOpenSplitDoesNotExternallyOpenDiffViewerWhenBrowserDisabled() throws {
-        let defaults = UserDefaults.standard
-        let previousBrowserDisabled = defaults.object(forKey: BrowserAvailabilitySettings.disabledKey)
-        BrowserAvailabilitySettings.setDisabled(true)
-        defer {
-            if let previousBrowserDisabled {
-                defaults.set(previousBrowserDisabled, forKey: BrowserAvailabilitySettings.disabledKey)
-            } else {
-                defaults.removeObject(forKey: BrowserAvailabilitySettings.disabledKey)
-            }
-            TerminalController.shared.setActiveTabManager(nil)
-        }
-
-        TerminalController.shared.setActiveTabManager(TabManager())
-        let token = UUID().uuidString.lowercased()
-        let response = try handleV2Request(
-            method: "browser.open_split",
-            params: [
-                "url": "\(CmuxDiffViewerURLSchemeHandler.scheme)://\(token)/diff.html",
-                "diff_viewer_token": token
-            ]
-        )
-
-        XCTAssertEqual(response["ok"] as? Bool, false, "Unexpected JSON-RPC response: \(response)")
-        let error = try XCTUnwrap(response["error"] as? [String: Any], "Unexpected JSON-RPC response: \(response)")
-        XCTAssertEqual(error["code"] as? String, "browser_disabled")
     }
 
     func testLegacyCloseSurfaceCommandRecordsRecentlyClosedHistory() throws {

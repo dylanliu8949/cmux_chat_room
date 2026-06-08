@@ -5,7 +5,6 @@ import AppKit
 /// Type of panel content
 public enum PanelType: String, Codable, Sendable {
     case terminal
-    case browser
     case markdown
     case filePreview = "filepreview"
     case rightSidebarTool
@@ -45,12 +44,6 @@ public enum TerminalPanelFocusIntent: Equatable {
     case textBoxInput
 }
 
-public enum BrowserPanelFocusIntent: Equatable {
-    case webView
-    case addressBar
-    case findField
-}
-
 public enum FilePreviewPanelFocusIntent: Hashable {
     case textEditor
     case pdfCanvas
@@ -69,7 +62,6 @@ public enum ProjectPanelFocusIntent: Hashable {
 public enum PanelFocusIntent: Equatable {
     case panel
     case terminal(TerminalPanelFocusIntent)
-    case browser(BrowserPanelFocusIntent)
     case filePreview(FilePreviewPanelFocusIntent)
     case project(ProjectPanelFocusIntent)
 }

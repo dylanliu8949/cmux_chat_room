@@ -356,8 +356,6 @@ private struct GlobalSearchResultRow: Identifiable, Equatable {
 
     var systemImageName: String {
         switch hit.kind {
-        case .browser:
-            return "globe"
         case .markdown:
             return "doc.richtext"
         case .title:

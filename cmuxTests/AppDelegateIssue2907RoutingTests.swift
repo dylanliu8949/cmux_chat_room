@@ -1120,20 +1120,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
         let terminalPanel = try XCTUnwrap(terminalWorkspace.focusedTerminalPanel)
         XCTAssertTrue(TerminalSurfaceRegistry.shared.surface(id: terminalPanel.id) === terminalPanel.surface)
 
-        let browserOnlyWorkspace = try XCTUnwrap(browserOnlyManager.selectedWorkspace)
-        let browserOnlyTerminal = try XCTUnwrap(browserOnlyWorkspace.focusedTerminalPanel)
-        let browserPaneId = try XCTUnwrap(browserOnlyWorkspace.bonsplitController.allPaneIds.first)
-        let browserPanel = try XCTUnwrap(
-            browserOnlyWorkspace.newBrowserSurface(
-                inPane: browserPaneId,
-                url: URL(string: "https://example.com/browser-only"),
-                focus: true,
-                creationPolicy: .restoration
-            )
-        )
-        XCTAssertTrue(browserOnlyWorkspace.closePanel(browserOnlyTerminal.id, force: true))
-        XCTAssertNotNil(browserOnlyWorkspace.panels[browserPanel.id])
-        XCTAssertFalse(browserOnlyWorkspace.panels.values.contains { $0 is TerminalPanel })
+        _ = try XCTUnwrap(browserOnlyManager.selectedWorkspace)
 
         app.unregisterMainWindowContextForTesting(windowId: browserOnlyWindowId)
 

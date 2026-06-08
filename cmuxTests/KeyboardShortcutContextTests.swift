@@ -7,35 +7,6 @@ import XCTest
 #endif
 
 final class KeyboardShortcutContextTests: XCTestCase {
-    func testRenameTabAndBrowserReloadCanShareDefaultChordAcrossContexts() {
-        let renameTabShortcut = KeyboardShortcutSettings.Action.renameTab.defaultShortcut
-
-        XCTAssertEqual(renameTabShortcut, KeyboardShortcutSettings.Action.browserReload.defaultShortcut)
-        XCTAssertEqual(KeyboardShortcutSettings.Action.renameTab.shortcutContext, .nonBrowserPanel)
-        XCTAssertEqual(KeyboardShortcutSettings.Action.browserReload.shortcutContext, .browserPanel)
-        XCTAssertFalse(
-            KeyboardShortcutSettings.Action.renameTab.conflicts(
-                with: KeyboardShortcutSettings.Action.browserReload.defaultShortcut,
-                proposedAction: .browserReload,
-                configuredShortcut: renameTabShortcut
-            )
-        )
-        XCTAssertFalse(
-            KeyboardShortcutSettings.Action.browserReload.conflicts(
-                with: renameTabShortcut,
-                proposedAction: .renameTab,
-                configuredShortcut: KeyboardShortcutSettings.Action.browserReload.defaultShortcut
-            )
-        )
-        XCTAssertTrue(
-            KeyboardShortcutSettings.Action.renameTab.conflicts(
-                with: renameTabShortcut,
-                proposedAction: .renameWorkspace,
-                configuredShortcut: renameTabShortcut
-            )
-        )
-    }
-
     func testRenameTabCanReassignCommandRAfterUnbindingWithoutBrowserReloadConflict() throws {
         let originalSettingsFileStore = KeyboardShortcutSettings.settingsFileStore
         let directoryURL = try makeTemporaryDirectory()
@@ -127,11 +98,11 @@ final class KeyboardShortcutContextTests: XCTestCase {
         let context = KeyboardShortcutSettings.Action.switchRightSidebarToFiles.shortcutContext
 
         XCTAssertEqual(context, .rightSidebarFocus)
-        XCTAssertFalse(context.isAvailable(focusedBrowserPanel: false, focusedMarkdownPanel: false, rightSidebarFocused: false))
-        XCTAssertTrue(context.isAvailable(focusedBrowserPanel: false, focusedMarkdownPanel: false, rightSidebarFocused: true))
+        XCTAssertFalse(context.isAvailable(focusedMarkdownPanel: false, rightSidebarFocused: false))
+        XCTAssertTrue(context.isAvailable(focusedMarkdownPanel: false, rightSidebarFocused: true))
         XCTAssertFalse(
             KeyboardShortcutSettings.Action.renameTab.shortcutContext
-                .isAvailable(focusedBrowserPanel: false, focusedMarkdownPanel: false, rightSidebarFocused: true)
+                .isAvailable(focusedMarkdownPanel: false, rightSidebarFocused: true)
         )
         XCTAssertTrue(context.overlaps(KeyboardShortcutSettings.Action.commandPalette.shortcutContext))
         XCTAssertFalse(context.overlaps(KeyboardShortcutSettings.Action.renameTab.shortcutContext))
@@ -141,11 +112,10 @@ final class KeyboardShortcutContextTests: XCTestCase {
         XCTAssertEqual(KeyboardShortcutSettings.Action.toggleReactGrab.shortcutContext, .application)
     }
 
-    func testBrowserFocusModeToggleIsBrowserScopedAndDoesNotCollideWithSplitZoom() {
+    func testBrowserFocusModeToggleDoesNotCollideWithSplitZoom() {
         let focusMode = KeyboardShortcutSettings.Action.toggleBrowserFocusMode
 
-        // Scoped to browser panels so it only claims the key when a browser is focused.
-        XCTAssertEqual(focusMode.shortcutContext, .browserPanel)
+        XCTAssertEqual(focusMode.shortcutContext, .application)
 
         // Default is Option+Cmd+Return: a modifier tier web pages rarely bind,
         // distinct from the other Return-based shortcut (Cmd+Shift+Return = toggle
@@ -168,7 +138,7 @@ final class KeyboardShortcutContextTests: XCTestCase {
         )
     }
 
-    func testMarkdownZoomIsScopedToFocusedMarkdownPanelAndDoesNotCollideWithBrowserZoom() {
+    func testMarkdownZoomIsScopedToFocusedMarkdownPanel() {
         for action in [
             KeyboardShortcutSettings.Action.markdownZoomIn,
             .markdownZoomOut,
@@ -178,15 +148,9 @@ final class KeyboardShortcutContextTests: XCTestCase {
         }
 
         let markdown = KeyboardShortcutSettings.Action.markdownZoomIn.shortcutContext
-        XCTAssertTrue(markdown.isAvailable(focusedBrowserPanel: false, focusedMarkdownPanel: true, rightSidebarFocused: false))
-        XCTAssertFalse(markdown.isAvailable(focusedBrowserPanel: false, focusedMarkdownPanel: false, rightSidebarFocused: false))
-        XCTAssertFalse(markdown.isAvailable(focusedBrowserPanel: true, focusedMarkdownPanel: false, rightSidebarFocused: false))
+        XCTAssertTrue(markdown.isAvailable(focusedMarkdownPanel: true, rightSidebarFocused: false))
+        XCTAssertFalse(markdown.isAvailable(focusedMarkdownPanel: false, rightSidebarFocused: false))
 
-        // Markdown zoom and browser zoom share Cmd-=/-/0 but are mutually
-        // exclusive (a panel can't be both), so they must NOT be treated as
-        // conflicting bindings.
-        let browser = KeyboardShortcutSettings.Action.browserZoomIn.shortcutContext
-        XCTAssertFalse(markdown.overlaps(browser))
         XCTAssertTrue(markdown.overlaps(markdown))
 
         // A focused markdown viewer is also a non-browser panel, so those two

@@ -1289,8 +1289,6 @@ struct ContentView: View {
         switch panel {
         case let terminal as TerminalPanel:
             targetView = terminal.hostedView
-        case let browser as BrowserPanel:
-            targetView = browser.webView
         default:
             targetView = nil
         }
@@ -2473,10 +2471,8 @@ struct ContentView: View {
     private func schedulePortalGeometrySynchronize() {
         if let observedWindow {
             TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
-            BrowserWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: observedWindow)
         } else {
             TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
-            BrowserWindowPortalRegistry.scheduleExternalGeometrySynchronizeForAllWindows()
         }
     }
 
@@ -2964,50 +2960,6 @@ struct ContentView: View {
             attemptCommandPaletteFocusRestoreIfNeeded()
         })
 
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .browserDidBecomeFirstResponderWebView)) { notification in
-            guard let webView = notification.object as? WKWebView,
-                  let selectedTabId = tabManager.selectedTabId,
-                  let selectedWorkspace = tabManager.selectedWorkspace,
-                  let focusedPanelId = selectedWorkspace.focusedPanelId,
-                  let focusedBrowser = selectedWorkspace.browserPanel(for: focusedPanelId),
-                  focusedBrowser.webView === webView else { return }
-            AppDelegate.shared?.noteMainPanelKeyboardFocusIntent(
-                workspaceId: selectedTabId,
-                panelId: focusedPanelId,
-                in: observedWindow ?? webView.window
-            )
-            completeWorkspaceHandoffIfNeeded(focusedTabId: selectedTabId, reason: "browser_first_responder")
-            attemptCommandPaletteFocusRestoreIfNeeded()
-        })
-
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .webViewDidReceiveClick)) { notification in
-            guard let webView = notification.object as? WKWebView,
-                  let selectedTabId = tabManager.selectedTabId,
-                  let selectedWorkspace = tabManager.selectedWorkspace,
-                  let focusedBrowser = selectedWorkspace.panels.values.compactMap({ $0 as? BrowserPanel })
-                    .first(where: { $0.webView === webView }) else { return }
-            AppDelegate.shared?.noteMainPanelKeyboardFocusIntent(
-                workspaceId: selectedTabId,
-                panelId: focusedBrowser.id,
-                in: observedWindow ?? webView.window
-            )
-        })
-
-        view = AnyView(view.onReceive(NotificationCenter.default.publisher(for: .browserDidFocusAddressBar)) { notification in
-            guard let panelId = notification.object as? UUID,
-                  let selectedTabId = tabManager.selectedTabId,
-                  let selectedWorkspace = tabManager.selectedWorkspace,
-                  selectedWorkspace.focusedPanelId == panelId,
-                  let focusedBrowser = selectedWorkspace.browserPanel(for: panelId) else { return }
-            AppDelegate.shared?.noteMainPanelKeyboardFocusIntent(
-                workspaceId: selectedTabId,
-                panelId: panelId,
-                in: observedWindow ?? focusedBrowser.webView.window
-            )
-            completeWorkspaceHandoffIfNeeded(focusedTabId: selectedTabId, reason: "browser_address_bar")
-            attemptCommandPaletteFocusRestoreIfNeeded()
-        })
-
         view = AnyView(view.onReceive(NotificationCenter.default.publisher(
             for: NSWindow.didBecomeKeyNotification,
             object: observedWindow
@@ -3422,7 +3374,6 @@ struct ContentView: View {
                 commandPaletteWindowOverlayController(for: window)
                     .update(isVisible: isCommandPalettePresented) { AnyView(commandPaletteOverlay) }
                 TerminalWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: window)
-                BrowserWindowPortalRegistry.scheduleExternalGeometrySynchronize(for: window)
             }
             AppDelegate.shared?.attachUpdateAccessory(to: window)
             AppDelegate.shared?.applyWindowDecorations(to: window)
@@ -3803,10 +3754,6 @@ struct ContentView: View {
 
     private func canCompleteWorkspaceHandoffImmediately(for workspaceId: UUID) -> Bool {
         guard let workspace = tabManager.tabs.first(where: { $0.id == workspaceId }) else { return true }
-        if let focusedPanelId = workspace.focusedPanelId,
-           workspace.browserPanel(for: focusedPanelId) != nil {
-            return true
-        }
         return workspace.hasLoadedTerminalSurface()
     }
 
@@ -5942,8 +5889,6 @@ struct ContentView: View {
         switch panelType {
         case .terminal:
             return String(localized: "commandPalette.kind.terminal", defaultValue: "Terminal")
-        case .browser:
-            return String(localized: "commandPalette.kind.browser", defaultValue: "Browser")
         case .markdown:
             return String(localized: "commandPalette.kind.markdown", defaultValue: "Markdown")
         case .filePreview:
@@ -5961,8 +5906,6 @@ struct ContentView: View {
         switch panelType {
         case .terminal:
             return ["terminal", "shell", "console"]
-        case .browser:
-            return ["browser", "web", "page"]
         case .markdown:
             return ["markdown", "note", "preview"]
         case .filePreview:
@@ -6496,7 +6439,6 @@ struct ContentView: View {
             let shortcut = KeyboardShortcutSettings.shortcut(for: action)
             guard !shortcut.isUnbound else { return nil }
             guard action.shortcutContext.isAvailable(
-                focusedBrowserPanel: context.bool(CommandPaletteContextKeys.panelIsBrowser),
                 focusedMarkdownPanel: context.bool(CommandPaletteContextKeys.panelIsMarkdown),
                 rightSidebarFocused: false
             ) else {
@@ -6561,7 +6503,6 @@ struct ContentView: View {
         var snapshot = CommandPaletteContextSnapshot()
         snapshot.setBool(CommandPaletteContextKeys.workspaceMinimalModeEnabled, isMinimalMode)
         snapshot.setBool(CommandPaletteContextKeys.sidebarMatchTerminalBackground, sidebarMatchTerminalBackground)
-        snapshot.setBool(CommandPaletteContextKeys.browserDisabled, BrowserAvailabilitySettings.isDisabled())
 
         if let workspace = tabManager.selectedWorkspace {
             let pinTarget = WorkspaceActionDispatcher.Target.single(workspace.id)
@@ -6603,19 +6544,11 @@ struct ContentView: View {
             let panelIsRemoteTerminal = workspace.isRemoteTerminalSurface(panelId)
             snapshot.setBool(CommandPaletteContextKeys.hasFocusedPanel, true)
             snapshot.setString(CommandPaletteContextKeys.panelName, panelDisplayName(workspace: workspace, panelId: panelId, fallback: panelContext.panel.displayTitle))
-            snapshot.setBool(CommandPaletteContextKeys.panelIsBrowser, panelContext.panel.panelType == .browser)
-            if let browserPanel = panelContext.panel as? BrowserPanel {
-                snapshot.setBool(CommandPaletteContextKeys.panelBrowserFocusModeActive, browserPanel.isBrowserFocusModeActive)
-            }
             // Markdown zoom only affects the rendered preview, so don't surface
             // the zoom commands when the panel is in raw text-edit mode.
             snapshot.setBool(
                 CommandPaletteContextKeys.panelIsMarkdown,
                 (panelContext.panel as? MarkdownPanel)?.displayMode == .preview
-            )
-            snapshot.setBool(
-                CommandPaletteContextKeys.panelBrowserOmnibarVisible,
-                (panelContext.panel as? BrowserPanel)?.isOmnibarVisible ?? true
             )
             snapshot.setBool(CommandPaletteContextKeys.panelIsTerminal, panelIsTerminal)
             snapshot.setBool(CommandPaletteContextKeys.panelHasPane, workspace.paneId(forPanelId: panelId) != nil)
@@ -8090,12 +8023,6 @@ struct ContentView: View {
         registry.register(commandId: "palette.restartSocketListener") {
             AppDelegate.shared?.restartSocketListener(nil)
         }
-        registry.register(commandId: "palette.disableBrowser") {
-            BrowserAvailabilitySettings.setDisabled(true)
-        }
-        registry.register(commandId: "palette.enableBrowser") {
-            BrowserAvailabilitySettings.setDisabled(false)
-        }
         registerSettingsToggleCommandHandlers(&registry)
 
         registry.register(commandId: "palette.renameWorkspace") {
@@ -8246,65 +8173,6 @@ struct ContentView: View {
             }
         }
 
-        registry.register(commandId: "palette.browserBack") {
-            tabManager.focusedBrowserPanel?.goBack()
-        }
-        registry.register(commandId: "palette.browserForward") {
-            tabManager.focusedBrowserPanel?.goForward()
-        }
-        registry.register(commandId: "palette.browserReload") {
-            tabManager.focusedBrowserPanel?.reload()
-        }
-        registry.register(commandId: "palette.browserOpenDefault") {
-            if !openFocusedBrowserInDefaultBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserFocusAddressBar") {
-            if !focusFocusedBrowserAddressBar() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserFocusMode") {
-            if !tabManager.toggleBrowserFocusModeForFocusedBrowser(reason: "commandPalette") {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserToggleOmnibar") {
-            if !tabManager.toggleOmnibarFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserToggleDevTools") {
-            if !tabManager.toggleDeveloperToolsFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserConsole") {
-            if !tabManager.showJavaScriptConsoleFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserReactGrab") {
-            if !tabManager.toggleReactGrabFromCurrentFocus() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserZoomIn") {
-            if !tabManager.zoomInFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserZoomOut") {
-            if !tabManager.zoomOutFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
-        registry.register(commandId: "palette.browserZoomReset") {
-            if !tabManager.resetZoomFocusedBrowser() {
-                NSSound.beep()
-            }
-        }
         registry.register(commandId: "palette.markdownZoomIn") {
             if !tabManager.zoomInFocusedMarkdown() {
                 NSSound.beep()
@@ -8320,23 +8188,10 @@ struct ContentView: View {
                 NSSound.beep()
             }
         }
-        registry.register(commandId: "palette.browserClearHistory") {
-            BrowserHistoryStore.shared.clearHistory()
-        }
         registry.register(commandId: "palette.findInDirectory") {
             _ = AppDelegate.shared?.focusFileSearchInActiveMainWindow(
                 preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
             )
-        }
-        registry.register(commandId: "palette.browserSplitRight") {
-            _ = tabManager.createBrowserSplit(direction: .right)
-        }
-        registry.register(commandId: "palette.browserSplitDown") {
-            _ = tabManager.createBrowserSplit(direction: .down)
-        }
-        registry.register(commandId: "palette.browserDuplicateRight") {
-            let url = tabManager.focusedBrowserPanel?.preferredURLStringForOmnibar().flatMap(URL.init(string:))
-            _ = tabManager.createBrowserSplit(direction: .right, url: url)
         }
 
         for target in TerminalDirectoryOpenTarget.commandPaletteShortcutTargets {
@@ -9231,11 +9086,6 @@ struct ContentView: View {
             return target
         }
 
-        if let webView = BrowserWindowPortalRegistry.webViewAtWindowPoint(windowPoint, in: window),
-           let target = commandPaletteBrowserFocusTarget(for: webView) {
-            return target
-        }
-
         if let terminalView = TerminalWindowPortalRegistry.terminalViewAtWindowPoint(windowPoint, in: window),
            let workspaceId = terminalView.tabId,
            let panelId = terminalView.terminalSurface?.id,
@@ -9260,48 +9110,6 @@ struct ContentView: View {
                 workspaceId: workspaceId,
                 panelId: panelId,
                 fallbackIntent: .terminal(.surface),
-                in: observedWindow
-            )
-        }
-
-        if let webView = commandPaletteOwningWebView(for: responder),
-           let target = commandPaletteBrowserFocusTarget(for: webView) {
-            return target
-        }
-
-        return nil
-    }
-
-    private func commandPaletteBrowserFocusTarget(for webView: WKWebView) -> CommandPaletteRestoreFocusTarget? {
-        if let selectedWorkspace = tabManager.selectedWorkspace,
-           let target = commandPaletteBrowserFocusTarget(in: selectedWorkspace, for: webView) {
-            return target
-        }
-
-        let selectedWorkspaceId = tabManager.selectedTabId
-        for workspace in tabManager.tabs where workspace.id != selectedWorkspaceId {
-            if let target = commandPaletteBrowserFocusTarget(in: workspace, for: webView) {
-                return target
-            }
-        }
-
-        return nil
-    }
-
-    private func commandPaletteBrowserFocusTarget(
-        in workspace: Workspace,
-        for webView: WKWebView
-    ) -> CommandPaletteRestoreFocusTarget? {
-        for (panelId, panel) in workspace.panels {
-            guard let browserPanel = panel as? BrowserPanel,
-                  browserPanel.webView === webView else {
-                continue
-            }
-
-            return commandPaletteRestoreFocusTarget(
-                workspaceId: workspace.id,
-                panelId: panelId,
-                fallbackIntent: .browser(.webView),
                 in: observedWindow
             )
         }
@@ -9381,12 +9189,6 @@ struct ContentView: View {
             return "terminal.findField"
         case .terminal(.textBoxInput):
             return "terminal.textBoxInput"
-        case .browser(.webView):
-            return "browser.webView"
-        case .browser(.addressBar):
-            return "browser.addressBar"
-        case .browser(.findField):
-            return "browser.findField"
         case .filePreview(.textEditor):
             return "filePreview.textEditor"
         case .filePreview(.pdfCanvas):
@@ -9783,41 +9585,12 @@ struct ContentView: View {
         dismissCommandPalette()
     }
 
-    private func focusFocusedBrowserAddressBar() -> Bool {
-        guard let panel = tabManager.focusedBrowserPanel else { return false }
-        _ = panel.requestAddressBarFocus(selectionIntent: .selectAll)
-        NotificationCenter.default.post(name: .browserFocusAddressBar, object: panel.id)
-        return true
-    }
-
-    private func openFocusedBrowserInDefaultBrowser() -> Bool {
-        guard let panel = tabManager.focusedBrowserPanel,
-              let rawURL = panel.preferredURLStringForOmnibar(),
-              let url = URL(string: rawURL),
-              let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https" else {
-            return false
-        }
-        return NSWorkspace.shared.open(url)
-    }
-
     private func openWorkspacePullRequestsInConfiguredBrowser() -> Bool {
         guard let workspace = tabManager.selectedWorkspace else { return false }
         let pullRequests = workspace.sidebarPullRequestsInDisplayOrder()
         guard !pullRequests.isEmpty else { return false }
 
         var openedCount = 0
-        if BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowser() {
-            for pullRequest in pullRequests {
-                if tabManager.openBrowser(url: pullRequest.url, insertAtEnd: true) != nil {
-                    openedCount += 1
-                } else if NSWorkspace.shared.open(pullRequest.url) {
-                    openedCount += 1
-                }
-            }
-            return openedCount > 0
-        }
-
         for pullRequest in pullRequests {
             if NSWorkspace.shared.open(pullRequest.url) {
                 openedCount += 1
@@ -9958,12 +9731,8 @@ struct SidebarTabItemSettingsSnapshot: Equatable {
         showsGitBranchIcon = Self.bool(defaults: defaults, key: "sidebarShowGitBranchIcon", defaultValue: false)
         showsSSH = Self.bool(defaults: defaults, key: "sidebarShowSSH", defaultValue: SidebarWorkspaceDetailDefaults.showSSH)
         makesPullRequestsClickable = SidebarPullRequestClickabilitySettings.isClickable(defaults: defaults)
-        openPullRequestLinksInCmuxBrowser = BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowser(
-            defaults: defaults
-        )
-        openPortLinksInCmuxBrowser = BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowser(
-            defaults: defaults
-        )
+        openPullRequestLinksInCmuxBrowser = false
+        openPortLinksInCmuxBrowser = false
 
         hidesAllDetails = SidebarWorkspaceDetailSettings.hidesAllDetails(defaults: defaults)
         wrapsWorkspaceTitles = SidebarWorkspaceTitleWrapSettings.wraps(defaults: defaults)
@@ -11522,8 +11291,6 @@ struct VerticalTabsSidebar: View {
         switch panelType {
         case .terminal:
             return .terminal
-        case .browser:
-            return .browser
         case .markdown:
             return .markdown
         case .filePreview:
@@ -14628,9 +14395,6 @@ private struct SidebarHelpMenuButton: View {
         switch action {
         case .importBrowserData:
             isPopoverPresented = false
-            DispatchQueue.main.async {
-                BrowserDataImportCoordinator.shared.presentImportDialog()
-            }
         case .keyboardShortcuts:
             isPopoverPresented = false
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
@@ -16745,34 +16509,12 @@ struct TabItemView: View, Equatable {
 
     private func openPullRequestLink(_ url: URL) {
         updateSelection()
-        if openSidebarPullRequestLinksInCmuxBrowser {
-            if tabManager.openBrowser(
-                inWorkspace: tab.id,
-                url: url,
-                preferSplitRight: true,
-                insertAtEnd: true
-            ) == nil {
-                NSWorkspace.shared.open(url)
-            }
-            return
-        }
         NSWorkspace.shared.open(url)
     }
 
     private func openPortLink(_ port: Int) {
         guard let url = URL(string: "http://localhost:\(port)") else { return }
         updateSelection()
-        if openSidebarPortLinksInCmuxBrowser {
-            if tabManager.openBrowser(
-                inWorkspace: tab.id,
-                url: url,
-                preferSplitRight: true,
-                insertAtEnd: true
-            ) == nil {
-                NSWorkspace.shared.open(url)
-            }
-            return
-        }
         NSWorkspace.shared.open(url)
     }
 

@@ -50,15 +50,11 @@ struct cmuxApp: App {
     @AppStorage(DevBuildBannerDebugSettings.sidebarBannerVisibleKey)
     private var showSidebarDevBuildBanner = DevBuildBannerDebugSettings.defaultShowSidebarBanner
     @AppStorage(SocketControlSettings.appStorageKey) private var socketControlMode = SocketControlSettings.defaultMode.rawValue
-    @AppStorage(BrowserToolbarAccessorySpacingDebugSettings.key) private var browserToolbarAccessorySpacingRaw = BrowserToolbarAccessorySpacingDebugSettings.defaultSpacing
     @State private var browserFocusModeMenuRevision = 0
     @StateObject var focusHistoryMenuInvalidator = FocusHistoryMenuInvalidator()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @Environment(\.openWindow) private var openWindow
 
-    private var browserToolbarAccessorySpacing: Int {
-        BrowserToolbarAccessorySpacingDebugSettings.resolved(browserToolbarAccessorySpacingRaw)
-    }
 
     init() {
         // Build the settings container once. All injected dependencies
@@ -520,17 +516,6 @@ struct cmuxApp: App {
                     ) {
                         BonsplitTabBarDebugWindowController.shared.show()
                     }
-                    Button("Browser Import Hint Debug…") {
-                        BrowserImportHintDebugWindowController.shared.show()
-                    }
-                    Button(
-                        String(
-                            localized: "debug.menu.browserProfilePopoverDebug",
-                            defaultValue: "Browser Profile Popover Debug…"
-                        )
-                    ) {
-                        BrowserProfilePopoverDebugWindowController.shared.show()
-                    }
                     Button("Debug Window Controls…") {
                         DebugWindowControlsWindowController.shared.show()
                     }
@@ -607,29 +592,6 @@ struct cmuxApp: App {
                     }
                     Button("Open All Debug Windows") {
                         openAllDebugWindows()
-                    }
-                }
-
-                Menu(
-                    String(
-                        localized: "debug.menu.browserToolbarButtonSpacing",
-                        defaultValue: "Browser Toolbar Button Spacing"
-                    )
-                ) {
-                    ForEach(BrowserToolbarAccessorySpacingDebugSettings.supportedValues, id: \.self) { spacing in
-                        Button {
-                            browserToolbarAccessorySpacingRaw = spacing
-                        } label: {
-                            if browserToolbarAccessorySpacing == spacing {
-                                Label {
-                                    Text(verbatim: "\(spacing)")
-                                } icon: {
-                                    Image(systemName: "checkmark")
-                                }
-                            } else {
-                                Text(verbatim: "\(spacing)")
-                            }
-                        }
                     }
                 }
 
@@ -864,69 +826,6 @@ struct cmuxApp: App {
                 activeTabManager.selectPreviousSurface()
             }
 
-            splitCommandButton(title: String(localized: "menu.view.back", defaultValue: "Back"), shortcut: menuShortcut(for: .browserBack)) {
-                activeTabManager.focusedBrowserPanel?.goBack()
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.forward", defaultValue: "Forward"), shortcut: menuShortcut(for: .browserForward)) {
-                activeTabManager.focusedBrowserPanel?.goForward()
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.reloadPage", defaultValue: "Reload Page"), shortcut: menuShortcut(for: .browserReload)) {
-                activeTabManager.focusedBrowserPanel?.reload()
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.toggleDevTools", defaultValue: "Toggle Developer Tools"), shortcut: menuShortcut(for: .toggleBrowserDeveloperTools)) {
-                let manager = activeTabManager
-                if !manager.toggleDeveloperToolsFocusedBrowser() {
-                    NSSound.beep()
-                }
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.showJSConsole", defaultValue: "Show JavaScript Console"), shortcut: menuShortcut(for: .showBrowserJavaScriptConsole)) {
-                let manager = activeTabManager
-                if !manager.showJavaScriptConsoleFocusedBrowser() {
-                    NSSound.beep()
-                }
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.toggleReactGrab", defaultValue: "Toggle React Grab"), shortcut: menuShortcut(for: .toggleReactGrab)) {
-                if !activeTabManager.toggleReactGrabFromCurrentFocus() {
-                    NSSound.beep()
-                }
-            }
-
-            let browserFocusModeMenu = browserFocusModeMenuSnapshot
-            Button(browserFocusModeMenu.title) {
-                if !activeTabManager.toggleBrowserFocusModeForFocusedBrowser(reason: "viewMenu") {
-                    NSSound.beep()
-                }
-            }
-            .disabled(!browserFocusModeMenu.canToggle)
-
-            splitCommandButton(title: String(localized: "menu.view.zoomIn", defaultValue: "Zoom In"), shortcut: menuShortcut(for: .browserZoomIn)) {
-                _ = activeTabManager.zoomInFocusedBrowser()
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.zoomOut", defaultValue: "Zoom Out"), shortcut: menuShortcut(for: .browserZoomOut)) {
-                _ = activeTabManager.zoomOutFocusedBrowser()
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.actualSize", defaultValue: "Actual Size"), shortcut: menuShortcut(for: .browserZoomReset)) {
-                _ = activeTabManager.resetZoomFocusedBrowser()
-            }
-
-            Button(String(localized: "menu.view.clearBrowserHistory", defaultValue: "Clear Browser History")) {
-                BrowserHistoryStore.shared.clearHistory()
-            }
-
-            Button(String(localized: "menu.view.importFromBrowser", defaultValue: "Import Browser Data…")) {
-                // Defer modal presentation until after AppKit finishes menu tracking.
-                DispatchQueue.main.async {
-                    BrowserDataImportCoordinator.shared.presentImportDialog()
-                }
-            }
-
             splitCommandButton(title: String(localized: "menu.view.nextWorkspace", defaultValue: "Next Workspace"), shortcut: menuShortcut(for: .nextSidebarTab)) {
                 activeTabManager.selectNextTab()
             }
@@ -956,14 +855,6 @@ struct cmuxApp: App {
 
             splitCommandButton(title: String(localized: "menu.view.splitDown", defaultValue: "Split Down"), shortcut: menuShortcut(for: .splitDown)) {
                 performSplitFromMenu(direction: .down)
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.splitBrowserRight", defaultValue: "Split Browser Right"), shortcut: menuShortcut(for: .splitBrowserRight)) {
-                performBrowserSplitFromMenu(direction: .right)
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.splitBrowserDown", defaultValue: "Split Browser Down"), shortcut: menuShortcut(for: .splitBrowserDown)) {
-                performBrowserSplitFromMenu(direction: .down)
             }
 
             equalizeSplitsCommandButton()
@@ -1063,17 +954,6 @@ struct cmuxApp: App {
         notificationStore.notificationMenuSnapshot
     }
 
-    private var browserFocusModeMenuSnapshot: (title: String, canToggle: Bool) {
-        let _ = browserFocusModeMenuRevision
-        let panel = activeTabManager.focusedBrowserPanel
-        return (
-            title: panel?.isBrowserFocusModeActive == true
-                ? String(localized: "menu.view.exitBrowserFocusMode", defaultValue: "Exit Browser Focus Mode")
-                : String(localized: "menu.view.enterBrowserFocusMode", defaultValue: "Enter Browser Focus Mode"),
-            canToggle: panel?.canToggleBrowserFocusMode == true
-        )
-    }
-
     var activeTabManager: TabManager {
         AppDelegate.shared?.activeTabManagerForCommands(
             preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
@@ -1094,13 +974,6 @@ struct cmuxApp: App {
             return
         }
         tabManager.createSplit(direction: direction)
-    }
-
-    private func performBrowserSplitFromMenu(direction: SplitDirection) {
-        if AppDelegate.shared?.performBrowserSplitShortcut(direction: direction) == true {
-            return
-        }
-        _ = tabManager.createBrowserSplit(direction: direction)
     }
 
     private func selectedWorkspaceIndex(in manager: TabManager, workspaceId: UUID) -> Int? {
@@ -1337,8 +1210,6 @@ struct cmuxApp: App {
 #if DEBUG
     private func openAllDebugWindows() {
         DebugWindowControlsWindowController.shared.show()
-        BrowserImportHintDebugWindowController.shared.show()
-        BrowserProfilePopoverDebugWindowController.shared.show()
         AboutTitlebarDebugWindowController.shared.show()
         TitlebarLayoutDebugWindowController.shared.show()
         SidebarDebugWindowController.shared.show()
@@ -1850,7 +1721,6 @@ private enum DebugWindowConfigSnapshot {
         """
 
         let menuBarPayload = MenuBarIconDebugSettings.copyPayload(defaults: defaults)
-        let browserDevToolsPayload = BrowserDevToolsButtonDebugSettings.copyPayload(defaults: defaults)
         let titlebarLayoutPayload = TitlebarLayoutDebugSettingsSnapshot.copyPayload(defaults: defaults)
 
         return """
@@ -1866,8 +1736,6 @@ private enum DebugWindowConfigSnapshot {
         # Menu Bar Extra Debug
         \(menuBarPayload)
 
-        # Browser DevTools Button
-        \(browserDevToolsPayload)
         """
     }
 
@@ -1929,16 +1797,6 @@ private final class DebugWindowControlsWindowController: NSWindowController, NSW
 private struct DebugWindowControlsView: View {
     @AppStorage(SidebarActiveTabIndicatorSettings.styleKey)
     private var sidebarActiveTabIndicatorStyle = SidebarActiveTabIndicatorSettings.defaultStyle.rawValue
-    @AppStorage(BrowserDevToolsButtonDebugSettings.iconNameKey) private var browserDevToolsIconNameRaw = BrowserDevToolsButtonDebugSettings.defaultIcon.rawValue
-    @AppStorage(BrowserDevToolsButtonDebugSettings.iconColorKey) private var browserDevToolsIconColorRaw = BrowserDevToolsButtonDebugSettings.defaultColor.rawValue
-
-    private var selectedDevToolsIconOption: BrowserDevToolsIconOption {
-        BrowserDevToolsIconOption(rawValue: browserDevToolsIconNameRaw) ?? BrowserDevToolsButtonDebugSettings.defaultIcon
-    }
-
-    private var selectedDevToolsColorOption: BrowserDevToolsIconColorOption {
-        BrowserDevToolsIconColorOption(rawValue: browserDevToolsIconColorRaw) ?? BrowserDevToolsButtonDebugSettings.defaultColor
-    }
 
     private var selectedSidebarActiveTabIndicatorStyle: SidebarActiveTabIndicatorStyle {
         SidebarActiveTabIndicatorSettings.resolvedStyle(rawValue: sidebarActiveTabIndicatorStyle)
@@ -1959,17 +1817,6 @@ private struct DebugWindowControlsView: View {
 
                 GroupBox("Open") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Button("Browser Import Hint Debug…") {
-                            BrowserImportHintDebugWindowController.shared.show()
-                        }
-                        Button(
-                            String(
-                                localized: "debug.menu.browserProfilePopoverDebug",
-                                defaultValue: "Browser Profile Popover Debug…"
-                            )
-                        ) {
-                            BrowserProfilePopoverDebugWindowController.shared.show()
-                        }
                         Button(
                             String(
                                 localized: "debug.menu.aboutTitlebarDebug",
@@ -2037,8 +1884,6 @@ private struct DebugWindowControlsView: View {
                         }
                         Button("Open All Debug Windows") {
                             DebugWindowControlsWindowController.shared.show()
-                            BrowserImportHintDebugWindowController.shared.show()
-                            BrowserProfilePopoverDebugWindowController.shared.show()
                             AboutTitlebarDebugWindowController.shared.show()
                             TitlebarLayoutDebugWindowController.shared.show()
                             SidebarDebugWindowController.shared.show()
@@ -2071,52 +1916,6 @@ private struct DebugWindowControlsView: View {
                     .padding(.top, 2)
                 }
 
-                GroupBox("Browser DevTools Button") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 8) {
-                            Text("Icon")
-                            Picker("Icon", selection: $browserDevToolsIconNameRaw) {
-                                ForEach(BrowserDevToolsIconOption.allCases) { option in
-                                    Text(option.title).tag(option.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            Spacer()
-                        }
-
-                        HStack(spacing: 8) {
-                            Text("Color")
-                            Picker("Color", selection: $browserDevToolsIconColorRaw) {
-                                ForEach(BrowserDevToolsIconColorOption.allCases) { option in
-                                    Text(option.title).tag(option.rawValue)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            Spacer()
-                        }
-
-                        HStack(spacing: 8) {
-                            Text("Preview")
-                            Spacer()
-                            Image(systemName: selectedDevToolsIconOption.rawValue)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(selectedDevToolsColorOption.color)
-                        }
-
-                        HStack(spacing: 12) {
-                            Button("Reset Button") {
-                                resetBrowserDevToolsButton()
-                            }
-                            Button("Copy Button Config") {
-                                copyBrowserDevToolsButtonConfig()
-                            }
-                        }
-                    }
-                    .padding(.top, 2)
-                }
-
                 GroupBox("Copy") {
                     VStack(alignment: .leading, spacing: 8) {
                         Button("Copy All Debug Config") {
@@ -2138,424 +1937,8 @@ private struct DebugWindowControlsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func resetBrowserDevToolsButton() {
-        browserDevToolsIconNameRaw = BrowserDevToolsButtonDebugSettings.defaultIcon.rawValue
-        browserDevToolsIconColorRaw = BrowserDevToolsButtonDebugSettings.defaultColor.rawValue
-    }
-
-    private func copyBrowserDevToolsButtonConfig() {
-        let payload = BrowserDevToolsButtonDebugSettings.copyPayload(defaults: .standard)
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(payload, forType: .string)
-    }
 }
 #endif
-
-private final class BrowserImportHintDebugWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = BrowserImportHintDebugWindowController()
-
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 420),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Browser Import Hint Debug"
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.browserImportHintDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: BrowserImportHintDebugView())
-        AppDelegate.shared?.applyWindowDecorations(to: window)
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-    }
-}
-
-private final class BrowserProfilePopoverDebugWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = BrowserProfilePopoverDebugWindowController()
-
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 340),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = String(
-            localized: "debug.windows.browserProfilePopover.title",
-            defaultValue: "Browser Profile Popover Debug"
-        )
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.browserProfilePopoverDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: BrowserProfilePopoverDebugView())
-        AppDelegate.shared?.applyWindowDecorations(to: window)
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-    }
-}
-
-private struct BrowserProfilePopoverDebugView: View {
-    @AppStorage(BrowserProfilePopoverDebugSettings.horizontalPaddingKey)
-    private var horizontalPaddingRaw = BrowserProfilePopoverDebugSettings.defaultHorizontalPadding
-    @AppStorage(BrowserProfilePopoverDebugSettings.verticalPaddingKey)
-    private var verticalPaddingRaw = BrowserProfilePopoverDebugSettings.defaultVerticalPadding
-
-    private var horizontalPaddingBinding: Binding<Double> {
-        Binding(
-            get: { BrowserProfilePopoverDebugSettings.resolvedHorizontalPadding(horizontalPaddingRaw) },
-            set: { horizontalPaddingRaw = BrowserProfilePopoverDebugSettings.resolvedHorizontalPadding($0) }
-        )
-    }
-
-    private var verticalPaddingBinding: Binding<Double> {
-        Binding(
-            get: { BrowserProfilePopoverDebugSettings.resolvedVerticalPadding(verticalPaddingRaw) },
-            set: { verticalPaddingRaw = BrowserProfilePopoverDebugSettings.resolvedVerticalPadding($0) }
-        )
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(
-                    String(
-                        localized: "debug.browserProfilePopover.heading",
-                        defaultValue: "Browser Profile Popover"
-                    )
-                )
-                .font(.headline)
-
-                Text(
-                    String(
-                        localized: "debug.browserProfilePopover.note",
-                        defaultValue: "Tune the profile popover padding live while comparing it against the browser toolbar menu."
-                    )
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                GroupBox(
-                    String(
-                        localized: "debug.browserProfilePopover.group.padding",
-                        defaultValue: "Padding"
-                    )
-                ) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        sliderRow(
-                            String(
-                                localized: "debug.browserProfilePopover.label.horizontal",
-                                defaultValue: "Horizontal"
-                            ),
-                            value: horizontalPaddingBinding,
-                            range: BrowserProfilePopoverDebugSettings.horizontalPaddingRange
-                        )
-                        sliderRow(
-                            String(
-                                localized: "debug.browserProfilePopover.label.vertical",
-                                defaultValue: "Vertical"
-                            ),
-                            value: verticalPaddingBinding,
-                            range: BrowserProfilePopoverDebugSettings.verticalPaddingRange
-                        )
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox(
-                    String(
-                        localized: "debug.browserProfilePopover.group.preview",
-                        defaultValue: "Preview"
-                    )
-                ) {
-                    profilePopoverPreview
-                        .padding(.top, 2)
-                }
-
-                HStack(spacing: 12) {
-                    Button(
-                        String(
-                            localized: "debug.browserProfilePopover.reset",
-                            defaultValue: "Reset"
-                        )
-                    ) {
-                        horizontalPaddingRaw = BrowserProfilePopoverDebugSettings.defaultHorizontalPadding
-                        verticalPaddingRaw = BrowserProfilePopoverDebugSettings.defaultVerticalPadding
-                    }
-                }
-
-                Text(
-                    String(
-                        localized: "debug.browserProfilePopover.liveNote",
-                        defaultValue: "Changes apply live to the browser profile popover."
-                    )
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var profilePopoverPreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "browser.profile.menu.title", defaultValue: "Profiles"))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .frame(width: 12, alignment: .center)
-                    Text(String(localized: "browser.profile.default", defaultValue: "Default"))
-                        .font(.system(size: 12))
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 8)
-                .frame(height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.primary.opacity(0.12))
-                )
-            }
-
-            Divider()
-
-            Text(String(localized: "browser.profile.new", defaultValue: "New Profile..."))
-                .font(.system(size: 12))
-
-            Text(String(localized: "menu.view.importFromBrowser", defaultValue: "Import Browser Data…"))
-                .font(.system(size: 12))
-        }
-        .padding(.horizontal, BrowserProfilePopoverDebugSettings.resolvedHorizontalPadding(horizontalPaddingRaw))
-        .padding(.vertical, BrowserProfilePopoverDebugSettings.resolvedVerticalPadding(verticalPaddingRaw))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(nsColor: .windowBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08))
-                )
-        )
-    }
-
-    private func sliderRow(_ label: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-            Slider(value: value, in: range, step: 1)
-            Text(String(format: "%.0f", value.wrappedValue))
-                .font(.caption)
-                .monospacedDigit()
-                .frame(width: 32, alignment: .trailing)
-        }
-    }
-}
-
-private struct BrowserImportHintDebugView: View {
-    @AppStorage(BrowserImportHintSettings.variantKey)
-    private var variantRaw = BrowserImportHintSettings.defaultVariant.rawValue
-    @AppStorage(BrowserImportHintSettings.showOnBlankTabsKey)
-    private var showOnBlankTabs = BrowserImportHintSettings.defaultShowOnBlankTabs
-    @AppStorage(BrowserImportHintSettings.dismissedKey)
-    private var isDismissed = BrowserImportHintSettings.defaultDismissed
-
-    private var selectedVariant: BrowserImportHintVariant {
-        BrowserImportHintSettings.variant(for: variantRaw)
-    }
-
-    private var variantSelection: Binding<String> {
-        Binding(
-            get: { selectedVariant.rawValue },
-            set: { variantRaw = BrowserImportHintSettings.variant(for: $0).rawValue }
-        )
-    }
-
-    private var showOnBlankTabsBinding: Binding<Bool> {
-        Binding(
-            get: { showOnBlankTabs },
-            set: { newValue in
-                showOnBlankTabs = newValue
-                if newValue {
-                    isDismissed = false
-                }
-            }
-        )
-    }
-
-    private var presentation: BrowserImportHintPresentation {
-        BrowserImportHintPresentation(
-            variant: selectedVariant,
-            showOnBlankTabs: showOnBlankTabs,
-            isDismissed: isDismissed
-        )
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Browser Import Hint")
-                    .font(.headline)
-
-                Text("Try lighter blank-tab import surfaces and dismissal states without touching the permanent Browser settings home.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                GroupBox("Variant") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Picker("Blank Tab Style", selection: variantSelection) {
-                            ForEach(BrowserImportHintVariant.allCases) { variant in
-                                Text(title(for: variant)).tag(variant.rawValue)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Text(description(for: selectedVariant))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("State") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle("Show on blank browser tabs", isOn: showOnBlankTabsBinding)
-                        Toggle("Pretend the user dismissed it", isOn: $isDismissed)
-
-                        Text("Current blank-tab placement: \(placementTitle(presentation.blankTabPlacement))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Settings status: \(settingsStatusTitle(presentation.settingsStatus))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("Quick Actions") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 10) {
-                            Button("Open Browser Settings") {
-                                AppDelegate.presentPreferencesWindow(navigationTarget: .browser)
-                            }
-                            Button("Open Import Dialog") {
-                                DispatchQueue.main.async {
-                                    BrowserDataImportCoordinator.shared.presentImportDialog()
-                                }
-                            }
-                        }
-
-                        Button("Reset Hint Debug State") {
-                            BrowserImportHintSettings.reset()
-                        }
-                    }
-                    .padding(.top, 2)
-                }
-
-                GroupBox("Ideas") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Inline strip: default candidate, visible but quieter than the old floating card.")
-                        Text("Floating card: strongest nudge, useful when we want more explanation.")
-                        Text("Toolbar chip: most subtle, best when the hint should stay out of the content area.")
-                        Text("Settings only: no in-browser nudge, Browser settings becomes the only permanent home.")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func title(for variant: BrowserImportHintVariant) -> String {
-        switch variant {
-        case .inlineStrip:
-            return "Inline Strip"
-        case .floatingCard:
-            return "Floating Card"
-        case .toolbarChip:
-            return "Toolbar Chip"
-        case .settingsOnly:
-            return "Settings Only"
-        }
-    }
-
-    private func description(for variant: BrowserImportHintVariant) -> String {
-        switch variant {
-        case .inlineStrip:
-            return "Shows a thin hint bar at the top of blank browser tabs."
-        case .floatingCard:
-            return "Shows the fuller callout card inside blank browser tabs."
-        case .toolbarChip:
-            return "Moves the hint into a small toolbar chip beside the browser controls."
-        case .settingsOnly:
-            return "Hides the blank-tab hint and leaves Browser settings as the only home."
-        }
-    }
-
-    private func placementTitle(_ placement: BrowserImportHintBlankTabPlacement) -> String {
-        switch placement {
-        case .hidden:
-            return "Hidden"
-        case .inlineStrip:
-            return "Inline Strip"
-        case .floatingCard:
-            return "Floating Card"
-        case .toolbarChip:
-            return "Toolbar Chip"
-        }
-    }
-
-    private func settingsStatusTitle(_ status: BrowserImportHintSettingsStatus) -> String {
-        switch status {
-        case .visible:
-            return "Visible"
-        case .hidden:
-            return "Hidden"
-        case .settingsOnly:
-            return "Settings Only"
-        }
-    }
-}
 
 private final class AboutWindowController: NSWindowController, NSWindowDelegate {
     static let shared = AboutWindowController()

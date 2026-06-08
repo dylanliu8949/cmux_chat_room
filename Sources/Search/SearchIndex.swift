@@ -2,14 +2,11 @@ import Foundation
 import SQLite3
 
 enum GlobalSearchKind: String, Codable, Sendable {
-    case browser
     case markdown
     case title
 
     var localizedLabel: String {
         switch self {
-        case .browser:
-            return String(localized: "globalSearch.kind.browser", defaultValue: "Browser")
         case .markdown:
             return String(localized: "globalSearch.kind.markdown", defaultValue: "Markdown")
         case .title:

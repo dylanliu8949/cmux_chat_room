@@ -22,15 +22,6 @@ extension PaneDropTargetView: FileDropPaneTarget {
     func fileDropConcludeDragOperation(_ sender: (any NSDraggingInfo)?) { concludeDragOperation(sender) }
 }
 
-extension BrowserPaneDropTargetView: FileDropPaneTarget {
-    func fileDropDraggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
-    func fileDropDraggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
-    func fileDropDraggingExited(_ sender: (any NSDraggingInfo)?) { draggingExited(sender) }
-    func fileDropPrepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool { prepareForDragOperation(sender) }
-    func fileDropPerformDragOperation(_ sender: any NSDraggingInfo) -> Bool { performDragOperation(sender) }
-    func fileDropConcludeDragOperation(_ sender: (any NSDraggingInfo)?) { concludeDragOperation(sender) }
-}
-
 /// Transparent NSView installed on the window's theme frame (above the NSHostingView) to
 /// handle file/URL drags from Finder. Nested NSHostingController layers (created by bonsplit's
 /// SinglePaneWrapper) prevent AppKit's NSDraggingDestination routing from reaching deeply

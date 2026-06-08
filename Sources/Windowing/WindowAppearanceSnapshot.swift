@@ -332,3 +332,55 @@ struct WindowAppearanceSnapshot {
         )
     }
 }
+
+/// 终端背景色与不透明度的合成助手。原先定义在 `BrowserPanel.swift`，浏览器删除后下沉到此，
+/// 供 markdown 渲染、ContentView、TerminalPanelView 等共享主题消费方使用。
+enum GhosttyBackgroundTheme {
+    static func clampedOpacity(_ opacity: Double) -> CGFloat {
+        WindowAppearanceSnapshot.clampedOpacity(opacity)
+    }
+
+    static func color(backgroundColor: NSColor, opacity: Double) -> NSColor {
+        WindowAppearanceSnapshot.compositedTerminalColor(
+            backgroundColor: backgroundColor,
+            opacity: opacity
+        )
+    }
+
+    static func color(
+        from notification: Notification?,
+        fallbackColor: NSColor,
+        fallbackOpacity: Double
+    ) -> NSColor {
+        let userInfo = notification?.userInfo
+        let backgroundColor =
+            (userInfo?[GhosttyNotificationKey.backgroundColor] as? NSColor)
+            ?? fallbackColor
+
+        let opacity: Double
+        if let value = userInfo?[GhosttyNotificationKey.backgroundOpacity] as? Double {
+            opacity = value
+        } else if let value = userInfo?[GhosttyNotificationKey.backgroundOpacity] as? NSNumber {
+            opacity = value.doubleValue
+        } else {
+            opacity = fallbackOpacity
+        }
+
+        return color(backgroundColor: backgroundColor, opacity: opacity)
+    }
+
+    static func color(from notification: Notification?) -> NSColor {
+        color(
+            from: notification,
+            fallbackColor: GhosttyApp.shared.defaultBackgroundColor,
+            fallbackOpacity: GhosttyApp.shared.defaultBackgroundOpacity
+        )
+    }
+
+    static func currentColor() -> NSColor {
+        color(
+            backgroundColor: GhosttyApp.shared.defaultBackgroundColor,
+            opacity: GhosttyApp.shared.defaultBackgroundOpacity
+        )
+    }
+}

@@ -4753,54 +4753,6 @@ final class TerminalWindowPortalLifecycleTests: XCTestCase {
         )
     }
 
-    func testTerminalPortalHostStaysBelowBrowserPortalHostWhenBothAreInstalled() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 320),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        defer { window.orderOut(nil) }
-        realizeWindowLayout(window)
-
-        let browserPortal = WindowBrowserPortal(window: window)
-        let terminalPortal = WindowTerminalPortal(window: window)
-        _ = browserPortal.webViewAtWindowPoint(NSPoint(x: 1, y: 1))
-        _ = terminalPortal.viewAtWindowPoint(NSPoint(x: 1, y: 1))
-
-        guard let contentView = window.contentView,
-              let container = contentView.superview else {
-            XCTFail("Expected content container")
-            return
-        }
-
-        func assertHostOrder(_ message: String) {
-            guard let terminalHostIndex = container.subviews.firstIndex(where: { $0 is WindowTerminalHostView }),
-                  let browserHostIndex = container.subviews.firstIndex(where: { $0 is WindowBrowserHostView }) else {
-                XCTFail("Expected both portal hosts in same container")
-                return
-            }
-
-            XCTAssertLessThan(
-                terminalHostIndex,
-                browserHostIndex,
-                message
-            )
-        }
-
-        assertHostOrder("Terminal portal host should start below browser portal host")
-
-        let anchor = NSView(frame: NSRect(x: 24, y: 24, width: 220, height: 150))
-        contentView.addSubview(anchor)
-        let hosted = GhosttySurfaceScrollView(
-            surfaceView: GhosttyNSView(frame: NSRect(x: 0, y: 0, width: 120, height: 80))
-        )
-        terminalPortal.bind(hostedView: hosted, to: anchor, visibleInUI: true)
-        terminalPortal.synchronizeHostedViewForAnchor(anchor)
-
-        assertHostOrder("Terminal portal bind/sync should not rise above the browser portal host")
-    }
-
     func testRegistryPrunesPortalWhenWindowCloses() {
         let baseline = TerminalWindowPortalRegistry.debugPortalCount()
         let window = NSWindow(

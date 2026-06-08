@@ -12,7 +12,7 @@ enum RemoteLoopbackProxyAlias {
     ]
 
     static func isLoopbackHost(_ host: String) -> Bool {
-        guard let normalizedHost = BrowserInsecureHTTPSettings.normalizeHost(host) else {
+        guard let normalizedHost = HostNormalization.normalizeHost(host) else {
             return false
         }
         return exactLoopbackHosts.contains(normalizedHost)
@@ -24,8 +24,8 @@ enum RemoteLoopbackProxyAlias {
     }
 
     static func localhostFamilyHost(forAliasHost host: String, aliasHost: String) -> String? {
-        guard let normalizedHost = BrowserInsecureHTTPSettings.normalizeHost(host),
-              let normalizedAlias = BrowserInsecureHTTPSettings.normalizeHost(aliasHost) else {
+        guard let normalizedHost = HostNormalization.normalizeHost(host),
+              let normalizedAlias = HostNormalization.normalizeHost(aliasHost) else {
             return nil
         }
         if normalizedHost == normalizedAlias {
@@ -40,7 +40,7 @@ enum RemoteLoopbackProxyAlias {
     }
 
     static func localhostFamilyAliasHost(forLoopbackHost host: String, aliasHost: String) -> String? {
-        guard let normalizedHost = BrowserInsecureHTTPSettings.normalizeHost(host) else { return nil }
+        guard let normalizedHost = HostNormalization.normalizeHost(host) else { return nil }
         if normalizedHost == canonicalLoopbackHost {
             return aliasHost
         }
@@ -51,4 +51,11 @@ enum RemoteLoopbackProxyAlias {
         guard !prefix.isEmpty else { return nil }
         return "\(prefix).\(aliasHost)"
     }
+}
+
+/// 远程 workspace 的本地端口代理端点（host:port）。原先随浏览器面板定义，浏览器删除后
+/// 下沉至此，仅供远程代理 broker 使用，会随 remote（Phase 8）一并删除。
+struct BrowserProxyEndpoint: Equatable {
+    let host: String
+    let port: Int
 }

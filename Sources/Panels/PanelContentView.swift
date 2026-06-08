@@ -50,17 +50,6 @@ struct PanelContentView: View {
                     onTriggerFlash: onTriggerFlash
                 )
             }
-        case .browser:
-            if let browserPanel = panel as? BrowserPanel {
-                BrowserPanelView(
-                    panel: browserPanel,
-                    paneId: paneId,
-                    isFocused: isFocused,
-                    isVisibleInUI: isVisibleInUI,
-                    portalPriority: portalPriority,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
         case .markdown:
             if let markdownPanel = panel as? MarkdownPanel {
                 MarkdownPanelView(
@@ -128,7 +117,7 @@ struct PanelContentView: View {
         switch panel.panelType {
         case .markdown, .filePreview, .rightSidebarTool, .project, .extensionBrowser:
             return true
-        case .terminal, .browser:
+        case .terminal:
             return false
         }
     }

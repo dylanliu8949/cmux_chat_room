@@ -360,9 +360,6 @@ final class CmuxSettingsFileStore {
         if let automationSection = root["automation"] as? [String: Any] {
             parseAutomationSection(automationSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
-        if let browserSection = root["browser"] as? [String: Any] {
-            parseBrowserSection(browserSection, sourcePath: sourcePath, snapshot: &snapshot)
-        }
         if let markdownSection = root["markdown"] as? [String: Any] {
             parseMarkdownSection(markdownSection, sourcePath: sourcePath, snapshot: &snapshot)
         }
@@ -681,12 +678,6 @@ final class CmuxSettingsFileStore {
         if let value = jsonBool(section["showPullRequests"]) { snapshot.managedUserDefaults["sidebarShowPullRequest"] = .bool(value) }
         if let value = jsonBool(section["watchGitStatus"]) { snapshot.managedUserDefaults[SidebarWorkspaceDetailDefaults.watchGitStatusKey] = .bool(value) }
         if let value = jsonBool(section["makePullRequestsClickable"]) { snapshot.managedUserDefaults[SidebarPullRequestClickabilitySettings.key] = .bool(value) }
-        if let value = jsonBool(section["openPullRequestLinksInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPullRequestLinksInCmuxBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["openPortLinksInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openSidebarPortLinksInCmuxBrowserKey] = .bool(value)
-        }
         if let value = jsonBool(section["showSSH"]) {
             snapshot.managedUserDefaults["sidebarShowSSH"] = .bool(value)
         }
@@ -914,93 +905,6 @@ final class CmuxSettingsFileStore {
                 return
             }
             snapshot.managedUserDefaults[AutomationSettings.portRangeKey] = .int(value)
-        }
-    }
-
-    private func parseBrowserSection(
-        _ section: [String: Any],
-        sourcePath: String,
-        snapshot: inout ResolvedSettingsSnapshot
-    ) {
-        if let raw = jsonString(section["defaultSearchEngine"]) {
-            guard let engine = BrowserSearchEngine(rawValue: raw) else {
-                logInvalid("browser.defaultSearchEngine", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[BrowserSearchSettings.searchEngineKey] = .string(engine.rawValue)
-        }
-        if let raw = jsonString(section["customSearchEngineName"]) {
-            snapshot.managedUserDefaults[BrowserSearchSettings.customSearchEngineNameKey] = .string(
-                BrowserSearchSettings.normalizedCustomSearchEngineName(raw)
-                    ?? BrowserSearchSettings.defaultCustomSearchEngineName
-            )
-        }
-        if let raw = jsonString(section["customSearchEngineURLTemplate"]) {
-            if BrowserSearchSettings.isValidSearchURLTemplate(raw) {
-                snapshot.managedUserDefaults[BrowserSearchSettings.customSearchEngineURLTemplateKey] = .string(raw)
-            } else {
-                logInvalid("browser.customSearchEngineURLTemplate", sourcePath: sourcePath)
-            }
-        }
-        if let value = jsonBool(section["showSearchSuggestions"]) {
-            snapshot.managedUserDefaults[BrowserSearchSettings.searchSuggestionsEnabledKey] = .bool(value)
-        }
-        if let raw = jsonString(section["theme"]) {
-            guard let mode = BrowserThemeMode(rawValue: raw) else {
-                logInvalid("browser.theme", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[BrowserThemeSettings.modeKey] = .string(mode.rawValue)
-        }
-        if let value = jsonBool(section["discardHiddenWebViews"]) {
-            snapshot.managedUserDefaults[BrowserHiddenWebViewDiscardPolicy.enabledKey] = .bool(value)
-        }
-        if let value = jsonDouble(section["hiddenWebViewDiscardDelaySeconds"]) {
-            guard let delay = BrowserHiddenWebViewDiscardPolicy.resolvedHiddenDelay(value) else {
-                logInvalid("browser.hiddenWebViewDiscardDelaySeconds", sourcePath: sourcePath)
-                return
-            }
-            snapshot.managedUserDefaults[BrowserHiddenWebViewDiscardPolicy.hiddenDelayKey] = .double(delay)
-        }
-        if let value = jsonBool(section["openTerminalLinksInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.openTerminalLinksInCmuxBrowserKey] = .bool(value)
-        }
-        if let value = jsonBool(section["interceptTerminalOpenCommandInCmuxBrowser"]) {
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.interceptTerminalOpenCommandInCmuxBrowserKey] = .bool(value)
-        }
-        if let values = jsonStringArray(section["hostsToOpenInEmbeddedBrowser"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.browserHostWhitelistKey] = .string(normalized.joined(separator: "\n"))
-        } else if section.keys.contains("hostsToOpenInEmbeddedBrowser") {
-            logInvalid("browser.hostsToOpenInEmbeddedBrowser", sourcePath: sourcePath)
-        }
-        if let values = jsonStringArray(section["urlsToAlwaysOpenExternally"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[BrowserLinkOpenSettings.browserExternalOpenPatternsKey] = .string(
-                normalized.joined(separator: "\n")
-            )
-        } else if section.keys.contains("urlsToAlwaysOpenExternally") {
-            logInvalid("browser.urlsToAlwaysOpenExternally", sourcePath: sourcePath)
-        }
-        if let values = jsonStringArray(section["insecureHttpHostsAllowedInEmbeddedBrowser"]) {
-            let normalized = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            snapshot.managedUserDefaults[BrowserInsecureHTTPSettings.allowlistKey] = .string(
-                normalized.joined(separator: "\n")
-            )
-        } else if section.keys.contains("insecureHttpHostsAllowedInEmbeddedBrowser") {
-            logInvalid("browser.insecureHttpHostsAllowedInEmbeddedBrowser", sourcePath: sourcePath)
-        }
-        if let value = jsonBool(section["showImportHintOnBlankTabs"]) {
-            snapshot.managedUserDefaults[BrowserImportHintSettings.showOnBlankTabsKey] = .bool(value)
-        }
-        if let raw = jsonString(section["reactGrabVersion"]) {
-            snapshot.managedUserDefaults[ReactGrabSettings.versionKey] = .string(raw)
         }
     }
 

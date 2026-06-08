@@ -701,8 +701,6 @@ final class ClosedItemHistoryStore: ObservableObject {
         switch snapshot.type {
         case .terminal:
             return String(localized: "menu.history.recentlyClosed.panel.terminal", defaultValue: "Terminal")
-        case .browser:
-            return String(localized: "menu.history.recentlyClosed.panel.browser", defaultValue: "Browser")
         case .markdown:
             return String(localized: "menu.history.recentlyClosed.panel.markdown", defaultValue: "Markdown")
         case .filePreview:

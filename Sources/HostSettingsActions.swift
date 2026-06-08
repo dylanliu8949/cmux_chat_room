@@ -66,7 +66,6 @@ final class HostSettingsActions: SettingsHostActions {
     }
 
     func clearBrowserHistory() {
-        BrowserHistoryStore.shared.clearHistory()
     }
 
     func openConfigInExternalEditor() {
@@ -101,7 +100,6 @@ final class HostSettingsActions: SettingsHostActions {
     }
 
     func openBrowserImportFlow() {
-        BrowserDataImportCoordinator.shared.presentImportDialog()
     }
 
     func requestNotificationAuthorization() {
@@ -153,8 +151,7 @@ final class HostSettingsActions: SettingsHostActions {
     }
 
     func browserHistoryEntryCount() -> Int? {
-        guard BrowserHistoryStore.shared.isLoaded else { return nil }
-        return BrowserHistoryStore.shared.entries.count
+        return nil
     }
 
     func sidebarFontSize() -> SettingsFontSize {

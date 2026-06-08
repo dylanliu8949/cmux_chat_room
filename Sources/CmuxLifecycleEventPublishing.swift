@@ -206,8 +206,6 @@ extension Workspace {
         switch panel.panelType {
         case .terminal:
             return "terminal"
-        case .browser:
-            return "browser"
         case .markdown:
             return "markdown"
         case .filePreview:

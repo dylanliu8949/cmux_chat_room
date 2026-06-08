@@ -472,9 +472,6 @@ final class MainWindowFocusController {
             if terminalFocusRequest(for: responder) != nil {
                 return .mainPanelFind
             }
-            if selectedFocusedPanelIsBrowser() {
-                return .mainPanelFind
-            }
             if case .rightSidebar(let mode) = intent {
                 return findShortcutTarget(forRightSidebarMode: mode)
             }
@@ -517,10 +514,6 @@ final class MainWindowFocusController {
         mode == .files ? .rightSidebarFileSearch : .none
     }
 
-    private func selectedFocusedPanelIsBrowser() -> Bool {
-        selectedFocusedBrowserPanelRequest() != nil
-    }
-
     private struct FocusedPanelRequest {
         let workspaceId: UUID
         let panelId: UUID
@@ -545,19 +538,6 @@ final class MainWindowFocusController {
             return FocusedPanelRequest(workspaceId: workspace.id, panelId: panelId)
         }
         return nil
-    }
-
-    private func selectedFocusedBrowserPanelRequest() -> FocusedPanelRequest? {
-        guard let tabManager,
-              let workspace = tabManager.selectedWorkspace,
-              let panelId = workspace.focusedPanelId,
-              let panel = workspace.panels[panelId] else {
-            return nil
-        }
-        guard panel is BrowserPanel else {
-            return nil
-        }
-        return FocusedPanelRequest(workspaceId: workspace.id, panelId: panelId)
     }
 
     private func focusTerminalOrReleaseRightSidebarFocus(clearUnavailableIntent: Bool) -> Bool {

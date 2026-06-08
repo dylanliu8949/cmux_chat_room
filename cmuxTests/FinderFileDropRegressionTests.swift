@@ -427,8 +427,8 @@ final class FinderFileDropRegressionTests: XCTestCase {
     func testSuccessfulPanelTextDropFocusesDestinationPanel() {
         let workspace = Workspace(title: "Tests")
         guard let terminalId = workspace.focusedPanelId,
-              let browserPanel = workspace.newBrowserSplit(from: terminalId, orientation: .horizontal) else {
-            XCTFail("Expected workspace with terminal and browser split")
+              let destinationPanel = workspace.newTerminalSplit(from: terminalId, orientation: .horizontal) else {
+            XCTFail("Expected workspace with terminal and split destination")
             return
         }
 
@@ -439,8 +439,8 @@ final class FinderFileDropRegressionTests: XCTestCase {
         XCTAssertTrue(
             FileDropTextDropController.performPanelTextDrop(
                 workspace: workspace,
-                panelId: browserPanel.id,
-                focusIntent: .browser(.webView),
+                panelId: destinationPanel.id,
+                focusIntent: .panel,
                 window: nil,
                 insert: {
                     didInsert = true
@@ -450,7 +450,7 @@ final class FinderFileDropRegressionTests: XCTestCase {
         )
 
         XCTAssertTrue(didInsert)
-        XCTAssertEqual(workspace.focusedPanelId, browserPanel.id)
+        XCTAssertEqual(workspace.focusedPanelId, destinationPanel.id)
     }
 
     func testTerminalTextDropFocusResolvesGhosttySurfaceIdToPanelId() {
@@ -473,8 +473,8 @@ final class FinderFileDropRegressionTests: XCTestCase {
     func testFailedPanelTextDropDoesNotChangeFocusedPanel() {
         let workspace = Workspace(title: "Tests")
         guard let terminalId = workspace.focusedPanelId,
-              let browserPanel = workspace.newBrowserSplit(from: terminalId, orientation: .horizontal) else {
-            XCTFail("Expected workspace with terminal and browser split")
+              let destinationPanel = workspace.newTerminalSplit(from: terminalId, orientation: .horizontal) else {
+            XCTFail("Expected workspace with terminal and split destination")
             return
         }
 
@@ -483,8 +483,8 @@ final class FinderFileDropRegressionTests: XCTestCase {
         XCTAssertFalse(
             FileDropTextDropController.performPanelTextDrop(
                 workspace: workspace,
-                panelId: browserPanel.id,
-                focusIntent: .browser(.webView),
+                panelId: destinationPanel.id,
+                focusIntent: .panel,
                 window: nil,
                 insert: {
                     false

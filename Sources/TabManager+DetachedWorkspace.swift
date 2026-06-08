@@ -76,7 +76,6 @@ extension TabManager {
             if title != nil {
                 newWorkspace.setCustomTitle(title)
             }
-            wireClosedBrowserTracking(for: newWorkspace)
 
             var updatedTabs = tabs
             let insertIndex = Self.clampedDetachedWorkspaceInsertIndex(plannedInsertIndex, workspaces: updatedTabs)
