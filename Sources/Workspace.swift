@@ -301,11 +301,20 @@ extension Workspace {
         }
 
         let panelSnapshotsById = Dictionary(uniqueKeysWithValues: snapshot.panels.map { ($0.id, $0) })
+        // 持久化层宽松解码会丢弃已删 PanelType 的 panel（Phase 2+），其 id 仍残留在 layout 中。
+        // 用幸存集合净化 layout：剪掉指向已丢 panel 的 leaf 并坍缩单边分屏，避免恢复出空白 pane
+        // 或单边坏分屏。净化为空（workspace 唯一的 panel 已被丢弃）时不重建任何 leaf——保留
+        // init 播种的默认终端作为该 workspace 的兜底，不留空白工作区。
+        let sanitizedLayout = prunedSessionLayoutSnapshot(
+            snapshot.layout,
+            keeping: Set(panelSnapshotsById.keys)
+        )
         let leafEntries: [SessionPaneRestoreEntry] = {
+            guard let sanitizedLayout else { return [] }
             let previousValue = suppressRemoteTerminalStartupForSessionRestoreScaffold
             suppressRemoteTerminalStartupForSessionRestoreScaffold = true
             defer { suppressRemoteTerminalStartupForSessionRestoreScaffold = previousValue }
-            return restoreSessionLayout(snapshot.layout)
+            return restoreSessionLayout(sanitizedLayout)
         }()
         var oldToNewPanelIds: [UUID: UUID] = [:]
 

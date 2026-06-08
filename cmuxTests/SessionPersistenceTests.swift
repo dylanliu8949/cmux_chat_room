@@ -47,6 +47,184 @@ final class SessionPersistenceTests: XCTestCase {
         XCTAssertEqual(restored.panelTitle(panelId: restoredPanelId), "Readme")
     }
 
+    // MARK: - 持久化边界宽松解码（Phase 0 安全网）
+
+    /// 一个含未支持 `type` 的 panel 被丢弃，同一 workspace 的其余 panel 正常解出、不抛错。
+    func testLossyDecodeDropsUnsupportedPanelTypeKeepingSiblings() throws {
+        let keepId = UUID()
+        let dropId = UUID()
+        let workspace = SessionWorkspaceSnapshot(
+            processTitle: "Test",
+            isPinned: false,
+            currentDirectory: "/tmp",
+            focusedPanelId: keepId,
+            layout: .pane(SessionPaneLayoutSnapshot(panelIds: [keepId, dropId], selectedPanelId: keepId)),
+            panels: [makeLossyTestPanel(id: keepId, type: .terminal), makeLossyTestPanel(id: dropId, type: .terminal)],
+            statusEntries: [],
+            logEntries: [],
+            progress: nil,
+            gitBranch: nil
+        )
+        let mutated = try injectingPanelType("__removed_panel_type__", forPanelId: dropId, into: makeLossyAppSnapshot(workspaces: [workspace]))
+
+        let decoded = try JSONDecoder().decode(AppSessionSnapshot.self, from: mutated)
+
+        let panels = try XCTUnwrap(decoded.windows.first?.tabManager.workspaces.first?.panels)
+        XCTAssertEqual(panels.map(\.id), [keepId])
+    }
+
+    /// workspace 仅有的 panel 是未支持类型时，整个会话仍解码成功（window 不丢），该 workspace 解出空 panel 集。
+    func testLossyDecodeKeepsWindowWhenWorkspaceLosesItsOnlyPanel() throws {
+        let dropId = UUID()
+        let workspace = SessionWorkspaceSnapshot(
+            processTitle: "Test",
+            isPinned: false,
+            currentDirectory: "/tmp",
+            focusedPanelId: dropId,
+            layout: .pane(SessionPaneLayoutSnapshot(panelIds: [dropId], selectedPanelId: dropId)),
+            panels: [makeLossyTestPanel(id: dropId, type: .terminal)],
+            statusEntries: [],
+            logEntries: [],
+            progress: nil,
+            gitBranch: nil
+        )
+        let mutated = try injectingPanelType("__removed_panel_type__", forPanelId: dropId, into: makeLossyAppSnapshot(workspaces: [workspace]))
+
+        let decoded = try JSONDecoder().decode(AppSessionSnapshot.self, from: mutated)
+
+        XCTAssertEqual(decoded.windows.count, 1)
+        XCTAssertEqual(decoded.windows.first?.tabManager.workspaces.first?.panels.isEmpty, true)
+    }
+
+    /// 丢弃中间 panel 后，幸存 panel 的相对顺序保持不变。
+    func testLossyDecodePreservesSurvivingPanelOrder() throws {
+        let first = UUID()
+        let middle = UUID()
+        let last = UUID()
+        let workspace = SessionWorkspaceSnapshot(
+            processTitle: "Test",
+            isPinned: false,
+            currentDirectory: "/tmp",
+            focusedPanelId: first,
+            layout: .pane(SessionPaneLayoutSnapshot(panelIds: [first, middle, last], selectedPanelId: first)),
+            panels: [
+                makeLossyTestPanel(id: first, type: .terminal),
+                makeLossyTestPanel(id: middle, type: .terminal),
+                makeLossyTestPanel(id: last, type: .terminal),
+            ],
+            statusEntries: [],
+            logEntries: [],
+            progress: nil,
+            gitBranch: nil
+        )
+        let mutated = try injectingPanelType("__removed_panel_type__", forPanelId: middle, into: makeLossyAppSnapshot(workspaces: [workspace]))
+
+        let decoded = try JSONDecoder().decode(AppSessionSnapshot.self, from: mutated)
+
+        let panels = try XCTUnwrap(decoded.windows.first?.tabManager.workspaces.first?.panels)
+        XCTAssertEqual(panels.map(\.id), [first, last])
+    }
+
+    /// markdown 是保留类型——不在任何丢弃路径中，正常解出。
+    func testLossyDecodeKeepsMarkdownPanel() throws {
+        let markdownId = UUID()
+        let workspace = SessionWorkspaceSnapshot(
+            processTitle: "Test",
+            isPinned: false,
+            currentDirectory: "/tmp",
+            focusedPanelId: markdownId,
+            layout: .pane(SessionPaneLayoutSnapshot(panelIds: [markdownId], selectedPanelId: markdownId)),
+            panels: [makeLossyTestPanel(id: markdownId, type: .markdown)],
+            statusEntries: [],
+            logEntries: [],
+            progress: nil,
+            gitBranch: nil
+        )
+        let data = try JSONEncoder().encode(makeLossyAppSnapshot(workspaces: [workspace]))
+
+        let decoded = try JSONDecoder().decode(AppSessionSnapshot.self, from: data)
+
+        let panels = try XCTUnwrap(decoded.windows.first?.tabManager.workspaces.first?.panels)
+        XCTAssertEqual(panels.map(\.id), [markdownId])
+        XCTAssertEqual(panels.first?.type, .markdown)
+    }
+
+    /// 恢复契约：分屏一侧的 panel 已被丢弃时，layout 坍缩为单 pane——不残留指向已丢 panel 的空 pane，
+    /// 也不为已丢的一侧凭空新建一个游离终端（坍缩前于 restore 完成，故只恢复出幸存的那一个 panel）。
+    @MainActor
+    func testRestoreCollapsesSplitReferencingDroppedPanel() throws {
+        let source = Workspace()
+        let realPanelId = try XCTUnwrap(source.focusedPanelId)
+        var snapshot = source.sessionSnapshot(includeScrollback: false)
+
+        let droppedId = UUID()
+        snapshot.layout = .split(
+            SessionSplitLayoutSnapshot(
+                orientation: .horizontal,
+                dividerPosition: 0.5,
+                first: .pane(SessionPaneLayoutSnapshot(panelIds: [realPanelId], selectedPanelId: realPanelId)),
+                second: .pane(SessionPaneLayoutSnapshot(panelIds: [droppedId], selectedPanelId: droppedId))
+            )
+        )
+
+        let restored = Workspace()
+        restored.restoreSessionSnapshot(snapshot)
+
+        XCTAssertEqual(restored.bonsplitController.allPaneIds.count, 1)
+        XCTAssertEqual(restored.panels.count, 1)
+        let focused = try XCTUnwrap(restored.focusedPanelId)
+        XCTAssertNotNil(restored.panels[focused])
+    }
+
+    private func makeLossyTestPanel(id: UUID, type: PanelType) -> SessionPanelSnapshot {
+        SessionPanelSnapshot(
+            id: id,
+            type: type,
+            isPinned: false,
+            isManuallyUnread: false,
+            listeningPorts: []
+        )
+    }
+
+    private func makeLossyAppSnapshot(workspaces: [SessionWorkspaceSnapshot]) -> AppSessionSnapshot {
+        let tabManager = SessionTabManagerSnapshot(selectedWorkspaceIndex: 0, workspaces: workspaces)
+        let window = SessionWindowSnapshot(
+            frame: SessionRectSnapshot(x: 0, y: 0, width: 800, height: 600),
+            tabManager: tabManager,
+            sidebar: SessionSidebarSnapshot(isVisible: true, selection: .tabs, width: 240)
+        )
+        return AppSessionSnapshot(
+            version: SessionSnapshotSchema.currentVersion,
+            createdAt: 0,
+            windows: [window]
+        )
+    }
+
+    /// 把已编码会话 JSON 中某个 panel 的 `type` 改写为 `rawType`，模拟「该 PanelType case 已删除」
+    /// 后旧快照的样子（编码侧无法直接产出未知枚举值，故在 JSON 层注入）。
+    private func injectingPanelType(_ rawType: String, forPanelId panelId: UUID, into snapshot: AppSessionSnapshot) throws -> Data {
+        let data = try JSONEncoder().encode(snapshot)
+        let object = try JSONSerialization.jsonObject(with: data)
+        var root = try XCTUnwrap(object as? [String: Any])
+        var windows = try XCTUnwrap(root["windows"] as? [[String: Any]])
+        let target = panelId.uuidString
+        for windowIndex in windows.indices {
+            guard var tabManager = windows[windowIndex]["tabManager"] as? [String: Any],
+                  var workspaces = tabManager["workspaces"] as? [[String: Any]] else { continue }
+            for workspaceIndex in workspaces.indices {
+                guard var panels = workspaces[workspaceIndex]["panels"] as? [[String: Any]] else { continue }
+                for panelIndex in panels.indices where (panels[panelIndex]["id"] as? String) == target {
+                    panels[panelIndex]["type"] = rawType
+                }
+                workspaces[workspaceIndex]["panels"] = panels
+            }
+            tabManager["workspaces"] = workspaces
+            windows[windowIndex]["tabManager"] = tabManager
+        }
+        root["windows"] = windows
+        return try JSONSerialization.data(withJSONObject: root)
+    }
+
     @MainActor
     func testSessionSnapshotSkipsTransientRemoteListeningPorts() throws {
         let workspace = Workspace()

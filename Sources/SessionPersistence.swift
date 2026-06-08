@@ -1784,6 +1784,61 @@ indirect enum SessionWorkspaceLayoutSnapshot: Codable, Sendable {
     }
 }
 
+/// 在持久化边界对 `SessionWorkspaceSnapshot.panels` 做逐元素宽松解码：当某个 panel 的
+/// `type` 是已删除的 `PanelType`（届时 `PanelType.init(from:)` 抛错）时，丢弃该单个 panel
+/// 而非让整个 workspace、进而整个会话解码失败。被丢弃 panel 残留在 layout/focus 中的 id
+/// 由 `Workspace.restoreSessionSnapshot` 用幸存集合净化。容错现在装好，真正的丢弃在对应
+/// `PanelType` case 被删除的 phase（browser/filePreview/project/remote 等）才发生。
+@propertyWrapper
+struct LossyPanelArray: Codable, Sendable {
+    var wrappedValue: [SessionPanelSnapshot]
+
+    init(wrappedValue: [SessionPanelSnapshot]) {
+        self.wrappedValue = wrappedValue
+    }
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var panels: [SessionPanelSnapshot] = []
+        if let count = container.count {
+            panels.reserveCapacity(count)
+        }
+        while !container.isAtEnd {
+            // `FailablePanelSnapshot.init` 自身永不抛错，故无论该元素能否解出，unkeyed
+            // container 都会前进一个位置，不会卡死或与后续元素错位。
+            if let panel = try container.decode(FailablePanelSnapshot.self).panel {
+                panels.append(panel)
+            }
+        }
+        wrappedValue = panels
+    }
+
+    func encode(to encoder: Encoder) throws {
+        try wrappedValue.encode(to: encoder)
+    }
+}
+
+private struct FailablePanelSnapshot: Decodable {
+    let panel: SessionPanelSnapshot?
+
+    init(from decoder: Decoder) throws {
+        do {
+            panel = try SessionPanelSnapshot(from: decoder)
+        } catch {
+            panel = nil
+            #if DEBUG
+            let rawType = (try? decoder.container(keyedBy: PanelTypePeekCodingKey.self))
+                .flatMap { try? $0.decode(String.self, forKey: .type) } ?? "?"
+            cmuxDebugLog("session restore: dropping panel with unsupported type \"\(rawType)\"")
+            #endif
+        }
+    }
+}
+
+private enum PanelTypePeekCodingKey: String, CodingKey {
+    case type
+}
+
 struct SessionWorkspaceSnapshot: Codable, Sendable {
     /// Original workspace ID captured when the snapshot comes from a live workspace.
     /// Restore uses this to remap closed-panel history onto the new workspace IDs;
@@ -1802,7 +1857,7 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var currentDirectory: String
     var focusedPanelId: UUID?
     var layout: SessionWorkspaceLayoutSnapshot
-    var panels: [SessionPanelSnapshot]
+    @LossyPanelArray var panels: [SessionPanelSnapshot]
     var statusEntries: [SessionStatusEntrySnapshot]
     var logEntries: [SessionLogEntrySnapshot]
     var progress: SessionProgressSnapshot?
