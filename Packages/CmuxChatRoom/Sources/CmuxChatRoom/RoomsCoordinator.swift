@@ -124,14 +124,12 @@ public final class RoomsCoordinator {
         appendToWindow(exchange, in: room)
 
         for t in targets {
-            let state = await lifecycle.state(of: t.agentID)
-            if state == .needsInput {
-                heldForNeedsInput[t.agentID, default: []].append(
-                    HeldPrompt(exchangeID: exchangeID, roomID: room, agent: t.agentID, body: body))
-                diag("hold agent=\(t.agentID.raw.uuidString.prefix(8)) exchange=\(exchangeID.raw.uuidString.prefix(8)) (needsInput)")
-            } else {
-                await injectAndBind(body, exchange: exchangeID, room: room, agent: t.agentID)
-            }
+            // Always inject. An agent reporting `needsInput` is *waiting for input* — injecting the
+            // prompt IS that input, and doing so starts its turn (→ running → Stop → reply routes back).
+            // The previous `needsInput` → hold branch dead-locked: the only transition out of
+            // `needsInput` is receiving the prompt we were withholding, so a Claude tab that sat at its
+            // prompt stayed "needs input" forever and every @mention to it was silently dropped.
+            await injectAndBind(body, exchange: exchangeID, room: room, agent: t.agentID)
         }
     }
 
