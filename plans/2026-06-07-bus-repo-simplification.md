@@ -80,10 +80,11 @@
 | 子系统 | 文件 / 包 | 体量 | 耦合点 / 改动 | 级别 |
 |---|---|---|---|---|
 | **Web 云端前后端** | `web/`（Next.js + docs + Postgres/Stack/E2B/Freestyle + `web/public` 41M） | 52 MB / ~65k LOC | app 完全不 import；`web/messages/*.json` 仅被 CLI 文档以 GitHub URL 引用 | ✅ |
-| **独立工具 / 原型** | `diff-viewer/`、`experiments/`、`Prototypes/`、`dogfood/` | — | 未编入 app target | ✅ |
+| **独立工具 / 原型** | `experiments/`、`Prototypes/`、`dogfood/` | — | 未编入 app target、无 CI 引用 | ✅ |
+| **diff-viewer** | `diff-viewer/` + `Resources/markdown-viewer/diff-viewer-app`（构建产物） | — | ⚠️ **非纯独立**：CI 有专用 job（`ci.yml:140` `build-diff-viewer-app.sh --check`、`:146-158` typecheck/test/lint）、`Resources/markdown-viewer/` 内嵌其构建产物——与 markdown viewer 同生命周期。→ **移至 Phase 3**（连 CI job + `scripts/build-diff-viewer-app.sh`/`check-diff-viewer-react-compiler.mjs` 一并删） | ⚠️ |
 | **`design/`** | `design/`（980K） | — | 🔍 可能是 AppIcon 源——**保留待核实**，本计划不删；如核实非源再单独 verify-then-delete | 保留 |
 | **扩展样例（非独立）** | `Examples/`（含 `CmuxExtensionSidebarExamples`） | — | ⚠️ 审查指正：被 `ContentView.swift:7` import + pbxproj 链接——**非独立**，随扩展平台在 **Phase 5** 删 | ⚠️ |
-| **遗留 python 测试** | `tests/`（被 `tests_v2/` 取代） | — | — | ✅ |
+| **遗留 python 测试（部分）** | `tests/` 中的 feature socket 测试（被 `tests_v2/` 取代） | — | ⚠️ **不可整目录删**：`tests/` 还含**活跃 CI 守卫脚本** `tests/test_ci_*.sh/.py`（`ci.yml:26-56` 直接跑、`run-tests-v1.sh:224` 迭代 `tests/test_*.py`）——这些守的是构建/发布流水线，与被删 feature 无关。→ **从 Phase 1 移除**：仅随各 feature 删除时移走其专属 socket 测试，`test_ci_*` 基础设施守卫**全部保留** | ⚠️ |
 | **AppleScript 自动化面** | `Sources/AppleScriptSupport.swift` + `Resources/cmux.sdef` + Info.plist 脚本键 | 714 LOC | ⚠️ 审查指正：**非死代码**——编入 app target（pbxproj:35/1737）、经 `.sdef` 由 ObjC runtime 实例化（无 Swift import ≠ dead）、`Info.plist:127-130` 声明。→ **Phase 1A** | ⚠️ |
 | **iOS / 移动端（12 包）** | `ios/`、12 × `Packages/CmuxMobile*`、`scripts/mobile-*` | ~2.4 MB / ~20k LOC，165 文件 | app target 不 link 这 12 个包 | ✅ |
 | **配对 Mac 移动主机** | `Packages/CMUXMobileCore`、`Sources/Mobile/` | ~3k LOC + 120K | **app 链接**：`TerminalController`/`AppDelegate`/`GhosttyTerminalView` 经 `CMUXMobileCore` 流式推送终端字节；需先抽出共享值类型再删（~150–200 LOC，3 文件） | ⚠️🔶 |
@@ -91,7 +92,7 @@
 | **应用内浏览器** | `Sources/Panels/Browser*`、`CmuxWebView*`、`Sources/Find/Browser*`、浏览器 CLI verbs、10 测试 | **~33–40k LOC，23 文件** | 删 `PanelType.browser` + ~10 处 switch（Workspace/PanelContentView/ContentView/SessionPersistence/快捷键）；浏览器是正交 Panel，**app 内最大单笔 LOC 收益** | ⚠️ |
 | **Feed 面板 UI（保留管道）** | `Sources/Feed/FeedPanelView*`、`FeedPanelViewModel`、Feed 调试窗 | ~5k LOC | **保留** `FeedCoordinator` 核心 + `CMUXWorkstream`（聊天桥读原始事件）；只删面板视图 | ⚠️ |
 | **非终端 Panel 类型** | `Sources/Panels/Markdown*`、`FilePreview*`、`Project*`、`Packages/CMUXProjectModel`、`Resources/markdown-viewer/` | — | 删 `PanelType.markdown/.filePreview/.project` 及 Workspace 创建路径 | ⚠️ |
-| **旧右侧栏工具** | `Sources/RightSidebar*`、`Sources/FileExplorer*`、`Sources/Search/`、`Sources/Find/` 大部分、`DockPanelView`/`DockEmptyView` | — | 右侧栏旧 modes（files/find/sessions/feed/dock）非聊天室 UI；**保留终端查找 SurfaceSearchOverlay** | ⚠️🔶 |
+| **旧右侧栏工具** | `Sources/RightSidebar*`、`Sources/FileExplorer*`、`Sources/Search/`（全局搜索；browser 分支在 Phase 2 先剥）、`DockPanelView`/`DockEmptyView` | — | 右侧栏旧 modes（files/find/sessions/feed/dock）非聊天室 UI；**`Sources/Find/` 不在此列——browser-find 两文件在 Phase 2 删，终端查找三文件（`SurfaceSearchOverlay`/`TerminalSearchOverlayHostingView`/`FindTextFieldSupport`）保留** | ⚠️🔶 |
 | **未用 agent 集成（hook 安装器）** | `Packages/CMUXAgentLaunch/.../{RovoDevHookConfig,HermesAgentHookConfig}.swift`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` **+ 各自 `AgentHookDef` 行 + install/uninstall dispatch** | — | **全有全无**（见 Phase 7）：删 config/extension 文件**必须同删** `AgentHookDef` 的 rovodev/hermes-agent/amp 行 + `cmux.swift` 的 install/uninstall dispatch（`:26241/26245/26602/26606`）+ `cmux hooks setup/uninstall <name>` 入口，否则 `cmux.swift` 引用已删符号、无法编译。**保留（非本行，勿删）**：`CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（会话索引）、`RestorableAgentKind`(18 cases)、`SessionAgentPresentation`/`SessionIndexStore/View` 的 rovo/hermes 分支 | ⚠️ |
 | **OMP 扩展（claude wrapper？）** | `CLI/CMUXCLI+OmpExtension.swift` | — | 🔍 **冲突**：探针 1 列为可删，但设计文档 §2 称「Claude 经 OMP wrapper 运行」、本 fork claude 启动用 `bin/claude` wrapper 注入 `--session-id/--settings`——**删前必须确认 claude hook 路径不依赖 OMP** | 🔍 |
 | **`cmux top` 监控** | `cmux top` 命令 / UI；`Sources/CmuxTop*` | — | 🔍 **冲突**：命令/UI 可删，但 `CmuxTopProcess*` 进程枚举被 `RestorableAgentSession` + vault scanner 复用——**只删命令/UI，保留枚举** | 🔍 |
@@ -169,7 +170,7 @@ _（空）本计划 D1–D10 已全部决策并归档于下方「已归档的决
    - **已选择**：新名 **Bus**（取自并行编程 *message bus*）。
 
 2. **删除候选的「零风险 Tier-1」基线**（探针一致、独立目录、不被 app target 链接）
-   - **已选择**：Phase 1 直接删（**审查修正后**，仅真正独立项）：`web/`、`ios/`、12 × `Packages/CmuxMobile*`（不含 `CMUXMobileCore`）、`diff-viewer/`、`experiments/`、`Prototypes/`、`dogfood/`、遗留 `tests/`、`scripts/mobile-*`。**移出 Phase 1**：`Examples/`→Phase 5（被 ContentView import）、`AppleScriptSupport.swift`→Phase 1A（pbxproj 链接 + 活跃 sdef）、`cmux claude-teams`→Phase 1B/保留（接在 resume/fork argv 脊柱上）。
+   - **已选择**：Phase 1 直接删（**审查修正后**，仅真正独立项）：`web/`、`ios/`、12 × `Packages/CmuxMobile*`（不含 `CMUXMobileCore`）、`experiments/`、`Prototypes/`、`dogfood/`、`scripts/mobile-*`。**移出 Phase 1**：`Examples/`→Phase 5（被 ContentView import）、`AppleScriptSupport.swift`→Phase 1A（pbxproj 链接 + 活跃 sdef）、`cmux claude-teams`→Phase 1B/保留（接在 resume/fork argv 脊柱上）、`diff-viewer/`→Phase 3（CI job + markdown-viewer 内嵌产物）、`tests/`→不整删（含活跃 `test_ci_*` CI 守卫，仅按 feature 移走专属 socket 测试）。
 
 3. **不先删的内部**
    - **已选择**：晚删——先断入口编译通过，待 roomID 侧边栏稳定后再收缩 `WorkspaceGroup` 与 `Workspace`/`TabManager`/`TerminalController` 内部。
@@ -268,7 +269,10 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 > 审查修正：原稿把 `Examples/`、`AppleScriptSupport.swift`、`claude-teams` 误列为零风险——它们**都被保留代码链接/依赖**，已从本 phase 移出（见下）。
 
-- [ ] 🗑️ `web/`、`ios/`、`diff-viewer/`、`experiments/`、`Prototypes/`、`dogfood/`、遗留 `tests/`（python，已被 `tests_v2/` 取代）、`scripts/mobile-*`
+- [ ] 🗑️ `web/`、`ios/`、`experiments/`、`Prototypes/`、`dogfood/`、`scripts/mobile-*`
+- [ ] **不在本 phase 删（审查指出 CI 耦合）**：
+  - `diff-viewer/` → **移至 Phase 3**：CI 有专用 job（`ci.yml:140-158`）、`Resources/markdown-viewer/diff-viewer-app` 内嵌其产物，须与 markdown viewer + CI job 同删。
+  - `tests/`（整目录）→ **不删**：含活跃 CI 守卫 `tests/test_ci_*.sh/.py`（`ci.yml:26-56`/`run-tests-v1.sh:224`）；仅随各 feature 删除时移走其专属 socket 测试，`test_ci_*` 守卫保留。
 - [ ] 🗑️ 12 个 iOS-only 包：`Packages/CmuxMobile{Camera,Diagnostics,PairedMac,RPC,Shell,ShellModel,ShellUI,Support,Terminal,TerminalKit,Transport,Workspace}`（app target 不 link；**保留** `CMUXMobileCore` 至 Phase 6）
 - [ ] **修改/删除**：`.github/workflows/test-ios.yml`（`paths:` 监听 `ios/**`/`CMUXMobileCore/**`/`CMUXAuthCore/**`，`:7`）**和** `.github/workflows/ios-testflight.yml`（`:13` 触发于 `ios/**`、`Packages/**`，`:188` 调 `./ios/scripts/upload-testflight.sh`，审查指出）——删 `ios/`/mobile 包后二者失参；**与删除同 PR**删除或 no-op，避免 scheduled/manual/main CI 红。
 - [ ] **不在本 phase 删（审查指出耦合，已移走）**：
@@ -287,7 +291,10 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 ### Phase 2 — 应用内浏览器垂直切片（app 内最大 LOC 收益）
 
-- [ ] 🗑️ `Sources/Panels/Browser*.swift`（~23 文件：BrowserPanel(+View/+扩展)、BrowserWindow*、BrowserScreenshot*、BrowserOmnibar*、BrowserWebAuthn*、BrowserAutomation、BrowserMedia*、BrowserHidden*、BrowserChrome*）、`Sources/Panels/CmuxWebView*.swift`、`Sources/BrowserPaneDropTargetView.swift`、`Sources/Find/Browser{SearchOverlay,FindJavaScript}.swift`、`cmuxTests/Browser*Tests.swift`、`cmuxUITests/Browser*.swift`
+- [ ] 🗑️ `Sources/Panels/Browser*.swift`（~23 文件：BrowserPanel(+View/+扩展)、BrowserWindow*、BrowserScreenshot*、BrowserOmnibar*、BrowserWebAuthn*、BrowserAutomation、BrowserMedia*、BrowserHidden*、BrowserChrome*）、`Sources/Panels/CmuxWebView*.swift`、`Sources/BrowserPaneDropTargetView.swift`、`Sources/Find/Browser{SearchOverlay,FindJavaScript}.swift`（**仅这两个 browser-find 文件**——`Sources/Find/` 其余三个是终端查找，保留至 Phase 4 仍不删，见下）、`cmuxTests/Browser*Tests.swift`、`cmuxUITests/Browser*.swift`、`tests/` 中 browser 专属 socket 测试（feature 专属，随浏览器删；非 `test_ci_*` 守卫）
+- [ ] **修改（审查指出：删 BrowserPanel 会断 Phase 2 编译，须同 PR 清理引用 BrowserPanel 的全局搜索/查找支持）**：
+  - `Sources/Search/GlobalSearchCoordinator.swift`（`:104` `captureBrowserPanel`）、`Sources/Search/GlobalSearchPanelCaptureManager.swift`（`:39/:44/:204` `as? BrowserPanel`/`captureBrowserPanel`/`indexBrowserPanel`）、`Sources/Search/AppDelegate+GlobalSearch.swift`（`:186/:194` `browserPanel(for:)`/`applyBrowserInlineSearch`）—— **剥除 browser 分支**使其在 BrowserPanel 删除后仍编译（`Sources/Search/` 整体在 Phase 4 删，但本 phase 必须先去 browser 耦合）。
+  - `Sources/Find/FindTextFieldSupport.swift`（`:104` `workspace.browserPanel(for:)?.searchState` fallback）—— 仅删 browser fallback 分支，**保留**该文件（终端查找依赖它，见 Phase 4）。
 - [ ] **修改**：`Sources/Panels/Panel.swift` — 移除 `PanelType.browser`（line 8）与 `PanelFocusIntent.browser(BrowserPanelFocusIntent)`（line 72）
 - [ ] **修改**：`Sources/Workspace.swift` — 删 `newBrowserSurface()`/`newBrowserSplit()`/`configureBrowserPanel()`；移除 `createPanel()`/`sessionSnapshot()`/`surfaceKind(for:)` 中的 `case .browser:`（5 处）；`remoteProxyEndpoint`（浏览器专用）标记延至 Phase 8 删（remote 一并）
 - [ ] **修改**：`Sources/Panels/PanelContentView.swift` — 移除 browser 视图分支
@@ -300,7 +307,8 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 ### Phase 3 — 其余非终端 Panel 类型（D6①）
 
-- [ ] 🗑️ `Sources/Panels/Markdown*.swift`、`Sources/Panels/FilePreview*.swift`、`Sources/Panels/Project*.swift`、`Resources/markdown-viewer/`、`Packages/CMUXProjectModel`
+- [ ] 🗑️ `Sources/Panels/Markdown*.swift`、`Sources/Panels/FilePreview*.swift`、`Sources/Panels/Project*.swift`、`Resources/markdown-viewer/`（含内嵌的 `diff-viewer-app` 产物）、`Packages/CMUXProjectModel`
+- [ ] 🗑️ **`diff-viewer/`（从 Phase 1 移入——与 markdown viewer 同生命周期、有专用 CI）**：删 `diff-viewer/` 目录 + `scripts/build-diff-viewer-app.sh`、`scripts/check-diff-viewer-react-compiler.mjs`；**同 PR 删 CI 的 diff-viewer job**（`.github/workflows/ci.yml:139-159` 的 build/typecheck/test/lint 步骤），否则 CI 指向已删目录而红。
 - [ ] **修改**：`Sources/Panels/Panel.swift` — 移除 `PanelType.{markdown,filePreview,project}`（line 9/10/12）与对应 `PanelFocusIntent.{filePreview,project}`（line 73/74）
 - [ ] **修改**：`Sources/Workspace.swift` — 移除这三类的创建路径与 `createPanel()`/`sessionSnapshot()` 中的 `case`
 - [ ] **修改**：`Sources/Panels/PanelContentView.swift`、`Sources/ContentView.swift`、`Sources/KeyboardShortcutContext.swift`、`Sources/SessionPersistence.swift` — 移除三类 panel 的视图分支、命令、快捷键、snapshot 字段
@@ -308,7 +316,8 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 ### Phase 4 — 旧右侧栏 modes（D6②）+ Feed 面板 UI（D9）
 
-- [ ] 🗑️ `Sources/RightSidebar*.swift`、`Sources/FileExplorer*.swift`、`Sources/Search/`、`Sources/Find/`（**除外**：终端查找 `SurfaceSearchOverlay`——它由 `Sources/GhosttyTerminalView.swift` 承载，**保留**，见 CLAUDE.md「Terminal find layering contract」）、`Sources/DockPanelView.swift`、`Sources/DockEmptyView.swift`
+- [ ] 🗑️ `Sources/RightSidebar*.swift`、`Sources/FileExplorer*.swift`、`Sources/Search/`（Phase 2 已剥除其 browser 分支，此时可整删；全局搜索随右侧栏退场）、`Sources/DockPanelView.swift`、`Sources/DockEmptyView.swift`
+- [ ] **保留（不可删，审查修正 — 终端查找不是单文件）**：`Sources/Find/` 的**三个终端查找文件** `SurfaceSearchOverlay.swift`、`TerminalSearchOverlayHostingView.swift`、`FindTextFieldSupport.swift`——`SurfaceSearchOverlay.swift:205` 的 `SearchNativeTextField` 子类化 `FindSelectionTrackingTextField`、`GhosttyTerminalView.swift:13467` 挂载 `TerminalSearchOverlayHostingView`、`:14703` 调 `cmuxRememberFindSelection`，三者互相依赖（见 CLAUDE.md「Terminal find layering contract」）。Phase 2 已删 `Sources/Find/Browser*` 两个文件，故本 phase **`Sources/Find/` 不再删任何文件**。
 - [ ] 🗑️ `Sources/Feed/FeedPanelView.swift`、`FeedPanelViewModel.swift`、Feed 调试窗（`FeedButtonStyleDebugWindowController`、`FeedPreviewWindowController`、`FeedTextEditorDebugWindowController`）
 - [ ] **保留（不可删）**：`Packages/CMUXWorkstream`、`Sources/Feed/FeedCoordinator.swift` 的 `ingestBlocking()`/`deliverReply()`/pid 跟踪、`TerminalController.v2FeedPush()`、`Sources/ChatRoomController.swift` —— 聊天桥的事件管道（D9）
 - [ ] **修改**：`Sources/ContentView.swift` / `Sources/RightSidebarPanelView.swift`（若整文件不删）— 移除右侧栏 modes 切换、`FeedPanelView()` 引用、`FeedCoordinator.shared.store?.pending.count` 等 UI 观察
@@ -423,7 +432,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - [ ] **步骤 4**：门控 G。
 
 **Phase 1**：真正独立目录删除
-- [ ] **步骤 1**：删 `web/`、`ios/`、`diff-viewer/`、`experiments/`、`Prototypes/`、`dogfood/`、遗留 `tests/`、`scripts/mobile-*`。
+- [ ] **步骤 1**：删 `web/`、`ios/`、`experiments/`、`Prototypes/`、`dogfood/`、`scripts/mobile-*`。**`diff-viewer/` 移至 Phase 3（CI job + markdown-viewer 内嵌产物耦合）；`tests/` 不整删（含活跃 `test_ci_*` CI 守卫）。**
 - [ ] **步骤 2**：删 12 个 `Packages/CmuxMobile*`（不含 `CMUXMobileCore`）；同 PR 删/no-op **`.github/workflows/test-ios.yml` 和 `.github/workflows/ios-testflight.yml`**（后者触发于 `ios/**`/`Packages/**`、`:188` 调 `./ios/scripts/upload-testflight.sh`——删 `ios/` 后会 scheduled/manual/main 红）；从 pbxproj 与 CI `PACKAGES` 移除引用。
 - [ ] **步骤 3**：门控 G。**（`Examples/`、`AppleScript`、`claude-teams` 不在本 phase——见 Phase 5 / 1A / 1B。）**
 
@@ -436,16 +445,16 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 **Phase 2**：浏览器垂直切片
 - [ ] **步骤 1**：先断入口——`ContentView`/命令面板/菜单/`CLI` 移除一切 browser 入口（新建、socket verb、快捷键），编译通过。
 - [ ] **步骤 2**：删 `PanelType.browser` + focus intent，逐处补齐 `Workspace`/`PanelContentView`/`SessionPersistence`/`KeyboardShortcutContext`/`TabManager` 的 `case .browser`。
-- [ ] **步骤 3**：删全部 `Browser*`/`CmuxWebView*`/`Find/Browser*` 文件与 `Browser*Tests`。
+- [ ] **步骤 3**：删全部 `Browser*`/`CmuxWebView*`/`Find/Browser{SearchOverlay,FindJavaScript}` 文件与 `Browser*Tests`；**同 PR 剥除 `Sources/Search/{GlobalSearchCoordinator,GlobalSearchPanelCaptureManager,AppDelegate+GlobalSearch}.swift` 的 browser 分支与 `Sources/Find/FindTextFieldSupport.swift:104` 的 browser fallback**（否则引用已删 `BrowserPanel`、编译失败）。`Sources/Find/` 终端查找三文件不动。
 - [ ] **步骤 4**：门控 G + 旧快照回归（含 browser panel 的 session 能正常降级恢复）。
 
 **Phase 3**：其余非终端 Panel（markdown / filePreview / project）
 - [ ] **步骤 1**：断入口（创建路径、命令、快捷键），编译通过。
-- [ ] **步骤 2**：删 `PanelType.{markdown,filePreview,project}` + intent，补齐各 `case`；删文件与 `CMUXProjectModel`、`Resources/markdown-viewer/`。
+- [ ] **步骤 2**：删 `PanelType.{markdown,filePreview,project}` + intent，补齐各 `case`；删文件与 `CMUXProjectModel`、`Resources/markdown-viewer/`；**删 `diff-viewer/` + `scripts/build-diff-viewer-app.sh`/`check-diff-viewer-react-compiler.mjs` + `ci.yml:139-159` diff-viewer job**。
 - [ ] **步骤 3**：门控 G + 旧快照回归。
 
 **Phase 4**：旧右侧栏 modes + Feed 面板 UI（保留管道）
-- [ ] **步骤 1**：删右侧栏 modes（files/find/sessions/feed/dock）UI 与切换；**保留** `SurfaceSearchOverlay`（终端查找）。
+- [ ] **步骤 1**：删右侧栏 modes（files/find/sessions/feed/dock）UI 与切换、`Sources/Search/` 全局搜索（Phase 2 已去 browser 耦合）；**`Sources/Find/` 三个终端查找文件全部保留**（`SurfaceSearchOverlay`/`TerminalSearchOverlayHostingView`/`FindTextFieldSupport`），本 phase 不删 `Sources/Find/` 任何文件。
 - [ ] **步骤 2**：仅删 `FeedPanelView*` 与 Feed 调试窗；**保留** `FeedCoordinator.ingestBlocking/deliverReply` + `CMUXWorkstream` + `v2FeedPush` + `ChatRoomController`。
 - [ ] **步骤 3**：门控 G + **聊天回复回归**（@mention → claude/codex 回复仍回到 room；终端查找仍可用）。
 
