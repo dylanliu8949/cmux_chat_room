@@ -71,6 +71,7 @@
 - 聊天室三件套：`Packages/CmuxChatRoomCore`、`Packages/CmuxChatRoom`、`Packages/CmuxChatRoomUI`、`Sources/ChatRoom*.swift`
 - 侧边栏 git 分支行：`Packages/CmuxGit`
 - 终端查找（保留，勿与右侧栏 Find 混淆）：`SurfaceSearchOverlay`（`Sources/GhosttyTerminalView.swift` 内承载，见 CLAUDE.md「Terminal find layering contract」）、`Packages/CmuxTerminalCopyMode`、`Packages/CMUXPasteboardFidelity`
+- **Markdown + Mermaid 渲染（保留——开发者用它与 agent 沟通）**：`Sources/Panels/Markdown*.swift`（全部 13 文件，含 `MarkdownPanel`/`MarkdownPanelView`/`MarkdownWebRenderer`/`MarkdownViewerAssets`/`MarkdownRemoteImageLoader` 等）、`PanelType.markdown`、`Resources/markdown-viewer/` 的**渲染资产**（`marked.min.js`/`highlight*.{js,css}`/`mermaid.min.js`/`vega*.min.js`/`github-markdown.css`/`shell.html`）。markdown 经 `WKWebView` 渲染，mermaid/vega 图表是其一部分。**注意**：markdown 依赖 `FilePreviewTextEditingPanel`（定义于 `Sources/Panels/FilePreviewTextEditor.swift`）——删 filePreview 时必须保留这个协议 seam。`MarkdownRemoteImageLoader` 是纯 HTTPS 图片取数器（SSRF 受限），与 SSH-remote 无关。
 - 基础设施：`Packages/CmuxFoundation`、`Packages/CmuxProcess`、`Packages/CmuxFileWatch`、`Packages/CMUXDebugLog`、设置/快捷键/本地化（`Packages/CmuxSettings(UI)`、`Resources/Localizable.xcstrings`）
 
 ### 删除候选总表（五个探针的「加法式」合并，按置信度分级）
@@ -87,11 +88,11 @@
 | **遗留 python 测试（部分）** | `tests/` 中的 feature socket 测试（被 `tests_v2/` 取代） | — | ⚠️ **不可整目录删**：`tests/` 还含**活跃 CI 守卫脚本** `tests/test_ci_*.sh/.py`（`ci.yml:26-56` 直接跑、`run-tests-v1.sh:224` 迭代 `tests/test_*.py`）——这些守的是构建/发布流水线，与被删 feature 无关。→ **从 Phase 1 移除**：仅随各 feature 删除时移走其专属 socket 测试，`test_ci_*` 基础设施守卫**全部保留** | ⚠️ |
 | **AppleScript 自动化面** | `Sources/AppleScriptSupport.swift` + `Resources/cmux.sdef` + Info.plist 脚本键 | 714 LOC | ⚠️ 审查指正：**非死代码**——编入 app target（pbxproj:35/1737）、经 `.sdef` 由 ObjC runtime 实例化（无 Swift import ≠ dead）、`Info.plist:127-130` 声明。→ **Phase 1A** | ⚠️ |
 | **iOS / 移动端（12 包）** | `ios/`、12 × `Packages/CmuxMobile*`、`scripts/mobile-*` | ~2.4 MB / ~20k LOC，165 文件 | app target 不 link 这 12 个包 | ✅ |
-| **配对 Mac 移动主机** | `Packages/CMUXMobileCore`、`Sources/Mobile/` | ~3k LOC + 120K | **app 链接**：`TerminalController`/`AppDelegate`/`GhosttyTerminalView` 经 `CMUXMobileCore` 流式推送终端字节；需先抽出共享值类型再删（~150–200 LOC，3 文件） | ⚠️🔶 |
-| **侧边栏扩展 / 自定义渲染平台** | `Packages/CmuxExtensionKit`、`CMUXExtensionHostSupport`、`CmuxSidebarProviderKit`、`CmuxSidebarInterpreterService`、`CmuxSwiftRender(UI)`、`Examples/*Sidebar*`、`Sources/CMUXSidebarExtensionBrowserPanel.swift` | ~12k LOC + 样例 | 保留内置 `workspaceScrollArea()`，删 `extensionSidebarScrollArea()` + 设置开关（~200 LOC in ContentView）；🔍 一个探针标记 `CmuxSwiftRender*/CmuxSidebarProviderKit` 当前在侧边栏渲染路径上——需先解耦 | ⚠️🔍 |
+| **配对 Mac 移动主机** | `Packages/CMUXMobileCore`、`Sources/Mobile/` | ~3k LOC + 120K | **app 链接**：`TerminalController`/`AppDelegate`/`GhosttyTerminalView` 流式推送终端字节 + **`TabManager` 7 处 `MobileHostRequestActivity` 节流（审查 R1.2）** + Mobile 设置面（`MobileSection`/`iOSPairingHost`）；需先去 TabManager 节流 + 删设置面 + 抽出共享值类型再删 | ⚠️🔶 |
+| **侧边栏扩展 / 自定义渲染平台** | `Packages/CmuxExtensionKit`、`CMUXExtensionHostSupport`、`CmuxSidebarProviderKit`、`CmuxSidebarInterpreterService`、`CmuxSwiftRender(UI)`、`Examples/*Sidebar*`、`Sources/CMUXSidebarExtensionBrowserPanel.swift` | ~12k LOC + 样例 | 删 `extensionSidebarScrollArea()` + 设置开关，**并须同 PR 删整条 `PanelType.extensionBrowser` panel surface（审查 R1.1/R2.2：`Panel.swift:13`/`Workspace.swift:15030`/`AppDelegate:13732`/`UpdateTitlebarAccessory:943` + 4 个 ExtensionSidebar/Browser 文件）**，否则 Phase 5 不编译；保留内置 `workspaceScrollArea()` | ⚠️🔍 |
 | **应用内浏览器** | `Sources/Panels/Browser*`、`CmuxWebView*`、`Sources/Find/Browser*`、浏览器 CLI verbs、10 测试 | **~33–40k LOC，23 文件** | 删 `PanelType.browser` + ~10 处 switch（Workspace/PanelContentView/ContentView/SessionPersistence/快捷键）；浏览器是正交 Panel，**app 内最大单笔 LOC 收益** | ⚠️ |
 | **Feed 面板 UI（保留管道）** | `Sources/Feed/FeedPanelView*`、`FeedPanelViewModel`、Feed 调试窗 | ~5k LOC | **保留** `FeedCoordinator` 核心 + `CMUXWorkstream`（聊天桥读原始事件）；只删面板视图 | ⚠️ |
-| **非终端 Panel 类型** | `Sources/Panels/Markdown*`、`FilePreview*`、`Project*`、`Packages/CMUXProjectModel`、`Resources/markdown-viewer/` | — | 删 `PanelType.markdown/.filePreview/.project` 及 Workspace 创建路径 | ⚠️ |
+| **非终端 Panel 类型（**markdown 除外，保留**）** | `Sources/Panels/FilePreview*`、`Project*`、`Packages/CMUXProjectModel`、`Resources/markdown-viewer/diff-viewer*` | — | 删 `PanelType.filePreview/.project` 及 Workspace 创建路径。**保留 `Markdown*`/`PanelType.markdown`/markdown 渲染资产（mermaid/vega）+ `FilePreviewTextEditingPanel` 协议（markdown 依赖）** | ⚠️ |
 | **旧右侧栏工具** | `Sources/RightSidebar*`、`Sources/FileExplorer*`、`Sources/Search/`（全局搜索；browser 分支在 Phase 2 先剥）、`DockPanelView`/`DockEmptyView` | — | 右侧栏旧 modes（files/find/sessions/feed/dock）非聊天室 UI；**`Sources/Find/` 不在此列——browser-find 两文件在 Phase 2 删，终端查找三文件（`SurfaceSearchOverlay`/`TerminalSearchOverlayHostingView`/`FindTextFieldSupport`）保留** | ⚠️🔶 |
 | **未用 agent 集成（hook 安装器）** | `Packages/CMUXAgentLaunch/.../{RovoDevHookConfig,HermesAgentHookConfig}.swift`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` **+ 各自 `AgentHookDef` 行 + install/uninstall dispatch** | — | **全有全无**（见 Phase 7）：删 config/extension 文件**必须同删** `AgentHookDef` 的 rovodev/hermes-agent/amp 行 + `cmux.swift` 的 install/uninstall dispatch（`:26241/26245/26602/26606`）+ `cmux hooks setup/uninstall <name>` 入口，否则 `cmux.swift` 引用已删符号、无法编译。**保留（非本行，勿删）**：`CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（会话索引）、`RestorableAgentKind`(18 cases)、`SessionAgentPresentation`/`SessionIndexStore/View` 的 rovo/hermes 分支 | ⚠️ |
 | **OMP 扩展（claude wrapper？）** | `CLI/CMUXCLI+OmpExtension.swift` | — | 🔍 **冲突**：探针 1 列为可删，但设计文档 §2 称「Claude 经 OMP wrapper 运行」、本 fork claude 启动用 `bin/claude` wrapper 注入 `--session-id/--settings`——**删前必须确认 claude hook 路径不依赖 OMP** | 🔍 |
@@ -113,6 +114,21 @@
 2. **垂直切片、逐 feature 推进**：每个 feature（含其 CLI verbs、设置、测试、pbxproj 与 CI `PACKAGES=(…)` 条目）作为**一个独立 PR / phase**，phase 间用 `./scripts/reload.sh --tag prune-bus` + `xcodebuild -scheme cmux-unit` 验证。
 3. **不要先动 `Workspace.swift` / `TabManager.swift` / `TerminalController.swift` 的内部**：很多被删 feature 硬接在这里，先让旧分支不可达，最后再收缩这三个文件。
 4. **`WorkspaceGroup` 与内部 `cmux→bus` 全量重命名留到最后**（前者待 roomID 侧边栏稳定，后者见 D1）。
+
+### 删除方法：架构决策手写、二级清理靠工具发现（开发者指定，2026-06-08）
+
+本计划**不**逐一手写每个 feature 的全部 stranded Swift caller / helper 文件。每个 phase 的工作是：**①** 删 feature 的主体文件 + 移除其入口（菜单/命令面板/socket verb/CLI/PanelType），把对已删类型的 live 引用清到**编译通过**；**②** 编译通过后，对本 phase 触及的范围跑 **Periphery**（scoped），人工核对归属，把确认为「仅服务本 feature、现已无引用」的声明/文件**在同一 PR**删掉。
+
+**三类工具各司其职（决定哪些细节可省、哪些必须手写）**：
+- **编译器**（gate G ③④ `xcodebuild cmux` + `cmux-unit`）捕获**对已删符号的 live 引用**——这是历轮 review 绝大多数 blocker 的真身（`MinimalModeSidebarControls`→`CmuxExtensionSidebarSelection`、`right_sidebar` CLI/socket→`RightSidebarRemoteRequest` 等）。Periphery **不**报这类（它们是被引用的，不是 dead）。**故本计划各 phase 里逐条列出的 Swift caller 锚点是「示例性」的——以编译器为准，不必穷举。**
+- **Periphery**（gate G 新增 ⑦）捕获**移除入口后变成 transitively-dead 的代码**（只被已删 feature 用的 helper struct/view/文件，如 `SidebarWorkspaceGroup*`、孤立 automation 类型）——这是工具相对手写清单的**净增价值**，无需手列。
+- **编译器与 Periphery 都看不见的层 → 必须在计划里保持显式手写**：shell/release 脚本（如 Sparkle `sign-cmux-bundle.sh` 调用）、`tests_v2/*.py`、CI workflow 路径触发、字符串字面量引用（`web/data/*.schema.json` URL）、运行时 session-snapshot 解码（**Phase 0 drop-set**）。这些 phase 的细节**不**降级。
+
+**两条硬护栏（不可放宽）**：
+1. **Periphery 只 scoped 到本 phase 触及范围 + 人工核对归属，绝不 repo-wide**。半精简的仓库里 Periphery 会把「仅因后续 phase 未跑而暂时无引用」的代码全报成 dead，盲删会越界扩大范围。
+2. **Periphery 对动态派发有假阳性，本仓库有真实地雷**：它看不见 `@objc`/Obj-C runtime/反射/`NSClassFromString`/IBAction/**sdef 实例化**的代码。典型：`AppleScriptSupport.swift` 无 Swift 引用、仅经 `cmux.sdef` 由 Obj-C runtime 实例化——Periphery 会判它 dead，盲删即杀掉 AppleScript 自动化。**删前人工核对归属是强制项**；Periphery 跑用 `--retain-objc-accessible` 等保留 + 对 sdef/IBAction 显式 retain。
+
+**保持完全显式（工具找不到/保护不了）**：**Phase 0 迁移 drop-set**、**非-Swift 消费者**（脚本/CI/release/`tests_v2`/schema 迁移/docs topic）、**保留例外**（markdown+mermaid、终端查找、markdown 依赖的 `FilePreviewTextEditingPanel` seam）。
 
 ## 参考资料
 
@@ -137,6 +153,7 @@
 - **原始设计文档**：`plans/2026-06-06-cmux-ai-chat-room-design.md`（路径已随移动更新；§2 标注「Claude 经 OMP wrapper」是**过时描述**——本 fork Claude 实际经 `bin/claude` wrapper 启动，见 `Sources/TabManager+ChatRoom.swift:170`，OMP 是独立未用 agent，见 `Sources/VaultAgentRegistry.swift:129`）。
 - **关键源文件锚点**：`Sources/Panels/Panel.swift:6/272`（`PanelType` 是**运行时枚举**，经 `Panel.panelType` 暴露，遍布渲染/焦点/路由/命令面板/socket 解析 switch——**不可**塞迁移用的 `.unknown`）；`Sources/SessionPersistence.swift:1694`（真实持久化模型是 `SessionPanelSnapshot`，非 `SessionTerminalPanelSnapshot`）；`Sources/Workspace.swift:266`（`restoreSessionSnapshot` 用 layout panel id 重建分屏——丢 panel 必须同步清理 layout/focus/selected id）；`cmux.xcodeproj/project.pbxproj`、CI `.github/workflows/{ci,test-ios}.yml`（删包/删 ios 必须同步）。
 - **更名参考**：产品名 **Bus** = 并行编程 message bus 语义；无外部 SDK。Sparkle（`Packages/CmuxUpdater`）若保留则更名需同步 appcast/displayName。
+- **死代码工具**：**Periphery**（https://github.com/peripheryapp/periphery）——Swift 未引用代码扫描，支持 macOS Xcode project。用法见「删除方法：架构决策手写、二级清理靠工具发现」节与 gate G ⑦。**仅作每 phase 垂直切片后的 scoped 清理，非 repo-wide 强制**；对 `@objc`/反射/sdef/IBAction 有假阳性，删前人工核对归属。
 
 ## 需要决策的事项
 
@@ -197,7 +214,8 @@ _（空）本计划 D1–D10 已全部决策并归档于下方「已归档的决
 
 9. **D6 — 旧右侧栏 + 非终端 Panel**
    - **选项**：A 删（保留终端查找）/ B 仅删 Feed UI
-   - **已选择**：**A，拆 2 phase**：① 先删非终端 Panel（browser/markdown/filePreview/project）；② 再删旧右侧栏 modes（files/find/sessions/feed/dock）。**保留** `SurfaceSearchOverlay`（终端查找，勿与右侧栏全局 Find 混淆）与 `FeedCoordinator`+`CMUXWorkstream` 管道，只删 `FeedPanelView*`。
+   - **已选择**：**A，拆 2 phase**：① 先删非终端 Panel（browser/filePreview/project）；② 再删旧右侧栏 modes（files/find/sessions/feed/dock）。**保留** `SurfaceSearchOverlay`（终端查找，勿与右侧栏全局 Find 混淆）与 `FeedCoordinator`+`CMUXWorkstream` 管道，只删 `FeedPanelView*`。
+   - **补充决策（开发者指定，2026-06-08）**：**markdown + mermaid 渲染保留**——开发者用 markdown/mermaid 与 agent 沟通。`PanelType.markdown` + `Sources/Panels/Markdown*.swift` + `Resources/markdown-viewer/` 渲染资产不删；删 filePreview 时保留 `FilePreviewTextEditingPanel` 协议 seam。markdown 不进 Phase 0 drop 集（旧 markdown 快照须正常恢复）。
 
 10. **D7 — 分析 / 崩溃上报**
     - **选项**：A 删 PostHog+Sentry / B 保留 Sentry
@@ -252,7 +270,7 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 ### Phase 0 — 安全网（持久化边界宽松解码 + 恢复契约；唯一含新代码的 phase）
 
-- [ ] **新增**：`Sources/SessionPanelSnapshotLenientDecoding.swift`（或就近置于 `SessionPersistence.swift`）—— **仅在持久化层**对 `SessionPanelSnapshot` 用私有「raw kind」字符串解码：遇已删类型字符串（`browser`/`markdown`/`filepreview`/`project`/remote）时**丢弃该 panel**并记 debug 日志，不抛错、不引入运行时 `PanelType.unknown`。**逐元素捕获粒度（审查 F3）**：`PanelType` 解码本身会 throw（`Panel.swift:30`），故必须从 unkeyed container **逐个 panel** decode、单个 throw 只跳过该 panel，**不可**整数组一次性 decode（否则一个坏 panel 拖垮整个 workspace）。注意：throw 只在对应 enum case 被实际删除后（Phase 2/3/8b）才发生，Phase 0 先把容错装好。
+- [ ] **新增**：`Sources/SessionPanelSnapshotLenientDecoding.swift`（或就近置于 `SessionPersistence.swift`）—— **仅在持久化层**对 `SessionPanelSnapshot` 用私有「raw kind」字符串解码：遇已删类型字符串（`browser`/`filepreview`/`project`/`rightSidebarTool`/`extensionBrowser`/remote）时**丢弃该 panel**并记 debug 日志，不抛错、不引入运行时 `PanelType.unknown`。**`markdown` 不在 drop 集——markdown 渲染保留**（见脊柱），旧 markdown 快照须正常恢复。**已删 PanelType 全清单（删它的 phase）**：`browser`(P2)、`filePreview`/`project`(P3——**`markdown` 保留**)、`rightSidebarTool`(P4，审查 R2.1——持久化于 `SessionPersistence.swift:1712`/`Panel.swift:11`/`Workspace.swift:668`)、`extensionBrowser`(P5，审查 R2.2——`Panel.swift:13`/`Workspace.swift:15030`)、remote 字段(P8b)。**每删一个 PanelType，其 raw 字符串必须在此 drop 集合中，且 fixture 覆盖；保留的 `markdown` 反之须有「正常恢复」回归。****逐元素捕获粒度（审查 F3）**：`PanelType` 解码本身会 throw（`Panel.swift:30`），故必须从 unkeyed container **逐个 panel** decode、单个 throw 只跳过该 panel，**不可**整数组一次性 decode（否则一个坏 panel 拖垮整个 workspace）。注意：throw 只在对应 enum case 被实际删除后（Phase 2/3/8b）才发生，Phase 0 先把容错装好。
   ```swift
   // 持久化层私有；不污染运行时 PanelType
   extension SessionWorkspaceSnapshot {
@@ -292,7 +310,7 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 ### Phase 2 — 应用内浏览器垂直切片（app 内最大 LOC 收益）
 
-- [ ] 🗑️ `Sources/Panels/Browser*.swift`（~23 文件：BrowserPanel(+View/+扩展)、BrowserWindow*、BrowserScreenshot*、BrowserOmnibar*、BrowserWebAuthn*、BrowserAutomation、BrowserMedia*、BrowserHidden*、BrowserChrome*）、`Sources/Panels/CmuxWebView*.swift`、`Sources/BrowserPaneDropTargetView.swift`、`Sources/Find/Browser{SearchOverlay,FindJavaScript}.swift`（**仅这两个 browser-find 文件**——`Sources/Find/` 其余三个是终端查找，保留至 Phase 4 仍不删，见下）、`cmuxTests/Browser*Tests.swift`、`cmuxUITests/Browser*.swift`、`tests/` 中 browser 专属 socket 测试（feature 专属，随浏览器删；非 `test_ci_*` 守卫）
+- [ ] 🗑️ `Sources/Panels/Browser*.swift`（~23 文件：BrowserPanel(+View/+扩展)、BrowserWindow*、BrowserScreenshot*、BrowserOmnibar*、BrowserWebAuthn*、BrowserAutomation、BrowserMedia*、BrowserHidden*、BrowserChrome*）、`Sources/Panels/CmuxWebView*.swift`、`Sources/BrowserPaneDropTargetView.swift`、`Sources/Find/Browser{SearchOverlay,FindJavaScript}.swift`（**仅这两个 browser-find 文件**——`Sources/Find/` 其余三个是终端查找，保留至 Phase 4 仍不删，见下）、`cmuxTests/Browser*Tests.swift`、`cmuxUITests/Browser*.swift`、`tests/` 中 browser 专属 socket 测试（feature 专属，随浏览器删；非 `test_ci_*` 守卫）、**`tests_v2/` 的 browser 套件（审查 R2.2：`scripts/run-tests-v2.sh:224` glob 全部 `test_*.py`，留则全量 v2 永久红）——`tests_v2/test_browser_*.py`、`test_cli_browser_*.py`、`test_ssh_remote_browser_*.py`（browser-over-remote，浏览器删后即失效）**
 - [ ] **修改（审查指出：删 BrowserPanel 会断 Phase 2 编译，须同 PR 清理引用 BrowserPanel 的全局搜索/查找支持）**：
   - `Sources/Search/GlobalSearchCoordinator.swift`（`:104` `captureBrowserPanel`）、`Sources/Search/GlobalSearchPanelCaptureManager.swift`（`:39/:44/:204` `as? BrowserPanel`/`captureBrowserPanel`/`indexBrowserPanel`）、`Sources/Search/AppDelegate+GlobalSearch.swift`（`:186/:194` `browserPanel(for:)`/`applyBrowserInlineSearch`）—— **剥除 browser 分支**使其在 BrowserPanel 删除后仍编译（`Sources/Search/` 整体在 Phase 4 删，但本 phase 必须先去 browser 耦合）。
   - `Sources/Find/FindTextFieldSupport.swift`（`:104` `workspace.browserPanel(for:)?.searchState` fallback）—— 仅删 browser fallback 分支，**保留**该文件（终端查找依赖它，见 Phase 4）。
@@ -303,24 +321,29 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 - [ ] **修改**：`Sources/KeyboardShortcutContext.swift` — 删 `shortcutEventBrowserPanel()`/`shortcutFocusedBrowserPanel()` 及 browser 专属快捷键
 - [ ] **修改**：`Sources/SessionPersistence.swift` — 删 `SessionBrowserPanelSnapshot` 结构与 panel snapshot 的 `browser` 字段（Phase 0 解码器已兜底旧快照）
 - [ ] **修改**：`Sources/TabManager.swift` — 移除 tab snapshot 的 browser kind 与 loading/title/favicon/muted 更新
-- [ ] **修改**：`CLI/cmux.swift` — 移除 browser 相关 socket verbs 与 automation 命令、browser 设置/help 别名（`browser.profiles.*`/`browser.import.cookies` 走 VM，留至 Phase 8）
+- [ ] **修改（审查 R1.1：`browser.profiles.*`/`browser.import.cookies` 的 backing `BrowserProfileAutomation`/`BrowserImportAutomation` 在 `Sources/Panels/BrowserAutomation.swift:183`，本 phase 随 `Browser*` 删除——故这两组 verb 必须在 Phase 2 一起删，不可留至 Phase 8a，否则删 backing 文件后 `TerminalController` 引用已删类型、Phase 2 不编译）**：
+  - `Sources/TerminalController.swift`：删 `browser.profiles.{list,create,rename,clear,delete}` + `browser.import.cookies` 的注册（`:897-902`）+ dispatch（`:1048+`，经 `BrowserProfileAutomation`/`BrowserImportAutomation`）
+  - `CLI/cmux.swift`：移除 browser 相关 socket verbs 与 automation 命令、`browser.profiles.*`/`browser.import.cookies` CLI 子命令、browser 设置/help 别名 + 本地化
 - [ ] **修改**：`Sources/AppDelegate.swift`、`Sources/AppDelegate+ClosedItemHistory.swift`、`Sources/AppDelegate+MoveTabToNewWorkspace.swift` — 移除 "New Browser Tab" 菜单、browser 的 closed-history / move-to-workspace 分支
 
 ### Phase 3 — 其余非终端 Panel 类型（D6①）
 
-- [ ] 🗑️ `Sources/Panels/Markdown*.swift`、`Sources/Panels/FilePreview*.swift`、`Sources/Panels/Project*.swift`、`Resources/markdown-viewer/`（含内嵌的 `diff-viewer-app` 产物）、`Packages/CMUXProjectModel`
+> **保留 Markdown + Mermaid（开发者用于与 agent 沟通）**：本 phase **不删** `Sources/Panels/Markdown*.swift`（含 `MarkdownRemoteImageLoader.swift`）、`PanelType.markdown`、`Resources/markdown-viewer/` 的渲染资产（`marked`/`highlight`/`mermaid`/`vega`/`github-markdown.css`/`shell.html`）。R2.3 的 Phase 3/8b 双重归属随 markdown 保留而消失（两边都不删它）。
+- [ ] 🗑️ `Sources/Panels/FilePreview*.swift`（**保留 `Sources/Panels/FilePreviewTextEditor.swift` 的 `FilePreviewTextEditingPanel` 协议——`MarkdownPanel` 仍 conform 它；删 filePreview 其余文件时把该协议 seam 留下，或下沉到 markdown 自有文件**）、`Sources/Panels/Project*.swift`、`Packages/CMUXProjectModel`
+- [ ] 🗑️ **仅 `Resources/markdown-viewer/` 的 diff-viewer 子目录**：`Resources/markdown-viewer/diff-viewer/`、`Resources/markdown-viewer/diff-viewer-app/`（**不删**同目录的 markdown 渲染资产）；先确认 `shell.html` 不引用 diff-viewer 子目录（已核实 `Markdown*.swift` 无 diff-viewer 引用）
 - [ ] 🗑️ **`diff-viewer/`（从 Phase 1 移入——与 markdown viewer 同生命周期、有专用 CI）**：删 `diff-viewer/` 目录 + `scripts/build-diff-viewer-app.sh`、`scripts/check-diff-viewer-react-compiler.mjs`、`scripts/open-diff-viewer-stress-samples.sh`；**同 PR 删 CI 的 diff-viewer job**（`.github/workflows/ci.yml:139-159` 的 build/typecheck/test/lint 步骤），否则 CI 指向已删目录而红。
 - [ ] **修改 — diff-viewer CLI/runtime（审查指出：删资产却留服务这些资产的 CLI 命令，会指向已删文件）**：`CLI/cmux.swift:2991` 删 `diff-viewer-server` 命令分发 + `runDiffViewerServerCommand`；`CLI/cmux_open.swift` 删 `cmux-diff-viewer` scheme/HTTP server/asset 服务（`:310-311/:385+`、`:4149` 服务、`:5581` 拷贝 `markdown-viewer/diff-viewer`/`diff-viewer-app`）及 `CMUXDiffViewerLocalization` 串；删 diff-viewer 相关快捷键/设置/测试引用。
-- [ ] **修改**：`Sources/Panels/Panel.swift` — 移除 `PanelType.{markdown,filePreview,project}`（line 9/10/12）与对应 `PanelFocusIntent.{filePreview,project}`（line 73/74）
+- [ ] **修改**：`Sources/Panels/Panel.swift` — 移除 `PanelType.{filePreview,project}`（line 10/12）与对应 `PanelFocusIntent.{filePreview,project}`（line 73/74）。**保留 `PanelType.markdown`（line 9）**
 - [ ] **修改**：`Sources/Workspace.swift` — 移除这三类的创建路径与 `createPanel()`/`sessionSnapshot()` 中的 `case`
-- [ ] **修改**：`Sources/Panels/PanelContentView.swift`、`Sources/ContentView.swift`、`Sources/KeyboardShortcutContext.swift`、`Sources/SessionPersistence.swift` — 移除三类 panel 的视图分支、命令、快捷键、snapshot 字段
-- [ ] **修改**：`Sources/CommandPalette/*`（随手清理，D5）— 删 markdown/project/filePreview 命令条目
+- [ ] **修改**：`Sources/Panels/PanelContentView.swift`、`Sources/ContentView.swift`、`Sources/KeyboardShortcutContext.swift`、`Sources/SessionPersistence.swift` — 移除 **filePreview/project 两类** panel 的视图分支、命令、快捷键、snapshot 字段（**保留 markdown 的视图分支/命令/snapshot**）
+- [ ] **修改**：`Sources/CommandPalette/*`（随手清理，D5）— 删 project/filePreview 命令条目（**保留 markdown 命令**）
 
 ### Phase 4 — 旧右侧栏 modes（D6②）+ Feed 面板 UI（D9）
 
 - [ ] 🗑️ `Sources/RightSidebar*.swift`（**含 `RightSidebarRemoteCommand.swift`——本 phase 拥有，已从 Phase 8b 移除以消除归属冲突**）、`Sources/FileExplorer*.swift`、`Sources/Search/`（Phase 2 已剥除其 browser 分支，此时可整删）、`Sources/DockPanelView.swift`、`Sources/DockEmptyView.swift`、`cmuxTests/SearchIndexTests.swift`
 - [ ] **修改（审查指出：右侧栏/文件浏览器/全局搜索接在 app 脊柱上，glob 删文件不够，须同 PR 清引用否则编译失败）— 右侧栏 surface**：
   - `Sources/AppDelegate.swift`：`MainWindowContext` 的 `fileExplorerState: FileExplorerState?`（`:706/:716`）、主窗口 setup 的 `FileExplorerState` 创建（`:8005`）、`applyRightSidebarRemoteCommand(...)`（`:6356`）及其在远程命令分发处的调用点（一并去，remote 路径 Phase 8b 已不再引用它）。
+  - **CLI/socket `right_sidebar` 入口（审查 R2：删 `RightSidebarRemoteCommand.swift`→`RightSidebarRemoteRequest` 后这些悬空，Phase 4 不编译）**：`CLI/cmux.swift` 删 `right-sidebar` 命令解析/转发/help（`:3114` `rightSidebarSocketArguments`、`:4600`、`:5084` verb 表、`:14492` `cli.rightSidebar.usage` help、**`:14937` `forwardRightSidebarCommand`**）；`Sources/TerminalController.swift` 删 `right_sidebar` 焦点策略 gate（`:363`）+ `RightSidebarRemoteRequest.parse`（`:370`）+ policy params（`:1407`）+ dispatch/handler（`:1590-1591` `case "right_sidebar": return rightSidebar(args)`）+ **`:20407-20448` 的 `RightSidebarRemoteRequest.parse`/`app.applyRightSidebarRemoteCommand`（`:20421`）调用 + 测试 seam `parseRightSidebarRemoteRequestForTesting`（`:20436`）** + `debug_right_sidebar_focus`/`debug.right_sidebar.focus` 调试命令（`:171/:193/:1679`）；删 `cli.rightSidebar.*` 与 `rightSidebar.remote.error.*` 本地化键（`Resources/Localizable.xcstrings:160344+`）；**删 `cmuxTests/TerminalControllerSocketSecurityTests.swift:812+` 的 `right_sidebar` socket 测试（审查 R2）**；删 right-sidebar/dock 的 docs 或 CLI docs topic（`CMUXCLI+DocsSettings.swift` 中宣传该面的条目）。
   - `Sources/Workspace.swift`：`RightSidebarToolPanel` 创建/查找（`:15436/:15463`）、快照 `SessionRightSidebarToolPanelSnapshot`（`:555/:669/:674`）与 reattach（`:16171`）；`Sources/SessionPersistence.swift` 删 `SessionRightSidebarToolPanelSnapshot` 字段（Phase 0 解码器兜底旧快照）。
   - 快捷键/本地化/测试：`KeyboardShortcutSettings.swift` 与 `Packages/CmuxSettings/.../ShortcutAction.swift` 的右侧栏相关 action、`Resources/Localizable.xcstrings` 串、相关测试。
 - [ ] **修改 — 全局搜索 surface（入口在 `Sources/Search/` 之外，须同 PR 去）**：`Sources/AppDelegate.swift` 删 `GlobalSearchCoordinator.shared.start()`（`:1388`）与菜单打开（`:8306`）；`Sources/App/MenuBarExtraController.swift` 删 `globalSearchItem`「Search All Windows」项 + 回调（`:24`）；`Sources/KeyboardShortcutSettings.swift` 删 `case globalSearch`（`:65` 及全部引用）、`Packages/CmuxSettings/.../ShortcutAction.swift` 删 `case globalSearch`（`:18/:129/:166`）+ 设置/本地化串 + 全局搜索快捷键测试。**注意 CLAUDE.md 快捷键政策**：删 cmux-owned 快捷键须同步 `KeyboardShortcutSettings`、Settings、`cmux.json` schema、快捷键文档。
@@ -334,16 +357,31 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 ### Phase 5 — 侧边栏扩展 / 自定义渲染平台（含 D8c 已定位的 seam）
 
 > 审查修正：seam 已核实——`CmuxSwiftRenderUI` 只喂 `extensionSidebarScrollArea()`（`ContentView.swift:11220`），不喂聊天侧边栏 `workspaceScrollArea()`（`:11056`），切换点 `:10960-10962`。**先断 `extensionSidebarScrollArea()` 这一路，确认 room 侧边栏走 `workspaceScrollArea()`，再删平台。** `Examples/` 在此删（Phase 1 已移走，因 `ContentView.swift:7` import 它）。
-- [ ] **修改**：`Sources/ContentView.swift` — **保留** `workspaceScrollArea()`（`:11056`）；删 `extensionSidebarScrollArea()`（`:11220`）、`:10960-10962` 的 provider 切换、`CMUXInstalledExtensionSidebarHostView`、`CmuxExtensionSidebarSelection` 枚举/菜单/设置开关、`import CmuxExtensionSidebarExamples`（`:7`）、`@_spi(CmuxHostTransport) import`
+- [ ] **修改**：`Sources/ContentView.swift` — **保留** `workspaceScrollArea()`（`:11056`）；删 `extensionSidebarScrollArea()`（`:11220`）、`:10960-10962` 的 provider 切换、`CmuxExtensionSidebarSelection` 枚举/菜单/设置开关、`import CmuxExtensionSidebarExamples`（`:7`）、`@_spi(CmuxHostTransport) import`
 - [ ] **修改**：`Sources/TerminalController.swift` — 移除 `import CmuxSwiftRenderUI` 与 `SidebarActionDispatch` 用法；`Sources/cmuxApp.swift` — 移除扩展侧边栏 provider 装配
-- [ ] 🗑️ `Sources/CmuxSidebarActionDispatch.swift`、`Packages/CmuxExtensionKit`、`CMUXExtensionHostSupport`、`CmuxSidebarProviderKit`、`CmuxSidebarInterpreterService`、`CmuxSwiftRender`、`CmuxSwiftRenderUI`、`Examples/`（含 `CmuxExtensionSidebarExamples` 与其余 `*Sidebar*` 样例）
+- [ ] **修改（审查 R2：删 `CmuxExtensionSidebarSelection`/`CustomSidebarValidator` 包却留 socket 方法/handler/CLI/设置，会引用已删类型且留死面）— custom-sidebar socket/CLI/设置全切片**：
+  - `Sources/TerminalController.swift`：删 `sidebar.custom.validate`/`sidebar.custom.reload`/`sidebar.custom.select` 的注册（`:911-913`）+ dispatch（`:1095-1099`）+ 其 handler（引用 `CustomSidebarValidator`/`CmuxExtensionSidebarSelection`，`:4067/4083` 及 reviewer 指出的 `:4129/:4150`）、`extension.sidebar.snapshot`（`:1929` dispatch + `:2418` capability）；删相关 `socket.sidebar.custom.*` 本地化串
+  - `CLI/cmux.swift`：删 `cmux sidebar custom {validate,reload,select}` 命令（`:15022/:15042` 调上述 socket 方法）+ help/本地化/测试
+  - 设置：🗑️/删 `Packages/CmuxSettings/.../Keys/BetaFeaturesCatalogSection.swift:44-47` 的 `customSidebars`（`customSidebars.beta.enabled`）、`Packages/CmuxSettingsUI/.../Sections/BetaFeaturesSection.swift:92` 的 `customSidebarsRow`、`Packages/CmuxSettingsUI/.../Navigation/CuratedSettingEntry+Default.swift:105` 搜索条目 + schema/本地化/测试（**CLAUDE.md 设置政策**：同步 `cmux.json` schema + 文档）
+  - 文档/help（审查 R1.2：删 guide 却留指向它的 docs topic/事件文档）：删 `CLI/CMUXCLI+DocsSettings.swift:118-128` 的 `sidebars` docs topic（aliases `custom-sidebar`/`vibe-sidebar`，指向 `docs/custom-sidebars`）；改 `docs/events.md`（`:93/:237/:248` 引导扩展侧边栏作者用 `extension.sidebar.snapshot` 的段落——随该事件删除而去）；🗑️ `docs/custom-sidebars.md`、`docs/data-driven-sidebar-plan.md`
+- [ ] **修改（审查 R1.1/R2.2：本 phase 删扩展平台包，故必须同 PR 拥有整条 `extensionBrowser` panel surface，否则留下引用已删包的活代码、Phase 5 不编译）— `extensionBrowser` PanelType 全切片**：
+  - `Sources/Panels/Panel.swift` 删 `PanelType.extensionBrowser`（`:13`）及其全部 arm（`:690`/`:1888`/`surfaceKind` `:11729`、`SurfaceKind.extensionBrowser` `:10746`）
+  - `Sources/Workspace.swift` 删 `newSidebarExtensionBrowserSurface(...)`（`:15030`，内部 `CMUXSidebarExtensionBrowserPanel` 创建）与 `createPanel()`/`sessionSnapshot()`/`surfaceKind(for:)` 的 `case .extensionBrowser`
+  - `Sources/Panels/PanelContentView.swift` 删 extensionBrowser 视图分支
+  - `Sources/AppDelegate.swift` 删 `openSidebarExtensionBrowser(from:title:)`（`:13732`）及其菜单/调用点
+  - `Sources/Update/UpdateTitlebarAccessory.swift:943` **和** `Sources/Update/MinimalModeSidebarControls.swift:198`（审查 R1.1：第二个调用点）删 `CmuxExtensionSidebarSelection.showMenu(...)` 调用（**两文件整体由 Phase 11 删，但 Phase 5 删 `CmuxExtensionSidebarSelection` 会先断它们，故此处先去两处调用点**）
+  - `Sources/SessionPersistence.swift` 删 extensionBrowser panel snapshot 字段（Phase 0 解码器已把 `extensionBrowser` 列入 drop 集兜底旧快照）
+  - 快捷键/本地化/测试：相关 `KeyboardShortcutSettings`/`ShortcutAction` 条目、`Resources/Localizable.xcstrings` 串、对应测试
+- [ ] 🗑️ `Sources/CMUXSidebarExtensionBrowserPanel.swift`（`:1` `@_spi(CmuxHostTransport) import CMUXExtensionHostSupport`）、`Sources/CMUXInstalledExtensionSidebarHostView.swift`、`Sources/ExtensionSidebarWorkspaceRowView.swift`、`Sources/ExtensionWorktreePrototype.swift`、`Sources/CmuxSidebarActionDispatch.swift`、`Packages/CmuxExtensionKit`、`CMUXExtensionHostSupport`、`CmuxSidebarProviderKit`、`CmuxSidebarInterpreterService`、`CmuxSwiftRender`、`CmuxSwiftRenderUI`、`Examples/`（含 `CmuxExtensionSidebarExamples` 与其余 `*Sidebar*` 样例）
 
 ### Phase 6 — 配对 Mac 移动主机（D3②；打字延迟热路径，谨慎）
 
 - [ ] **修改**：`Sources/TerminalController.swift` — 删 `MobileViewportReport` 结构 + `mobileViewportReportsBySurfaceID` 等字典、`mobileTerminalRenderGridFrame()`/`mobileHostHandleRPC()`/`mobileHostResult()`、`MobileHostService.shared.*` 调用、`import CMUXMobileCore`
 - [ ] **修改**：`Sources/GhosttyTerminalView.swift` — 删 `mobileByteTeeContext`、PTY byte-tee 回调安装与 `dropSurface` 处的 tee 清理、`import CMUXMobileCore`（**仅减负载**；diff 确认渲染网格帧无非移动用途依赖此 tee，否则先抽出该值类型到 `CmuxFoundation` 再删）
 - [ ] **修改**：`Sources/AppDelegate.swift` — 删 `MobileHostService.shared.start()/stop()`、`ensureMobileWorkspaceListObserver()`/`removeMobileWorkspaceListObserverIfUnused()`/`installMobileHostSettingsObserver()`/`syncMobileHostService()` 及 `mobileWorkspaceListObservers`/`mobileHostSettingsObserver` 属性
-- [ ] 🗑️ `Packages/CMUXMobileCore`、`Sources/Mobile/`（上述三文件引用清零后）
+- [ ] **修改（审查 R1.2：`TabManager` 直接用 `MobileHostRequestActivity`，定义在待删的 `Sources/Mobile/MobileHostService.swift:158`——不清理则 Phase 6 不编译）**：`Sources/TabManager.swift` 删 7 处 `MobileHostRequestActivity.quietDelay(...)`/`.hasRecentActivity(...)` 调用（`:1449`/`:1708`/`:1891`/`:2862`/`:2870`/`:3065`/`:3073`）及 `mobileHostBackgroundWorkQuietInterval` 常量——移除「移动主机活动期推迟后台工作」的节流：移动主机已删，无移动活动可节流，guard 直接去掉（后台工作照常进行），**不**引入替代节流（YAGNI，无第二来源）。
+- [ ] **修改/删除（审查 R1.2：删主机却留「iOS Pairing」设置 = 死设置开关，更糟）**：🗑️ `Packages/CmuxSettingsUI/Sources/CmuxSettingsUI/Sections/MobileSection.swift`；删 `Packages/CmuxSettings/Sources/CmuxSettings/Keys/MobileCatalogSection.swift` 的 `iOSPairingHost`（`mobile.iOSPairingHost.enabled`）及该 catalog section 全部 mobile 键、设置搜索别名、`Resources/Localizable.xcstrings` 的 mobile 设置串、`cmux.json` schema/配置文档的 mobile 项、相关测试（**CLAUDE.md 设置政策**：删设置项须同步 schema + 文档 + 本地化）。
+- [ ] 🗑️ `Packages/CMUXMobileCore`、`Sources/Mobile/`（上述引用清零后）
 
 ### Phase 7 — 未用 agent 集成（窄范围）+ `cmux top`（文件级 split）
 
@@ -364,20 +402,22 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 ### Phase 8a — 云 / Auth（独立 PR）
 
 - [ ] 🗑️ `Sources/Cloud/`、`Sources/CloudVMActionLauncher.swift`、`Sources/Auth/`、`Packages/CMUXAuthCore`、`Packages/CmuxAuthRuntime`、`vendor/stack-auth-*`
-- [ ] 🗑️ **`web/`（从 Phase 1 移入——CI/cloud-vm workflow 在此自然归属）**：删 `web/` 整目录；**同 PR** 删/no-op `ci.yml:107` web-typecheck + `:161` web-db-migrations job、`.github/workflows/cloud-vm-migrate.yml`、`cloud-vm-smoke.yml`；`scripts/verify-cmd-click-file-previews.sh` 的 `web/public` fixture 引用已在 Phase 3 随 filePreview 删除（若未删则此处一并去）。
+- [ ] **前置（审查 R2.1：`web/` 不止 cloud——`web/data/` 是 app+CLI 引用的 canonical 设置 schema/shortcuts 源，必须先迁出再删 `web/`，否则核心设置 schema/docs 指向已删文件）**：把 `web/data/{cmux.schema.json,cmux-settings.schema.json,cmux-shortcuts.ts}` 移到非 web canonical home（如 `schema/`），并 repoint 全部引用——`Sources/KeyboardShortcutSettingsFileStore.swift:28-29`（`schemaURLString`/`legacySchemaURLString`）、`Sources/KeyboardShortcutSettingsFileStore+Template.swift:8`（生成的 `cmux.json` `$schema` URL）、`CLI/CMUXCLI+DocsSettings.swift:5/48`（`settingsSchemaURL`/shortcut data）、`CLI/CMUXCLI+Config.swift:151`——的 `main/web/data/...` raw URL 改为新路径。**这步是删 `web/` 的 hard 前置**；且后续 Phase（mobile/telemetry/customSidebars/workspaceGroups 删设置项）须同步更新迁出后的 schema 文件，保持 schema/docs 诚实。
+- [ ] 🗑️ **`web/`（从 Phase 1 移入——CI/cloud-vm workflow 在此自然归属；schema/shortcuts 已先迁出）**：删 `web/` 整目录；**同 PR** 删/no-op `ci.yml:107` web-typecheck + `:161` web-db-migrations job、`.github/workflows/cloud-vm-migrate.yml`、`cloud-vm-smoke.yml`；`scripts/verify-cmd-click-file-previews.sh` 的 `web/public` fixture 引用已在 Phase 3 随 filePreview 删除（若未删则此处一并去）；删 `CMUXCLI+DocsSettings.swift` 中 browser/dock 等已删功能的 docs topic（随各功能删除而去，避免 docs 指向已删特性）。
 - [ ] **修改 — CLI auth/vm/cloud surface（审查指出：socket handler 删了但 CLI verb 仍在，会对已删 handler 失败）**：`CLI/cmux.swift` 删 `case "auth", "login", "logout"`（`:3338`）、`case "vm", "cloud"`（`:3405`）dispatch 与其 helper、VM/cloud help 文本（`:12840`）；`scripts/stress-cli-socket-api.py` 删 `auth`/`cloud`/`auth login`（`:68/:72/:169`）等条目。
-- [ ] **修改**：`Sources/TerminalController.swift` 删 `vm.*` / `auth.*` / `browser.profiles.*` / `browser.import.cookies` socket case；`Sources/TerminalNotificationStore.swift` 删 `PhonePushClient.shared.forward(...)`；`Sources/cmuxApp.swift` 删 `HostAccountFlow`/账户 section 装配；`Sources/AppDelegate.swift` 删 `AuthManager.shared.handleCallbackURL` 与 `cmux://auth-callback`；`Packages/CmuxSettingsUI` 账户 section
+- [ ] **修改**：`Sources/TerminalController.swift` 删 `vm.*` / `auth.*` socket case（**`browser.profiles.*`/`browser.import.cookies` 已移至 Phase 2，其 backing 在 `Sources/Panels/`，不在本 phase**）；`Sources/TerminalNotificationStore.swift` 删 `PhonePushClient.shared.forward(...)`；`Sources/cmuxApp.swift` 删 `HostAccountFlow`/账户 section 装配；`Sources/AppDelegate.swift` 删 `AuthManager.shared.handleCallbackURL` 与 `cmux://auth-callback`；`Packages/CmuxSettingsUI` 账户 section
 
 ### Phase 8b — Remote SSH + 会话 snapshot 迁移（独立 PR）
 
-- [ ] 🗑️ `Sources/WorkspaceRemoteConfiguration.swift`、`Sources/Remote*.swift`（`RemoteInteractiveShellBootstrapBuilder`、`RemoteRelayZshBootstrap`、`RemoteShellSessionParsing`、`RemoteLoopback*`、`WorkspaceRemoteSSHBatchCommandBuilder`、`MarkdownRemoteImageLoader`）、`Sources/AppDelegate+CmuxSSHURL.swift`、`cmuxTests/WorkspaceRemoteConnectionTests.swift`（**`RightSidebarRemoteCommand.swift` 已移至 Phase 4，不在本 phase——消除审查指出的 Phase 4/8b 归属冲突**）
+- [ ] 🗑️ `Sources/WorkspaceRemoteConfiguration.swift`、`Sources/Remote*.swift`（`RemoteInteractiveShellBootstrapBuilder`、`RemoteRelayZshBootstrap`、`RemoteShellSessionParsing`、`RemoteLoopback*`、`WorkspaceRemoteSSHBatchCommandBuilder`）、`Sources/AppDelegate+CmuxSSHURL.swift`、`cmuxTests/WorkspaceRemoteConnectionTests.swift`（**`RightSidebarRemoteCommand.swift` 已移至 Phase 4、`MarkdownRemoteImageLoader.swift` 由 Phase 3 拥有（在 `Sources/Panels/`）——均不在本 phase，消除审查指出的 Phase 4/8b 与 Phase 3/8b 归属冲突**）
 - [ ] **修改**：`Sources/Workspace.swift` 删 `WorkspaceRemoteSessionController`（~3.5k LOC）、全部 `@Published` remote 属性（含 `remoteProxyEndpoint`）、`isRemoteWorkspace` 及其遍布 guard、所有 `remote*` 方法、`newTerminalSurface()`/`createPanel()` 的 remote 分支
 - [ ] **修改**：`Sources/TerminalController.swift` 删 `workspace.remote.*` RPC case 与 `v2WorkspaceRemotePTY*`/`v2WorkspaceRemoteConfigure`、`currentSocketPathForRemoteRestore()`；`Sources/ContentView.swift` 删 remote 状态观察/侧栏 UI/文件浏览 guard；`Sources/SessionPersistence.swift` 删 `SessionRemoteWorkspaceSnapshot` 与 terminal snapshot 的 `isRemoteTerminal`/`remotePTYSessionID`（Phase 0 持久化层解码器兜底旧含-remote 快照）
 
 ### Phase 8c — `cmuxd` 守护进程（独立 PR；**不碰** CmuxControlSocket/CmuxSocketControl）
 
 - [ ] 🗑️ `daemon/`（cmuxd）— 核实其 remote-only、不承载本地运行/打包后删；**再次确认**未误删本地控制 socket 包。
-- [ ] **修改 CI/release（审查指出 daemon 经 workflow + dev 脚本连线）**：`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job，`scripts/release_asset_guard.js:6-11` 的 `cmuxd-remote-*` 资产校验行 + `scripts/release_asset_guard.test.js`（`ci.yml:53` 跑它），以及本地 dev 脚本 `scripts/reloads.sh`（`CMUXD_UNIX_PATH` 注入 `:236-237/:277`、`cmuxd` 构建/拷贝 `:259-267`）与 `scripts/reload.sh` 的同类 cmuxd 注入——**与本 PR 同步**移除或停用，否则本地编译过但 CI/release/dogfood 仍带 stale daemon 行为。若暂不动 release/nightly，则在本 phase **显式标注"先停用 remote-daemon job"** 再删 `daemon/`。
+- [ ] 🗑️ **daemon release/打包 helper 脚本（审查 R2.4：删 `daemon/` 却留这些会指向已删产物）**：`scripts/build_remote_daemon_release_assets.sh`（remote-daemon 资产构建器）；**修改** `scripts/prune_nightly_release_assets.py` 删 `cmuxd-remote-*` 资产匹配模式（`:15-17` 的 `cmuxd-remote-(darwin|linux)-*` / `cmuxd-remote-checksums-*` / `cmuxd-remote-manifest-*` 正则）。
+- [ ] **修改 CI/release（审查指出 daemon 经 workflow + dev 脚本连线）**：`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job，`scripts/release_asset_guard.js:6-11` 的 `cmuxd-remote-*` 资产校验行 + `scripts/release_asset_guard.test.js`（`ci.yml:53` 跑它），以及调用 `build_remote_daemon_release_assets.sh` 的 release/nightly 步骤，本地 dev 脚本 `scripts/reloads.sh`（`CMUXD_UNIX_PATH` 注入 `:236-237/:277`、`cmuxd` 构建/拷贝 `:259-267`）与 `scripts/reload.sh` 的同类 cmuxd 注入——**与本 PR 同步**移除或停用，否则本地编译过但 CI/release/dogfood 仍带 stale daemon 行为。若暂不动 release/nightly，则在本 phase **显式标注"先停用 remote-daemon job"** 再删 `daemon/`。
 
 ### Phase 9 — 「Bus」对外更名（D1，纯文案）
 
@@ -389,14 +429,22 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 ### Phase 10 — `WorkspaceGroup` 退役 + 内部收缩（独立 PR；gated）
 
 > 审查修正：从 Phase 9 拆出。需 roomID 侧边栏/创建/关闭语义稳定，且补恢复/侧边栏/关闭不变量测试后才做（见测试计划）。
-- [ ] **修改**：移除 `WorkspaceGroup`/`groupId`/`deleteWorkspaceGroup`/ungroup 路径；收缩 `Workspace.swift`/`TabManager.swift`/`TerminalController.swift` 不可达旧分支（终端 + chatRoom/agent only 假设）
+> 审查修正 R1：原一行严重 under-scope——`WorkspaceGroup` 横跨 sidebar/设置/config/docs/持久化/测试多面，glob 删 model 会留死的 sidebar/设置/docs 面或漏旧会话兼容。展开为完整垂直切片：
+- [ ] **模型/核心（审查 R1.2 修正：`WorkspaceGroup` 类型实际在 `TabManager.swift`，非 `Workspace.swift`）**：`Sources/TabManager.swift` 删 `struct WorkspaceGroup`（`:1007`）与其 group 设置类型（`:920` 一带，如 `WorkspaceGroupNewWorkspacePlacementSettings`/`WorkspaceGroupNewPlacement`）；`Sources/Workspace.swift` 删 `groupId`/`deleteWorkspaceGroup`/ungroup·dissolve·anchor 路径与 group 配置解析使用点（`:10313` 状态、`:10560 resolveWorkspaceGroupConfig`）；`Sources/TerminalController.swift` 收缩不可达旧分支（终端 + chatRoom/agent only 假设）
+- [ ] 🗑️ **专用 sidebar/group 文件**：`Sources/TabItemView+WorkspaceGroups.swift`、`Sources/VerticalTabsSidebar+WorkspaceGroups.swift`、`Sources/WorkspaceGroupMenuSnapshot.swift`、**（审查 R1.2）`Sources/SidebarWorkspaceGroupHeaderView.swift`、`SidebarWorkspaceGroupDialogs.swift`、`SidebarWorkspaceGroupConfigOpener.swift`、`SidebarWorkspaceGroupHeaderMetrics.swift`、`SidebarWorkspaceGroupingMetrics.swift`**
+- [ ] **修改 — 设置/config/schema 引用（审查 R1.2：删模型/设置类型却留这些 → 编译错 + stale config）**：`Sources/KeyboardShortcutSettingsFileStore.swift` 删 `workspaceGroups` section 解析（`:372-373` + `parseWorkspaceGroupsSection` `:1007`、`workspaceGroups.newWorkspacePlacement` `:1014`）；`Sources/KeyboardShortcutSettingsFileStore+Template.swift:85` 删生成模板里的 `workspaceGroups` 项；`Sources/SettingsNavigation.swift:438` 删 `workspaceGroups.newWorkspacePlacement` 导航映射；`Sources/CmuxSettingsJSONPathSupport.swift:90` 删该 JSON path；同步迁出后的 `cmux.schema.json` 的 `workspaceGroups`（schema 已在 Phase 8a 迁出非 web home）
+- [ ] **修改 — sidebar 渲染/上下文菜单**：`Sources/ContentView.swift` 删 `workspaceGroups`/`workspaceGroupById`/`workspaceGroupMenuSnapshot`（`:10900-10902/:10929`）与 group header/分组渲染、右键「分组/解组」菜单；`Sources/SidebarWorkspaceRenderItem.swift` 的 `groupHeader`/`renderItems(...groupsById:)` 旧分组路径（聊天室用 `chatRoomRenderItems`，group 路径已不可达）
+- [ ] **修改 — AppDelegate 新建-入组路径**：`Sources/AppDelegate*.swift` 删「在 group 内新建 workspace」/move-into-group 分支
+- [ ] **修改 — 持久化（旧会话兼容）**：`Sources/SessionPersistence.swift` 删 `SessionWorkspaceGroupSnapshot`（`:1825`）与 `SessionWorkspaceSnapshot.workspaceGroups`（`:1860`）字段——**旧会话兼容**：该字段是 `decodeIfPresent` 可选，删属性后 Codable 默认忽略未知 key；须确认 `SessionWorkspaceSnapshot` 无穷举 CodingKeys/抛错解码强制它，并加旧含-`workspaceGroups` 快照回归（恢复后 tab 顺序/平铺正常、无悬挂 `anchorWorkspaceId`）
+- [ ] **修改 — config/设置/docs/本地化**：`Sources/CmuxConfig.swift` 删 `workspaceGroups`（`:19`）、`CmuxConfigWorkspaceGroupsDefinition`（`:157`）、`CmuxConfigWorkspaceGroupEntry`（`:165`）及 CodingKeys/decode（`:90-92`）；删 `cmux.json` schema 的 `workspaceGroups`、设置搜索别名、`Resources/Localizable.xcstrings` group 串；🗑️ `docs/workspace-groups.md`
+- [ ] **修改 — 测试**：删/改 WorkspaceGroup 相关单测（reorder/dissolve/anchor/恢复），新增旧会话兼容回归（见测试计划「`WorkspaceGroup` 退役不变量」）
 
 ### Phase 11 — 更新器 / 分发删除（D4，独立 PR；审查指出非"随手 commit"）
 
 - [ ] **修改**：`Sources/AppDelegate.swift` 删 `import CmuxUpdater`/`CmuxUpdaterUI`（`:6-7`）、`UpdateActionDelegate`/`UpdateActionsHost` 一致性与 retry/relaunch 回调、**`checkForUpdates(_:)` 方法**；`Sources/ContentView.swift` 删侧边栏 update pill；`Sources/cmuxApp.swift` 删 updater 装配
 - [ ] **修改 — updater 入口 surface（审查指出散落在 Phase 11 文件之外，删 `checkForUpdates` 会断这些）**：`Sources/App/CmuxHelpCommands.swift:17-18` Help 菜单「Check for Updates」、`Sources/App/MenuBarExtraController.swift:33/130-132/277` `checkForUpdatesItem` + `checkForUpdatesAction`、`Sources/ContentView.swift:7001` 命令面板 `palette.checkForUpdates` 贡献 + 对应本地化串（`command.checkForUpdates.*`/`menu.checkForUpdates`）
 - [ ] 🗑️ `Sources/Update/`、`Packages/CmuxUpdater`、`Packages/CmuxUpdaterUI`、`homebrew-cmux/`、相关测试（含 updater UI 测试）；Info.plist 的 `SUFeedURL`/`SUPublicEDKey` 等 Sparkle 键
-- [ ] **本地 release 脚本（审查指出仍要求 Sparkle/appcast/homebrew）**：**改写** `scripts/build-sign-upload.sh`——剥除 Sparkle key 注入（`:83-95`）、appcast 生成/上传（`:131-158`）、homebrew 编辑（`:173`），**保留**构建/签名/公证/DMG/上传（app 仍需出 DMG，只是不再自动更新）；🗑️ 随之 orphan 的 `scripts/{sparkle_generate_appcast.sh,sparkle_generate_keys.sh,derive_sparkle_public_key.swift,remove-sparkle-sandbox-xpc-services.sh}`；`scripts/release-pretag-guard.sh` 剥除 appcast/Sparkle 检查；🗑️ feature-coupled 测试 `tests/test_ci_sparkle_build_monotonic.sh`、`tests/test_nightly_universal_build.sh` 的 Sparkle 部分（**这些是 Sparkle 专属守卫，随功能删——区别于保留的通用 `test_ci_*` 基础设施守卫**）
+- [ ] **本地 release 脚本（审查指出仍要求 Sparkle/appcast/homebrew）**：**改写** `scripts/build-sign-upload.sh`——剥除 Sparkle key 注入（`:83-95`）、appcast 生成/上传（`:131-158`）、homebrew 编辑（`:173`），**保留**构建/签名/公证/DMG/上传（app 仍需出 DMG，只是不再自动更新）；**审查 R1：`remove-sparkle-sandbox-xpc-services.sh` 非真 orphan——`scripts/sign-cmux-bundle.sh:79` 调它，而 `sign-cmux-bundle.sh` 仍被 `release.yml:360`/`nightly.yml:519` 用；故须同 PR 先改 `sign-cmux-bundle.sh` 删掉 `:79` 的调用（Sparkle 已不在 bundle 里，无需再剥 XPC）+ 删 `tests/test_sparkle_xpc_cleanup.sh`，再** 🗑️ `scripts/{sparkle_generate_appcast.sh,sparkle_generate_keys.sh,derive_sparkle_public_key.swift,remove-sparkle-sandbox-xpc-services.sh}`；`scripts/release-pretag-guard.sh` 剥除 appcast/Sparkle 检查；🗑️ feature-coupled 测试 `tests/test_ci_sparkle_build_monotonic.sh`、`tests/test_nightly_universal_build.sh` 的 Sparkle 部分（**这些是 Sparkle 专属守卫，随功能删——区别于保留的通用 `test_ci_*` 基础设施守卫**）
 - [ ] **修改 CI/release**：`.github/workflows/update-homebrew.yml`（Sparkle/homebrew 发布流）、`release.yml`/`nightly.yml` 中的 appcast/Sparkle 步骤；**`scripts/release_asset_guard.js:5` 的 `"appcast.xml"` 必需资产行 + 其 `release_asset_guard.test.js`**（`release.yml:72` 经 `evaluateReleaseAssetGuard` 调用、`ci.yml:53` 跑 test）——删 appcast 生成的同时移除该校验行，否则 release 校验仍要求已不再生成的 appcast 资产而红。（注：该 guard 的 `cmuxd-remote-*` 行由 Phase 8c 处理，本 phase 只动 `appcast.xml` 行。）同步删除或停用
 
 ### Phase 12 — 遥测 / 崩溃上报删除（D7，独立 PR）
@@ -432,7 +480,7 @@ N/A。
 
 XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**Phase -1 / 0 / 1 / 1A / 1B / 2 / 3 / 4 / 5 / 6 / 7 / 8a / 8b / 8c / 9 / 10 / 11 / 12**。所有 phase 共享收尾门控 **G**（每 phase 末尾跑，不重复抄写）：
 
-> **门控 G（每 phase 末尾跑，全自动）**：① 同步 `cmux.xcodeproj/project.pbxproj`（移除已删包/文件的 ref + Frameworks 链接）与**本 phase 文件清单列出的所有 phase-specific workflows**（不止 `ci.yml`/`test-ios.yml`——按 phase 还含 `ios-testflight.yml`、`release.yml`、`nightly.yml`、`tmux-corpus.yml`、`update-homebrew.yml` 等；以各 phase「需要修改的文件」为准，凡触发于已删路径或调用已删脚本的 workflow 必须同步删/停用）；② `python3 scripts/normalize-pbxproj.py` + `scripts/check-pbxproj.sh` + `scripts/lint-pbxproj-test-wiring.sh`；③ `xcodebuild -project cmux.xcodeproj -scheme cmux -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/cmux-prune-bus build`（app 编译）；④ `xcodebuild -scheme cmux-unit -derivedDataPath /tmp/cmux-prune-bus build`（**测试 target 编译**——`reload.sh` 不编译它）；⑤ `./scripts/reload.sh --tag prune-bus` 起 tagged Debug；⑥ 自动化烟测（stale 命令面板/socket verb、旧快照 layout remap）+ 场景 1 见「测试计划」。门控全绿才进下一 phase。
+> **门控 G（每 phase 末尾跑，全自动）**：① 同步 `cmux.xcodeproj/project.pbxproj`（移除已删包/文件的 ref + Frameworks 链接）与**本 phase 文件清单列出的所有 phase-specific workflows**（不止 `ci.yml`/`test-ios.yml`——按 phase 还含 `ios-testflight.yml`、`release.yml`、`nightly.yml`、`tmux-corpus.yml`、`update-homebrew.yml` 等；以各 phase「需要修改的文件」为准，凡触发于已删路径或调用已删脚本的 workflow 必须同步删/停用）；② `python3 scripts/normalize-pbxproj.py` + `scripts/check-pbxproj.sh` + `scripts/lint-pbxproj-test-wiring.sh`；③ `xcodebuild -project cmux.xcodeproj -scheme cmux -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/cmux-prune-bus build`（app 编译）；④ `xcodebuild -scheme cmux-unit -derivedDataPath /tmp/cmux-prune-bus build`（**测试 target 编译**——`reload.sh` 不编译它）；⑤ `./scripts/reload.sh --tag prune-bus` 起 tagged Debug；⑥ 自动化烟测（stale 命令面板/socket verb、旧快照 layout remap）+ 场景 1 见「测试计划」；⑦ **Periphery scoped 扫描（见「删除方法」）**：对本 phase 触及范围跑 Periphery，人工核对归属后删 transitively-dead 声明/文件（**两条护栏：scoped-only + 对 `@objc`/反射/sdef/IBAction 假阳性人工核对**；用 `--retain-objc-accessible` 等）；⑧ **非-Swift 消费者闸**：凡本 phase 删了 release/CI/dev 脚本或 `tests_v2` 套件，跑对应 **release 脚本 dry-run**（如 `sign-cmux-bundle.sh`/`build-sign-upload.sh` 的非签名路径）+ **完整 `scripts/run-tests-v2.sh`**，确认无指向已删脚本/API 的红。门控全绿才进下一 phase。
 
 **Phase -1**：前提回归门控（不删任何东西）**(需要手动操作)**
 - [ ] **步骤 1**：起 tagged app，新建 room + claude + codex agent，`@all` 发 prompt，确认**两者回复都回到 room channel**（非 `0 / N replied`）、终端查找可用；退出重开确认恢复 + claude 已 resume。**全绿才进 Phase 0。**
@@ -462,23 +510,25 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 
 **Phase 3**：其余非终端 Panel（markdown / filePreview / project）
 - [ ] **步骤 1**：断入口（创建路径、命令、快捷键），编译通过。
-- [ ] **步骤 2**：删 `PanelType.{markdown,filePreview,project}` + intent，补齐各 `case`；删文件与 `CMUXProjectModel`、`Resources/markdown-viewer/`；**删 `diff-viewer/` + `scripts/{build-diff-viewer-app.sh,check-diff-viewer-react-compiler.mjs,open-diff-viewer-stress-samples.sh}` + `ci.yml:139-159` diff-viewer job + CLI runtime（`cmux.swift:2991` `diff-viewer-server`/`runDiffViewerServerCommand`、`cmux_open.swift` 的 `cmux-diff-viewer` server/asset 服务）**；删 `scripts/verify-cmd-click-file-previews.sh`（验的是已删的 filePreview，且读 `web/public` fixture——一并去免得 Phase 8a 删 web/ 时再处理）。
+- [ ] **步骤 2**：删 `PanelType.{filePreview,project}` + intent，补齐各 `case`（**保留 `PanelType.markdown` 及全部 `Markdown*.swift`/markdown 渲染资产**）；删 filePreview/project 文件与 `CMUXProjectModel`（**保留 `FilePreviewTextEditingPanel` 协议——markdown 仍用**）；删 `Resources/markdown-viewer/` 的 **diff-viewer 子目录**（`diff-viewer/`、`diff-viewer-app/`，**不删** markdown 资产）；**删 `diff-viewer/` 顶层目录 + `scripts/{build-diff-viewer-app.sh,check-diff-viewer-react-compiler.mjs,open-diff-viewer-stress-samples.sh}` + `ci.yml:139-159` diff-viewer job + CLI runtime（`cmux.swift:2991` `diff-viewer-server`/`runDiffViewerServerCommand`、`cmux_open.swift` 的 `cmux-diff-viewer` server/asset 服务）**；删 `scripts/verify-cmd-click-file-previews.sh`（验的是已删的 filePreview，且读 `web/public` fixture——一并去免得 Phase 8a 删 web/ 时再处理）。
 - [ ] **步骤 3**：门控 G + 旧快照回归。
 
 **Phase 4**：旧右侧栏 modes + Feed 面板 UI（保留管道）
-- [ ] **步骤 1**：删右侧栏 surface **整片**——`Sources/RightSidebar*.swift`（含 `RightSidebarRemoteCommand.swift`，本 phase 拥有）/`FileExplorer*.swift` + `AppDelegate` 的 `FileExplorerState`/`applyRightSidebarRemoteCommand` + `Workspace` 的 `RightSidebarToolPanel`/`SessionRightSidebarToolPanelSnapshot` + 快捷键/本地化/测试；删全局搜索 **整片**——`Sources/Search/` + `AppDelegate` start/菜单 + `MenuBarExtraController` 项 + `KeyboardShortcutSettings`/`CmuxSettings` 的 `.globalSearch` action + `SearchIndexTests`（Phase 2 已去 browser 耦合）。**`Sources/Find/` 三个终端查找文件全部保留**（`SurfaceSearchOverlay`/`TerminalSearchOverlayHostingView`/`FindTextFieldSupport`），本 phase 不删 `Sources/Find/` 任何文件。
+- [ ] **步骤 1**：删右侧栏 surface **整片**——`Sources/RightSidebar*.swift`（含 `RightSidebarRemoteCommand.swift`，本 phase 拥有）/`FileExplorer*.swift` + `AppDelegate` 的 `FileExplorerState`/`applyRightSidebarRemoteCommand` + `Workspace` 的 `RightSidebarToolPanel`/`SessionRightSidebarToolPanelSnapshot` + 快捷键/本地化/测试；**（审查 R2）删 `right_sidebar` CLI/socket 入口**——`CLI/cmux.swift` 的 `right-sidebar` 解析/转发/help（`:3114/4600/5084/14492` + `:14937` `forwardRightSidebarCommand`）+ `TerminalController` 的 `right_sidebar` gate/dispatch/handler（`:363/370/1407/1590`）+ `:20407-20448` 的 parse/`applyRightSidebarRemoteCommand`/测试 seam `parseRightSidebarRemoteRequestForTesting` + `debug_right_sidebar_focus`（`:171/193/1679`）+ `cli.rightSidebar.*`/`rightSidebar.remote.error.*` 本地化 + `cmuxTests/TerminalControllerSocketSecurityTests.swift:812+` 的 `right_sidebar` socket 测试 + right-sidebar/dock docs topic（否则引用已删 `RightSidebarRemoteRequest`/`rightSidebar(args)`、编译失败）；删全局搜索 **整片**——`Sources/Search/` + `AppDelegate` start/菜单 + `MenuBarExtraController` 项 + `KeyboardShortcutSettings`/`CmuxSettings` 的 `.globalSearch` action + `SearchIndexTests`（Phase 2 已去 browser 耦合）。**`Sources/Find/` 三个终端查找文件全部保留**（`SurfaceSearchOverlay`/`TerminalSearchOverlayHostingView`/`FindTextFieldSupport`），本 phase 不删 `Sources/Find/` 任何文件。
 - [ ] **步骤 2**：仅删 `FeedPanelView*` 与 Feed 调试窗；**保留** `FeedCoordinator.ingestBlocking/deliverReply` + `CMUXWorkstream` + `v2FeedPush` + `ChatRoomController`。
 - [ ] **步骤 3**：门控 G + **聊天回复回归**（@mention → claude/codex 回复仍回到 room；终端查找仍可用）。
 
 **Phase 5**：侧边栏扩展 / 自定义渲染平台（seam 已定位：`extensionSidebarScrollArea` 喂 SwiftRender，非 `workspaceScrollArea`）
 - [ ] **步骤 1**：断 `extensionSidebarScrollArea()`（`ContentView:11220`）+ provider 切换（`:10960-10962`）+ `import CmuxExtensionSidebarExamples`（`:7`），确认 room 侧边栏走 `workspaceScrollArea()`（`:11056`），编译通过。
-- [ ] **步骤 2**：删 `CmuxExtensionKit`/`CMUXExtensionHostSupport`/`CmuxSidebarProviderKit`/`CmuxSidebarInterpreterService`/`CmuxSwiftRender(UI)`、`CmuxSidebarActionDispatch.swift`、**`Examples/`（含 `CmuxExtensionSidebarExamples`）**。
-- [ ] **步骤 3**：门控 G + 侧边栏（rooms+agents）渲染回归。
+- [ ] **步骤 2（审查 R1.1/R2.2：同 PR 删整条 `extensionBrowser` panel surface）**：删 `PanelType.extensionBrowser`（`Panel.swift:13` + arms）、`Workspace.newSidebarExtensionBrowserSurface`（`:15030`）+ 各 `case .extensionBrowser`、`PanelContentView` 分支、`AppDelegate.openSidebarExtensionBrowser`（`:13732`）、`UpdateTitlebarAccessory.swift:943` **和 `MinimalModeSidebarControls.swift:198`（审查 R1.1）** 的 `CmuxExtensionSidebarSelection.showMenu` 调用、`SessionPersistence` 的 extensionBrowser snapshot 字段、相关快捷键/本地化/测试；🗑️ `CMUXSidebarExtensionBrowserPanel.swift`/`CMUXInstalledExtensionSidebarHostView.swift`/`ExtensionSidebarWorkspaceRowView.swift`/`ExtensionWorktreePrototype.swift`。
+- [ ] **步骤 3（审查 R2：custom-sidebar socket/CLI/设置全切片，同 PR）**：删 `TerminalController` 的 `sidebar.custom.{validate,reload,select}`（`:911-913` 注册 + `:1095` dispatch + handler `:4129/4150`）与 `extension.sidebar.snapshot`（`:1929/2418`）+ 本地化；删 `CLI/cmux.swift:15022/15042` 的 `cmux sidebar custom` 命令/help；删 beta 设置 `customSidebars`（`BetaFeaturesCatalogSection.swift:44`/`BetaFeaturesSection.swift:92`/`CuratedSettingEntry+Default.swift:105` + schema/本地化/测试）；删 `CMUXCLI+DocsSettings.swift:118` 的 `sidebars` docs topic + `docs/events.md` 扩展侧边栏段落；🗑️ `docs/custom-sidebars.md`、`docs/data-driven-sidebar-plan.md`。
+- [ ] **步骤 4**：删 `CmuxExtensionKit`/`CMUXExtensionHostSupport`/`CmuxSidebarProviderKit`/`CmuxSidebarInterpreterService`/`CmuxSwiftRender(UI)`、`CmuxSidebarActionDispatch.swift`、**`Examples/`（含 `CmuxExtensionSidebarExamples`）**。
+- [ ] **步骤 5**：门控 G + 侧边栏（rooms+agents）渲染回归 + 旧含-`extensionBrowser` 快照降级恢复回归 + `cmux sidebar custom`/`sidebar.custom.*` socket verb 已从运行时注册表移除（行为级断言）。
 
 **Phase 6**：配对 Mac 移动主机（打字延迟热路径，谨慎）
 - [ ] **步骤 1**：diff 确认 `GhosttyTerminalView`/`TerminalController` 的 byte-tee 与 render-grid-frame **仅服务移动主机**；若有非移动用途，先把该值类型抽到 `CmuxFoundation`。
-- [ ] **步骤 2**：删三文件（`AppDelegate`/`TerminalController`/`GhosttyTerminalView`）的 mobile 引用与 `import CMUXMobileCore`，再删 `Packages/CMUXMobileCore` + `Sources/Mobile/`。
-- [ ] **步骤 3**：门控 G + **打字延迟主观验收**（在 agent 终端连续输入，无卡顿/回显延迟）。**(需要手动操作)** — 需人眼/手感判断。
+- [ ] **步骤 2**：删 `AppDelegate`/`TerminalController`/`GhosttyTerminalView` 的 mobile 引用与 `import CMUXMobileCore`；**（审查 R1.2）**删 `TabManager` 7 处 `MobileHostRequestActivity` 节流调用（`:1449/1708/1891/2862/2870/3065/3073`）+ `mobileHostBackgroundWorkQuietInterval`；删 Mobile 设置面（`MobileSection.swift`、`MobileCatalogSection` 的 `iOSPairingHost` 等 mobile 键 + schema/文档/本地化/测试）；再删 `Packages/CMUXMobileCore` + `Sources/Mobile/`。
+- [ ] **步骤 3**：门控 G + **打字延迟主观验收**（在 agent 终端连续输入，无卡顿/回显延迟）+ 确认设置面无残留「iOS Pairing」死开关。**(需要手动操作)** — 需人眼/手感判断。
 
 **Phase 7**：未用 agent 集成（窄）+ OMP + `cmux top`（文件级 split）
 - [ ] **步骤 1（rovo/hermes/amp 全有全无，同 commit）**：删 hook config/extension 文件（`RovoDevHookConfig.swift`、`HermesAgentHookConfig.swift`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` + 测试）**同时**删 `AgentHookDef` 的 rovodev/hermes-agent/amp 三行 + `cmux.swift` 的 install/uninstall dispatch（`:26240-26247`/`:26601-26608`）+ `installRovoDevHooks`/`rovoDevHooksContent` 等函数 + `cmux hooks setup/uninstall {rovodev,hermes-agent,amp}` 入口/本地化（否则 `cmux.swift` 引用已删符号、编译失败）。**保留** `CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（会话索引，非 hook）、`RestorableAgentKind` 全部 case、`SessionAgentPresentation`/`SessionIndexStore/View` 的 rovo/hermes 分支。
@@ -487,23 +537,25 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - [ ] **步骤 4**：门控 G + 新建 codex + claude agent，确认 hook（回复/状态）正常。
 
 **Phase 8a**：云 / Auth（独立 PR）
-- [ ] **步骤 1**：删 `Sources/Cloud/`、`CloudVMActionLauncher`、`Sources/Auth/`、`CMUXAuthCore`、`CmuxAuthRuntime`、`vendor/stack-auth-*` 及其 socket verb / 账户 UI / 回调；**删 CLI auth/login/logout（`cmux.swift:3338`）与 vm/cloud（`:3405`）dispatch + help（`:12840`）+ `stress-cli-socket-api.py` 条目**；**删 `web/` + `ci.yml` web-typecheck/web-db-migrations job + `cloud-vm-migrate.yml`/`cloud-vm-smoke.yml`**；门控 G。
+- [ ] **步骤 0（审查 R2.1）**：先迁出 `web/data/{cmux.schema.json,cmux-settings.schema.json,cmux-shortcuts.ts}` 到非 web canonical home + repoint `KeyboardShortcutSettingsFileStore.swift:28-29`/`+Template.swift:8`/`CMUXCLI+DocsSettings.swift:5/48`/`CMUXCLI+Config.swift:151` 的 schema URL，**再**删 `web/`。
+- [ ] **步骤 1**：删 `Sources/Cloud/`、`CloudVMActionLauncher`、`Sources/Auth/`、`CMUXAuthCore`、`CmuxAuthRuntime`、`vendor/stack-auth-*` 及其 socket verb / 账户 UI / 回调；**删 CLI auth/login/logout（`cmux.swift:3338`）与 vm/cloud（`:3405`）dispatch + help（`:12840`）+ `stress-cli-socket-api.py` 条目**；**删 `web/` + `ci.yml` web-typecheck/web-db-migrations job + `cloud-vm-migrate.yml`/`cloud-vm-smoke.yml`**；**删 `tests_v2/` 的 cloud/auth/vm 套件（审查 R2.2）**；门控 G。
 
 **Phase 8b**：Remote SSH + 会话 snapshot 迁移（独立 PR）
-- [ ] **步骤 1**：删 remote SSH（`WorkspaceRemoteConfiguration`、`Remote*`、`WorkspaceRemoteSessionController`、相关 RPC/属性/字段、`AppDelegate+CmuxSSHURL`）；门控 G + **含-remote 字段旧快照回归**（Phase 0 持久化层兜底，layout 净化，不崩）。
+- [ ] **步骤 1**：删 remote SSH（`WorkspaceRemoteConfiguration`、`Remote*`、`WorkspaceRemoteSessionController`、相关 RPC/属性/字段、`AppDelegate+CmuxSSHURL`）；**删 `tests_v2/` 的非-daemon remote 套件（审查 R2.2：`test_ssh_remote_*.py` 中调 `workspace.remote.status` 等的，如 `test_ssh_remote_cli_metadata.py:342`/`test_ssh_remote_cli_relay.py`/`test_ssh_remote_port_detection.py` 等；需 `daemon/` 的留至 Phase 8c）**；门控 G + **含-remote 字段旧快照回归**（Phase 0 持久化层兜底，layout 净化，不崩）。
 
 **Phase 8c**：`cmuxd` 守护进程（独立 PR）
-- [ ] **步骤 1**：核实 `cmuxd` remote-only 后删 `daemon/`。**同 PR 镜像文件清单（line 358）的全部 CI/script 清理**：`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job + `scripts/release_asset_guard.js` 的 `cmuxd-remote-*` 资产校验行（`:6-11`）+ 其 `release_asset_guard.test.js`；本地 dev 脚本 `scripts/reloads.sh`（`CMUXD_UNIX_PATH` 注入 `:236-237/:277`、`cmuxd` 构建/拷贝 `:259-267`）与 `scripts/reload.sh` 中同类 cmuxd 注入——一并删/停用，否则本地编译过但 CI/release/dogfood 仍带 stale daemon 行为。若暂不动 release/nightly，则**先显式停用 remote-daemon job** 再删 `daemon/`。**再次确认未碰** `CmuxControlSocket`/`CmuxSocketControl`（CLI/hooks 的本地控制 socket，脊柱）；门控 G。
+- [ ] **步骤 1**：核实 `cmuxd` remote-only 后删 `daemon/`。**同 PR 镜像文件清单的全部 CI/script 清理**：🗑️ `scripts/build_remote_daemon_release_assets.sh` + 改 `scripts/prune_nightly_release_assets.py` 删 `cmuxd-remote-*` 模式（`:15-17`，审查 R2.4）；`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job + `scripts/release_asset_guard.js` 的 `cmuxd-remote-*` 资产校验行（`:6-11`）+ 其 `release_asset_guard.test.js`；本地 dev 脚本 `scripts/reloads.sh`（`CMUXD_UNIX_PATH` 注入 `:236-237/:277`、`cmuxd` 构建/拷贝 `:259-267`）与 `scripts/reload.sh` 中同类 cmuxd 注入——一并删/停用，否则本地编译过但 CI/release/dogfood 仍带 stale daemon 行为。若暂不动 release/nightly，则**先显式停用 remote-daemon job** 再删 `daemon/`。**删 `tests_v2/` 的 daemon-依赖 remote 套件（审查 R2.2：`test_ssh_remote_daemon_resize_stdio.py:95` 等 require `daemon/`/remote 的）**。**再次确认未碰** `CmuxControlSocket`/`CmuxSocketControl`（CLI/hooks 的本地控制 socket，脊柱）；门控 G。
 
 **Phase 9**：「Bus」对外更名（纯文案）
 - [ ] **步骤 1**：改对外文案为 **Bus**（`CFBundleDisplayName`、About、窗口标题、`README.md`、`docs/`、本地化对外串）；**全程不碰** `cmux` CLI 名 / `CMUX_*` / socket / bundle id 基名 / 包名 / hook 协议 / `scripts/*`。
 - [ ] **步骤 2**：`./scripts/reload.sh --tag prune-bus` 确认 hooks/CLI/dogfood 零回归（命令仍是 `cmux`）；门控 G；可选加 `bus` alias 转发 `cmux`。
 
 **Phase 10**：`WorkspaceGroup` 退役 + 内部收缩（gated）
-- [ ] **步骤 1**：roomID 侧边栏稳定后，移除 `WorkspaceGroup`/`groupId`/ungroup 路径，收缩 `Workspace`/`TabManager`/`TerminalController` 不可达旧分支；门控 G + 恢复/侧边栏/关闭不变量测试（见测试计划）。
+- [ ] **步骤 1（审查 R1：完整垂直切片，非一行）**：roomID 侧边栏稳定后——删模型/核心（**`TabManager` 的 `struct WorkspaceGroup`（`:1007`）+ group 设置类型（`:920`）**、`Workspace` 的 `groupId`/ungroup/anchor/`:10560` group config 解析；收缩 `TabManager`/`TerminalController` 旧分支）；🗑️ `TabItemView+WorkspaceGroups.swift`/`VerticalTabsSidebar+WorkspaceGroups.swift`/`WorkspaceGroupMenuSnapshot.swift`/**`SidebarWorkspaceGroup{HeaderView,Dialogs,ConfigOpener,HeaderMetrics}.swift`/`SidebarWorkspaceGroupingMetrics.swift`**；删 `ContentView`/`SidebarWorkspaceRenderItem` 的 group 渲染/右键菜单、`AppDelegate` 新建-入组路径；删 `SessionPersistence` 的 `SessionWorkspaceGroupSnapshot`+`workspaceGroups` 字段、`CmuxConfig` 的 `workspaceGroups`/`CmuxConfigWorkspaceGroups*`（`:19/157/165`）+ **设置 surface（`KeyboardShortcutSettingsFileStore.swift:372`/`+Template.swift:85`/`SettingsNavigation.swift:438`/`CmuxSettingsJSONPathSupport.swift:90`）** + `cmux.schema.json`（迁出后）/设置别名/本地化；🗑️ `docs/workspace-groups.md`；改/删相关测试。
+- [ ] **步骤 2**：门控 G + 恢复/侧边栏/关闭不变量测试 + **旧含-`workspaceGroups` 会话回归**（恢复后 tab 顺序/平铺正常、无悬挂 `anchorWorkspaceId`，见测试计划）。
 
 **Phase 11**：更新器 / 分发删除（D4，独立 PR）
-- [ ] **步骤 1**：删 `AppDelegate` 的 `import CmuxUpdater(UI)`/`UpdateActionsHost` 装配 + `checkForUpdates(_:)` + `ContentView` update pill；**删 updater 入口**（`CmuxHelpCommands.swift:17` Help 菜单、`MenuBarExtraController.swift:33/277` 菜单项+action、`ContentView.swift:7001` 命令面板 `palette.checkForUpdates` + 本地化）；删 `Sources/Update/`、`Packages/CmuxUpdater(UI)`、`homebrew-cmux/`、updater 测试、Info.plist Sparkle 键；**改写 `scripts/build-sign-upload.sh` 去 Sparkle/appcast/homebrew（保留 DMG 构建签名公证上传）+ 删 orphan `sparkle_*`/`derive_sparkle_public_key.swift`/`remove-sparkle-sandbox-xpc-services.sh` + `release-pretag-guard.sh` 去 appcast 检查 + 删 `tests/test_ci_sparkle_build_monotonic.sh`/`test_nightly_universal_build.sh` Sparkle 部分**；停用 `update-homebrew.yml` 与 release/nightly 的 Sparkle/appcast 步骤、移除 `scripts/release_asset_guard.js` 的 `"appcast.xml"` 资产行 + 其 test（否则 `release.yml:72` 的 guard 仍要求 appcast 资产）；门控 G。
+- [ ] **步骤 1**：删 `AppDelegate` 的 `import CmuxUpdater(UI)`/`UpdateActionsHost` 装配 + `checkForUpdates(_:)` + `ContentView` update pill；**删 updater 入口**（`CmuxHelpCommands.swift:17` Help 菜单、`MenuBarExtraController.swift:33/277` 菜单项+action、`ContentView.swift:7001` 命令面板 `palette.checkForUpdates` + 本地化）；删 `Sources/Update/`、`Packages/CmuxUpdater(UI)`、`homebrew-cmux/`、updater 测试、Info.plist Sparkle 键；**改写 `scripts/build-sign-upload.sh` 去 Sparkle/appcast/homebrew（保留 DMG 构建签名公证上传）+ 改 `scripts/sign-cmux-bundle.sh:79` 删 `remove-sparkle-sandbox-xpc-services.sh` 调用（审查 R1：否则 release/nightly 签名步骤调已删脚本而断）+ 删 `tests/test_sparkle_xpc_cleanup.sh` + 删 orphan `sparkle_*`/`derive_sparkle_public_key.swift`/`remove-sparkle-sandbox-xpc-services.sh` + `release-pretag-guard.sh` 去 appcast 检查 + 删 `tests/test_ci_sparkle_build_monotonic.sh`/`test_nightly_universal_build.sh` Sparkle 部分**；停用 `update-homebrew.yml` 与 release/nightly 的 Sparkle/appcast 步骤、移除 `scripts/release_asset_guard.js` 的 `"appcast.xml"` 资产行 + 其 test（否则 `release.yml:72` 的 guard 仍要求 appcast 资产）；门控 G。
 
 **Phase 12**：遥测 / 崩溃上报删除（D7，独立 PR）
 - [ ] **步骤 1**：删 `GhosttyTerminalView.swift:13` 的 `import Sentry` + 全部 `SentrySDK`/`PostHog` 调用点；删 `PostHogAnalytics.swift`、`SentryHelper.swift` + pbxproj 包引用；**删用户可见遥测设置**（`CommandPaletteSettingsToggle.swift:310` 开关、`SettingsSearchAliases.swift:76` 别名、`AppSection.swift:536` UI 行、`CmuxSettings` 目录 `app.sendAnonymousTelemetry` + `TelemetrySettings` 模型、本地化、`GhosttyConfigTests.swift` 测试、`cmux.json` schema/文档）；停用 release/nightly 的 dSYM→Sentry 上传；**保留** `CMUXDebugLog`；门控 G。
@@ -529,7 +581,8 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 ```swift
 @Suite struct SessionSnapshotLenientDecodingTests {
     // 持久化层（不涉及运行时 PanelType）
-    @Test func droppedPanelTypeIsSkippedNotThrown()   // 旧 "browser"/"markdown" panel → 丢弃，其余 panel 正常解出
+    @Test func droppedPanelTypeIsSkippedNotThrown()   // 旧 "browser"/"filepreview" panel → 丢弃，其余 panel 正常解出
+    @Test func keptMarkdownPanelRestoresNotDropped()  // 旧 "markdown" panel → 正常恢复（markdown 保留，不在 drop 集）
     @Test func currentSnapshotRoundTripsUnchanged()   // 当前格式 encode→decode 不变（不回归）
     // 恢复契约（layout/focus/selected 净化）
     @Test func unknownSelectedPanelIsRemapped()       // selected 指向已删 panel → 重映射到幸存集合
@@ -537,9 +590,10 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
     @Test func splitWithOneSideRemovedCollapses()     // 分屏一侧 panel 被删 → layout 坍缩为单 pane
     @Test func workspaceLosingAllPanelsFallsBackToTerminal() // workspace 丢光 panel → 回退一个新建空终端，不留空白
     @Test func legacySnapshotWithRemoteFieldsRestores()      // 含 remote 字段旧快照 → 窗口/tab 恢复，remote 忽略
+    @Test func droppedRightSidebarToolAndExtensionBrowserSkipped() // 审查 R2.1/R2.2：含 rightSidebarTool / extensionBrowser panel 旧快照 → 丢弃，其余正常
 }
 ```
-- fixture：脱敏的真实旧 `session-*.json` 拷贝置 `cmuxTests/Fixtures/`，覆盖 browser/markdown/remote + layout/selected 指向已删 panel。
+- fixture：脱敏的真实旧 `session-*.json` 拷贝置 `cmuxTests/Fixtures/`，**被删类型**覆盖 **browser/filePreview/project/rightSidebarTool/extensionBrowser/remote** + layout/selected 指向已删 panel（审查 R2.1/R2.2）；**保留类型**须含一个 `markdown` panel 验证它**正常恢复**（不被丢弃）。
 
 #### 2. 删除切片的行为级回归（自动化，编入门控 G）
 
@@ -548,6 +602,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - **Feed 管道存活**：Phase 4 删 Feed UI 后，注入一条 `feed.push` Stop 事件，`#expect` `ChatRoomController` 仍把回复挂到对应 exchange（`FeedCoordinator.ingestBlocking/deliverReply` 未被误删）。
 - **`WorkspaceGroup` 退役不变量**（Phase 10）：构造含 group 的旧会话，恢复后 `#expect` tab 顺序/关闭/侧边栏分组语义符合 roomID 模型，无悬挂 `anchorWorkspaceId`。
 - **resume/fork argv 存活**（若执行 Phase 1B）：`#expect` `AgentResumeArgv`/`RestorableAgentSession` 对 claude/codex 仍生成正确 resume argv。
+- **`tests_v2/` 套件归属（审查 R2.2）**：`scripts/run-tests-v2.sh:224` glob 全部 `tests_v2/test_*.py`，故**每个删除 phase 必须连带删除其对应的 v2 套件**（Phase 2→`test_browser_*`/`test_cli_browser_*`/`test_ssh_remote_browser_*`；Phase 8a→cloud/auth/vm；Phase 8b→非-daemon `test_ssh_remote_*`；Phase 8c→daemon-依赖的）+ helper/docs 引用；**保留**终端/分屏/聊天室的中性 v2 覆盖。否则全量 v2 在功能删除后永久红、或仓库留下对已删 API 的死测试。
 
 ### 手动测试（仅人眼 / 手感验收，最后手段）
 
@@ -564,8 +619,8 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
   - **预期**：room + 两个 agent tab 恢复；claude tab **恢复为已 resume 的会话**而非裸 shell（依赖此前的 resume-binding 修复）。
 
 #### 场景 2：旧快照迁移（Phase 2 / 3 / 8② 后）
-- [ ] **步骤 1**：把一份**删除前**保存、含 browser/markdown/remote panel 的 `session-com.cmuxterm.app.debug.prune-bus.json` 放回 app-support 目录，重开 app。
-  - **预期**：app 正常启动，未知 panel 被静默丢弃，其余窗口/tab/room 正常恢复，不崩、不空白。
+- [ ] **步骤 1**：把一份**删除前**保存、含 browser/filePreview/remote（已删类型）**及一个 markdown（保留类型）** panel 的 `session-com.cmuxterm.app.debug.prune-bus.json` 放回 app-support 目录，重开 app。
+  - **预期**：app 正常启动，已删类型 panel 被静默丢弃，**markdown panel 正常恢复并能渲染（含 mermaid）**，其余窗口/tab/room 正常恢复，不崩、不空白。
 
 #### 场景 3：打字延迟手感（Phase 6 后）**(需要手动操作)**
 - [ ] **步骤 1**：在 agent 终端快速连续输入一段文本。
