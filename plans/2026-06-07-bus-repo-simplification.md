@@ -92,7 +92,7 @@
 | **Feed 面板 UI（保留管道）** | `Sources/Feed/FeedPanelView*`、`FeedPanelViewModel`、Feed 调试窗 | ~5k LOC | **保留** `FeedCoordinator` 核心 + `CMUXWorkstream`（聊天桥读原始事件）；只删面板视图 | ⚠️ |
 | **非终端 Panel 类型** | `Sources/Panels/Markdown*`、`FilePreview*`、`Project*`、`Packages/CMUXProjectModel`、`Resources/markdown-viewer/` | — | 删 `PanelType.markdown/.filePreview/.project` 及 Workspace 创建路径 | ⚠️ |
 | **旧右侧栏工具** | `Sources/RightSidebar*`、`Sources/FileExplorer*`、`Sources/Search/`、`Sources/Find/` 大部分、`DockPanelView`/`DockEmptyView` | — | 右侧栏旧 modes（files/find/sessions/feed/dock）非聊天室 UI；**保留终端查找 SurfaceSearchOverlay** | ⚠️🔶 |
-| **未用 agent 集成** | `CMUXAgentVault/Providers/{RovoDev,HermesAgent}`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` | — | 仅用 claude/codex/cursor；**保留** `AgentHookDef` 表与 `RestorableAgentKind`(18 cases) 枚举（共享、用于解码旧会话） | ⚠️🔍 |
+| **未用 agent 集成（hook 安装器）** | `Packages/CMUXAgentLaunch/.../{RovoDevHookConfig,HermesAgentHookConfig}.swift`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` **+ 各自 `AgentHookDef` 行 + install/uninstall dispatch** | — | **全有全无**（见 Phase 7）：删 config/extension 文件**必须同删** `AgentHookDef` 的 rovodev/hermes-agent/amp 行 + `cmux.swift` 的 install/uninstall dispatch（`:26241/26245/26602/26606`）+ `cmux hooks setup/uninstall <name>` 入口，否则 `cmux.swift` 引用已删符号、无法编译。**保留（非本行，勿删）**：`CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（会话索引）、`RestorableAgentKind`(18 cases)、`SessionAgentPresentation`/`SessionIndexStore/View` 的 rovo/hermes 分支 | ⚠️ |
 | **OMP 扩展（claude wrapper？）** | `CLI/CMUXCLI+OmpExtension.swift` | — | 🔍 **冲突**：探针 1 列为可删，但设计文档 §2 称「Claude 经 OMP wrapper 运行」、本 fork claude 启动用 `bin/claude` wrapper 注入 `--session-id/--settings`——**删前必须确认 claude hook 路径不依赖 OMP** | 🔍 |
 | **`cmux top` 监控** | `cmux top` 命令 / UI；`Sources/CmuxTop*` | — | 🔍 **冲突**：命令/UI 可删，但 `CmuxTopProcess*` 进程枚举被 `RestorableAgentSession` + vault scanner 复用——**只删命令/UI，保留枚举** | 🔍 |
 | **`cmux claude-teams`** | claude-teams CLI | — | ⚠️ 审查指正：**不独立**——`AgentResumeArgv:46`/`RestorableAgentSession:471` 据它生成 resume/fork argv（恢复脊柱）。→ **Phase 1B / 默认保留** | ⚠️ |
@@ -332,8 +332,12 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 ### Phase 7 — 未用 agent 集成（窄范围）+ `cmux top`（文件级 split）
 
 > 审查修正：Rovo/Hermes/Amp **不孤立**——`Sources/SessionIndexStore.swift:1276-1277`、`Sources/SessionIndexView.swift:1158/1192/1499`、`Sources/SessionAgentPresentation.swift:10/24` 仍引用它们；保留的 `RestorableAgentKind`（18 cases，用于解码旧会话）也含这些 case。**故本 phase 收窄为「只删真正死的 hook 安装器 / CLI 入口」，保留 session-index/presentation 与 enum cases**（廉价、且解码旧会话需要）。
-- [ ] 🗑️ **hook 配置文件（审查修正：实际位置在 `CMUXAgentLaunch`，非 Vault Providers）**：`Packages/CMUXAgentLaunch/Sources/CMUXAgentLaunch/RovoDevHookConfig.swift`、`HermesAgentHookConfig.swift`、`CLI/CMUXCLI+HermesAgentHooks.swift`、`CLI/CMUXCLI+AmpExtension.swift` + 各自测试。
-- [ ] **保留（不可删，审查指正）**：`Packages/CMUXAgentVault/Sources/CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（这是**会话索引 provider**，被保留的 session-index 用，**不是** hook 安装器）、`AgentHookDef` 表、`RestorableAgentKind` 全部 case、`SessionAgentPresentation.swift` 与 `SessionIndexStore/View` 的 rovo/hermes 分支。
+- [ ] 🗑️ **hook 安装器整套，全有全无（审查修正：rovo/hermes/amp 的 `AgentHookDef` 行 + dispatch 与 config 文件硬耦合，半删不编译）**。`cmux.swift:26241/26245` 把 rovodev/hermes-agent dispatch 到 `installRovoDevHooks`/`installHermesAgentHooks`（uninstall 在 `:26602/26606`），且 `rovoDevHooksContent`（`cmux.swift:26031-26043`）直接引用 `RovoDevHookConfig.Event/.installing`、`installHermesAgentHooks` **定义在**待删的 `CMUXCLI+HermesAgentHooks.swift` 内、amp 行（`AgentHookDef:212`）依赖待删的 `CMUXCLI+AmpExtension.swift`——故每个 agent 必须**同 PR 一起删**：
+  - 文件：`Packages/CMUXAgentLaunch/Sources/CMUXAgentLaunch/RovoDevHookConfig.swift`、`HermesAgentHookConfig.swift`、`CLI/CMUXCLI+HermesAgentHooks.swift`、`CLI/CMUXCLI+AmpExtension.swift` + 各自测试；
+  - **`AgentHookDef` 行**：`CLI/CMUXCLI+AgentHookDefinitions.swift` 的 rovodev(`:282`)/hermes-agent(`:294`)/amp(`:212`) 三行；
+  - **dispatch**：`cmux.swift` 的 `if def.name == "rovodev"/"hermes-agent"` install(`:26240-26247`)/uninstall(`:26601-26608`) 分支，及 amp 经 flat 路径对 `CMUXCLI+AmpExtension` 的引用、`installRovoDevHooks`/`uninstallRovoDevHooks`/`rovoDevHooksContent` 三函数；
+  - **入口**：`cmux hooks setup/uninstall {rovodev,hermes-agent,amp}` 子命令分发 + 本地化/help 串。
+- [ ] **保留（不可删，审查指正）**：`Packages/CMUXAgentVault/Sources/CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（这是**会话索引 provider**，被保留的 session-index 用，**不是** hook 安装器）、`RestorableAgentKind` 全部 case（解码旧会话）、`SessionAgentPresentation.swift` 与 `SessionIndexStore/View` 的 rovo/hermes 分支。注意：删的是 `AgentHookDef` 中这三行**及其 dispatch**，不是整张表（claude/codex/cursor 行保留）。
 - [ ] **OMP（D8a：可删，但须文件级完整，审查修正）**：🗑️ `CLI/CMUXCLI+OmpExtension.swift` 时**同 PR**移除 `CLI/CMUXCLI+AgentHookDefinitions.swift:203` 的 omp `AgentHookDef` 条目、`CLI/cmux.swift:26232` 对该文件方法的调用、`cmux hooks setup omp` 入口、相关测试与本地化串；并修 `AgentKind.swift:3` 过时注释。（要么整套删干净，要么整套保留——不可半删。）
 - [ ] **`cmux top` 文件级 split**：**删除集** = `cmux top` 子命令 + 其面向用户的监控 UI 文件；**保留集** = `Sources/CmuxTopProcess*.swift`、`Sources/CmuxTopSnapshot*.swift`、`Sources/TerminalControllerTopSupport.swift`（被 `RestorableAgentSession`、`VaultAgentProcessScanner`、`Sources/App/AgentHibernationController.swift` 复用）。修改 `CLI/cmux.swift` 去掉 `top` dispatch。
 
@@ -355,7 +359,7 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 ### Phase 8c — `cmuxd` 守护进程（独立 PR；**不碰** CmuxControlSocket/CmuxSocketControl）
 
 - [ ] 🗑️ `daemon/`（cmuxd）— 核实其 remote-only、不承载本地运行/打包后删；**再次确认**未误删本地控制 socket 包。
-- [ ] **修改 CI/release（审查指出 daemon 经 workflow 连线）**：`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job，与 `scripts/release_asset_guard.js:6` 的 cmuxd 资产校验——**与本 PR 同步**移除或停用相关 job，否则本地编译过但 CI/release 红。若暂不动 release/nightly，则在本 phase **显式标注"先停用 remote-daemon job"** 再删 `daemon/`。
+- [ ] **修改 CI/release（审查指出 daemon 经 workflow + dev 脚本连线）**：`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job，`scripts/release_asset_guard.js:6-11` 的 `cmuxd-remote-*` 资产校验行 + `scripts/release_asset_guard.test.js`（`ci.yml:53` 跑它），以及本地 dev 脚本 `scripts/reloads.sh`（`CMUXD_UNIX_PATH` 注入 `:236-237/:277`、`cmuxd` 构建/拷贝 `:259-267`）与 `scripts/reload.sh` 的同类 cmuxd 注入——**与本 PR 同步**移除或停用，否则本地编译过但 CI/release/dogfood 仍带 stale daemon 行为。若暂不动 release/nightly，则在本 phase **显式标注"先停用 remote-daemon job"** 再删 `daemon/`。
 
 ### Phase 9 — 「Bus」对外更名（D1，纯文案）
 
@@ -373,7 +377,7 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 - [ ] **修改**：`Sources/AppDelegate.swift` 删 `import CmuxUpdater`/`CmuxUpdaterUI`（`:6-7`）、`UpdateActionDelegate`/`UpdateActionsHost` 一致性与 retry/relaunch 回调；`Sources/ContentView.swift` 删侧边栏 update pill；`Sources/cmuxApp.swift` 删 updater 装配
 - [ ] 🗑️ `Sources/Update/`、`Packages/CmuxUpdater`、`Packages/CmuxUpdaterUI`、`homebrew-cmux/`、相关测试
-- [ ] **修改 CI/release**：`.github/workflows/update-homebrew.yml`（Sparkle/homebrew 发布流）、`release.yml`/`nightly.yml` 中的 appcast/Sparkle 步骤——同步删除或停用
+- [ ] **修改 CI/release**：`.github/workflows/update-homebrew.yml`（Sparkle/homebrew 发布流）、`release.yml`/`nightly.yml` 中的 appcast/Sparkle 步骤；**`scripts/release_asset_guard.js:5` 的 `"appcast.xml"` 必需资产行 + 其 `release_asset_guard.test.js`**（`release.yml:72` 经 `evaluateReleaseAssetGuard` 调用、`ci.yml:53` 跑 test）——删 appcast 生成的同时移除该校验行，否则 release 校验仍要求已不再生成的 appcast 资产而红。（注：该 guard 的 `cmuxd-remote-*` 行由 Phase 8c 处理，本 phase 只动 `appcast.xml` 行。）同步删除或停用
 
 ### Phase 12 — 遥测 / 崩溃上报删除（D7，独立 PR）
 
@@ -407,7 +411,7 @@ N/A。
 
 XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**Phase -1 / 0 / 1 / 1A / 1B / 2 / 3 / 4 / 5 / 6 / 7 / 8a / 8b / 8c / 9 / 10 / 11 / 12**。所有 phase 共享收尾门控 **G**（每 phase 末尾跑，不重复抄写）：
 
-> **门控 G（每 phase 末尾跑，全自动）**：① 同步 `cmux.xcodeproj/project.pbxproj`（移除已删包/文件的 ref + Frameworks 链接）与 CI `.github/workflows/{ci,test-ios}.yml`；② `python3 scripts/normalize-pbxproj.py` + `scripts/check-pbxproj.sh` + `scripts/lint-pbxproj-test-wiring.sh`；③ `xcodebuild -project cmux.xcodeproj -scheme cmux -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/cmux-prune-bus build`（app 编译）；④ `xcodebuild -scheme cmux-unit -derivedDataPath /tmp/cmux-prune-bus build`（**测试 target 编译**——`reload.sh` 不编译它）；⑤ `./scripts/reload.sh --tag prune-bus` 起 tagged Debug；⑥ 自动化烟测（stale 命令面板/socket verb、旧快照 layout remap）+ 场景 1 见「测试计划」。门控全绿才进下一 phase。
+> **门控 G（每 phase 末尾跑，全自动）**：① 同步 `cmux.xcodeproj/project.pbxproj`（移除已删包/文件的 ref + Frameworks 链接）与**本 phase 文件清单列出的所有 phase-specific workflows**（不止 `ci.yml`/`test-ios.yml`——按 phase 还含 `ios-testflight.yml`、`release.yml`、`nightly.yml`、`tmux-corpus.yml`、`update-homebrew.yml` 等；以各 phase「需要修改的文件」为准，凡触发于已删路径或调用已删脚本的 workflow 必须同步删/停用）；② `python3 scripts/normalize-pbxproj.py` + `scripts/check-pbxproj.sh` + `scripts/lint-pbxproj-test-wiring.sh`；③ `xcodebuild -project cmux.xcodeproj -scheme cmux -configuration Debug -destination 'platform=macOS' -derivedDataPath /tmp/cmux-prune-bus build`（app 编译）；④ `xcodebuild -scheme cmux-unit -derivedDataPath /tmp/cmux-prune-bus build`（**测试 target 编译**——`reload.sh` 不编译它）；⑤ `./scripts/reload.sh --tag prune-bus` 起 tagged Debug；⑥ 自动化烟测（stale 命令面板/socket verb、旧快照 layout remap）+ 场景 1 见「测试计划」。门控全绿才进下一 phase。
 
 **Phase -1**：前提回归门控（不删任何东西）**(需要手动操作)**
 - [ ] **步骤 1**：起 tagged app，新建 room + claude + codex agent，`@all` 发 prompt，确认**两者回复都回到 room channel**（非 `0 / N replied`）、终端查找可用；退出重开确认恢复 + claude 已 resume。**全绿才进 Phase 0。**
@@ -420,7 +424,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 
 **Phase 1**：真正独立目录删除
 - [ ] **步骤 1**：删 `web/`、`ios/`、`diff-viewer/`、`experiments/`、`Prototypes/`、`dogfood/`、遗留 `tests/`、`scripts/mobile-*`。
-- [ ] **步骤 2**：删 12 个 `Packages/CmuxMobile*`（不含 `CMUXMobileCore`）；同 PR 删/no-op `.github/workflows/test-ios.yml`；从 pbxproj 与 CI `PACKAGES` 移除引用。
+- [ ] **步骤 2**：删 12 个 `Packages/CmuxMobile*`（不含 `CMUXMobileCore`）；同 PR 删/no-op **`.github/workflows/test-ios.yml` 和 `.github/workflows/ios-testflight.yml`**（后者触发于 `ios/**`/`Packages/**`、`:188` 调 `./ios/scripts/upload-testflight.sh`——删 `ios/` 后会 scheduled/manual/main 红）；从 pbxproj 与 CI `PACKAGES` 移除引用。
 - [ ] **步骤 3**：门控 G。**（`Examples/`、`AppleScript`、`claude-teams` 不在本 phase——见 Phase 5 / 1A / 1B。）**
 
 **Phase 1A**：AppleScript 自动化面删除 **(需要手动操作：先确认无外部脚本依赖)**
@@ -456,7 +460,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - [ ] **步骤 3**：门控 G + **打字延迟主观验收**（在 agent 终端连续输入，无卡顿/回显延迟）。**(需要手动操作)** — 需人眼/手感判断。
 
 **Phase 7**：未用 agent 集成（窄）+ OMP + `cmux top`（文件级 split）
-- [ ] **步骤 1**：删 **hook 配置**（在 `CMUXAgentLaunch`）：`RovoDevHookConfig.swift`、`HermesAgentHookConfig.swift`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` + 测试。**保留** `CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（会话索引，非 hook）、`RestorableAgentKind` 全部 case、`SessionAgentPresentation`/`SessionIndexStore/View` 的 rovo/hermes 分支。
+- [ ] **步骤 1（rovo/hermes/amp 全有全无，同 commit）**：删 hook config/extension 文件（`RovoDevHookConfig.swift`、`HermesAgentHookConfig.swift`、`CLI/CMUXCLI+{HermesAgentHooks,AmpExtension}.swift` + 测试）**同时**删 `AgentHookDef` 的 rovodev/hermes-agent/amp 三行 + `cmux.swift` 的 install/uninstall dispatch（`:26240-26247`/`:26601-26608`）+ `installRovoDevHooks`/`rovoDevHooksContent` 等函数 + `cmux hooks setup/uninstall {rovodev,hermes-agent,amp}` 入口/本地化（否则 `cmux.swift` 引用已删符号、编译失败）。**保留** `CMUXAgentVault/Providers/{RovoDev,HermesAgent}/*Index.swift`（会话索引，非 hook）、`RestorableAgentKind` 全部 case、`SessionAgentPresentation`/`SessionIndexStore/View` 的 rovo/hermes 分支。
 - [ ] **步骤 2**：删 OMP **整套**：`CMUXCLI+OmpExtension.swift` + `CMUXCLI+AgentHookDefinitions.swift:203` 的 omp 条目 + `cmux.swift:26232` 调用 + `cmux hooks setup omp` 入口 + 测试/本地化 + `AgentKind.swift:3` 注释（不可半删）。
 - [ ] **步骤 3**：删 `cmux top` 命令 + 其 UI；**保留** `CmuxTopProcess*.swift`/`CmuxTopSnapshot*.swift`/`TerminalControllerTopSupport.swift`。
 - [ ] **步骤 4**：门控 G + 新建 codex + claude agent，确认 hook（回复/状态）正常。
@@ -468,7 +472,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - [ ] **步骤 1**：删 remote SSH（`WorkspaceRemoteConfiguration`、`Remote*`、`WorkspaceRemoteSessionController`、相关 RPC/属性/字段、`AppDelegate+CmuxSSHURL`）；门控 G + **含-remote 字段旧快照回归**（Phase 0 持久化层兜底，layout 净化，不崩）。
 
 **Phase 8c**：`cmuxd` 守护进程（独立 PR）
-- [ ] **步骤 1**：核实 `cmuxd` remote-only 后删 `daemon/` + 打包脚本引用；**再次确认未碰** `CmuxControlSocket`/`CmuxSocketControl`（CLI/hooks 的本地控制 socket，脊柱）；门控 G。
+- [ ] **步骤 1**：核实 `cmuxd` remote-only 后删 `daemon/`。**同 PR 镜像文件清单（line 358）的全部 CI/script 清理**：`.github/workflows/ci.yml:97`、`tmux-corpus.yml:7`、`release.yml:249`、`nightly.yml:397` 的 cmuxd job + `scripts/release_asset_guard.js` 的 `cmuxd-remote-*` 资产校验行（`:6-11`）+ 其 `release_asset_guard.test.js`；本地 dev 脚本 `scripts/reloads.sh`（`CMUXD_UNIX_PATH` 注入 `:236-237/:277`、`cmuxd` 构建/拷贝 `:259-267`）与 `scripts/reload.sh` 中同类 cmuxd 注入——一并删/停用，否则本地编译过但 CI/release/dogfood 仍带 stale daemon 行为。若暂不动 release/nightly，则**先显式停用 remote-daemon job** 再删 `daemon/`。**再次确认未碰** `CmuxControlSocket`/`CmuxSocketControl`（CLI/hooks 的本地控制 socket，脊柱）；门控 G。
 
 **Phase 9**：「Bus」对外更名（纯文案）
 - [ ] **步骤 1**：改对外文案为 **Bus**（`CFBundleDisplayName`、About、窗口标题、`README.md`、`docs/`、本地化对外串）；**全程不碰** `cmux` CLI 名 / `CMUX_*` / socket / bundle id 基名 / 包名 / hook 协议 / `scripts/*`。
@@ -478,7 +482,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - [ ] **步骤 1**：roomID 侧边栏稳定后，移除 `WorkspaceGroup`/`groupId`/ungroup 路径，收缩 `Workspace`/`TabManager`/`TerminalController` 不可达旧分支；门控 G + 恢复/侧边栏/关闭不变量测试（见测试计划）。
 
 **Phase 11**：更新器 / 分发删除（D4，独立 PR）
-- [ ] **步骤 1**：删 `AppDelegate` 的 `import CmuxUpdater(UI)`/`UpdateActionsHost` 装配 + `ContentView` update pill；删 `Sources/Update/`、`Packages/CmuxUpdater(UI)`、`homebrew-cmux/`；停用 `update-homebrew.yml` 与 release/nightly 的 Sparkle/appcast 步骤；门控 G。
+- [ ] **步骤 1**：删 `AppDelegate` 的 `import CmuxUpdater(UI)`/`UpdateActionsHost` 装配 + `ContentView` update pill；删 `Sources/Update/`、`Packages/CmuxUpdater(UI)`、`homebrew-cmux/`；停用 `update-homebrew.yml` 与 release/nightly 的 Sparkle/appcast 步骤，**并移除 `scripts/release_asset_guard.js` 的 `"appcast.xml"` 资产行 + 其 test**（否则 `release.yml:72` 的 guard 仍要求 appcast 资产）；门控 G。
 
 **Phase 12**：遥测 / 崩溃上报删除（D7，独立 PR）
 - [ ] **步骤 1**：删 `GhosttyTerminalView.swift:13` 的 `import Sentry` + 全部 `SentrySDK`/`PostHog` 调用点；删 `PostHogAnalytics.swift`、`SentryHelper.swift` + pbxproj 包引用；停用 release/nightly 的 dSYM→Sentry 上传；**保留** `CMUXDebugLog`；门控 G。
