@@ -185,6 +185,10 @@ struct WorkspaceGroupTests {
                 break
             case .workspace(let workspace):
                 visibleWorkspaceIds.append(workspace.id)
+            case .sectionHeader, .roomRow, .agentRow:
+                // 聊天室渲染项不出现在旧分组（`renderItems(tabs:groupsById:)`）路径里；
+                // 仅为满足枚举穷尽性而处理。
+                break
             }
         }
 
