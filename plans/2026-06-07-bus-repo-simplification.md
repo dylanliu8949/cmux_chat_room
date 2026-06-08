@@ -309,7 +309,8 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 ### Phase 3 — 其余非终端 Panel 类型（D6①）
 
 - [ ] 🗑️ `Sources/Panels/Markdown*.swift`、`Sources/Panels/FilePreview*.swift`、`Sources/Panels/Project*.swift`、`Resources/markdown-viewer/`（含内嵌的 `diff-viewer-app` 产物）、`Packages/CMUXProjectModel`
-- [ ] 🗑️ **`diff-viewer/`（从 Phase 1 移入——与 markdown viewer 同生命周期、有专用 CI）**：删 `diff-viewer/` 目录 + `scripts/build-diff-viewer-app.sh`、`scripts/check-diff-viewer-react-compiler.mjs`；**同 PR 删 CI 的 diff-viewer job**（`.github/workflows/ci.yml:139-159` 的 build/typecheck/test/lint 步骤），否则 CI 指向已删目录而红。
+- [ ] 🗑️ **`diff-viewer/`（从 Phase 1 移入——与 markdown viewer 同生命周期、有专用 CI）**：删 `diff-viewer/` 目录 + `scripts/build-diff-viewer-app.sh`、`scripts/check-diff-viewer-react-compiler.mjs`、`scripts/open-diff-viewer-stress-samples.sh`；**同 PR 删 CI 的 diff-viewer job**（`.github/workflows/ci.yml:139-159` 的 build/typecheck/test/lint 步骤），否则 CI 指向已删目录而红。
+- [ ] **修改 — diff-viewer CLI/runtime（审查指出：删资产却留服务这些资产的 CLI 命令，会指向已删文件）**：`CLI/cmux.swift:2991` 删 `diff-viewer-server` 命令分发 + `runDiffViewerServerCommand`；`CLI/cmux_open.swift` 删 `cmux-diff-viewer` scheme/HTTP server/asset 服务（`:310-311/:385+`、`:4149` 服务、`:5581` 拷贝 `markdown-viewer/diff-viewer`/`diff-viewer-app`）及 `CMUXDiffViewerLocalization` 串；删 diff-viewer 相关快捷键/设置/测试引用。
 - [ ] **修改**：`Sources/Panels/Panel.swift` — 移除 `PanelType.{markdown,filePreview,project}`（line 9/10/12）与对应 `PanelFocusIntent.{filePreview,project}`（line 73/74）
 - [ ] **修改**：`Sources/Workspace.swift` — 移除这三类的创建路径与 `createPanel()`/`sessionSnapshot()` 中的 `case`
 - [ ] **修改**：`Sources/Panels/PanelContentView.swift`、`Sources/ContentView.swift`、`Sources/KeyboardShortcutContext.swift`、`Sources/SessionPersistence.swift` — 移除三类 panel 的视图分支、命令、快捷键、snapshot 字段
@@ -392,13 +393,16 @@ N/A — 本计划为删除 / 重构，不引入用户可见的 A/B 实验，无 
 
 ### Phase 11 — 更新器 / 分发删除（D4，独立 PR；审查指出非"随手 commit"）
 
-- [ ] **修改**：`Sources/AppDelegate.swift` 删 `import CmuxUpdater`/`CmuxUpdaterUI`（`:6-7`）、`UpdateActionDelegate`/`UpdateActionsHost` 一致性与 retry/relaunch 回调；`Sources/ContentView.swift` 删侧边栏 update pill；`Sources/cmuxApp.swift` 删 updater 装配
-- [ ] 🗑️ `Sources/Update/`、`Packages/CmuxUpdater`、`Packages/CmuxUpdaterUI`、`homebrew-cmux/`、相关测试
+- [ ] **修改**：`Sources/AppDelegate.swift` 删 `import CmuxUpdater`/`CmuxUpdaterUI`（`:6-7`）、`UpdateActionDelegate`/`UpdateActionsHost` 一致性与 retry/relaunch 回调、**`checkForUpdates(_:)` 方法**；`Sources/ContentView.swift` 删侧边栏 update pill；`Sources/cmuxApp.swift` 删 updater 装配
+- [ ] **修改 — updater 入口 surface（审查指出散落在 Phase 11 文件之外，删 `checkForUpdates` 会断这些）**：`Sources/App/CmuxHelpCommands.swift:17-18` Help 菜单「Check for Updates」、`Sources/App/MenuBarExtraController.swift:33/130-132/277` `checkForUpdatesItem` + `checkForUpdatesAction`、`Sources/ContentView.swift:7001` 命令面板 `palette.checkForUpdates` 贡献 + 对应本地化串（`command.checkForUpdates.*`/`menu.checkForUpdates`）
+- [ ] 🗑️ `Sources/Update/`、`Packages/CmuxUpdater`、`Packages/CmuxUpdaterUI`、`homebrew-cmux/`、相关测试（含 updater UI 测试）；Info.plist 的 `SUFeedURL`/`SUPublicEDKey` 等 Sparkle 键
+- [ ] **本地 release 脚本（审查指出仍要求 Sparkle/appcast/homebrew）**：**改写** `scripts/build-sign-upload.sh`——剥除 Sparkle key 注入（`:83-95`）、appcast 生成/上传（`:131-158`）、homebrew 编辑（`:173`），**保留**构建/签名/公证/DMG/上传（app 仍需出 DMG，只是不再自动更新）；🗑️ 随之 orphan 的 `scripts/{sparkle_generate_appcast.sh,sparkle_generate_keys.sh,derive_sparkle_public_key.swift,remove-sparkle-sandbox-xpc-services.sh}`；`scripts/release-pretag-guard.sh` 剥除 appcast/Sparkle 检查；🗑️ feature-coupled 测试 `tests/test_ci_sparkle_build_monotonic.sh`、`tests/test_nightly_universal_build.sh` 的 Sparkle 部分（**这些是 Sparkle 专属守卫，随功能删——区别于保留的通用 `test_ci_*` 基础设施守卫**）
 - [ ] **修改 CI/release**：`.github/workflows/update-homebrew.yml`（Sparkle/homebrew 发布流）、`release.yml`/`nightly.yml` 中的 appcast/Sparkle 步骤；**`scripts/release_asset_guard.js:5` 的 `"appcast.xml"` 必需资产行 + 其 `release_asset_guard.test.js`**（`release.yml:72` 经 `evaluateReleaseAssetGuard` 调用、`ci.yml:53` 跑 test）——删 appcast 生成的同时移除该校验行，否则 release 校验仍要求已不再生成的 appcast 资产而红。（注：该 guard 的 `cmuxd-remote-*` 行由 Phase 8c 处理，本 phase 只动 `appcast.xml` 行。）同步删除或停用
 
 ### Phase 12 — 遥测 / 崩溃上报删除（D7，独立 PR）
 
 - [ ] **修改**：`Sources/GhosttyTerminalView.swift` 删 `import Sentry`（`:13`）与 `SentrySDK.capture` 调用点（如 `:1994`）；其余 `SentrySDK`/`PostHog` 调用点
+- [ ] **修改 — 用户可见遥测设置 surface（审查指出：删内部实现却留「Send anonymous telemetry」开关 = 死隐私开关，更糟）**：删 `Sources/CommandPalette/CommandPaletteSettingsToggle.swift:310-318` 的 `sendAnonymousTelemetry` 开关、`Sources/SettingsSearchAliases.swift:76` 的 `app:telemetry` 别名、`Packages/CmuxSettingsUI/.../AppSection.swift:96/536` 的 telemetry 行、`Packages/CmuxSettings` 设置目录的 `app.sendAnonymousTelemetry` 项与 `TelemetrySettings` 模型、本地化串（`settings.app.telemetry` 等）、`cmuxTests/GhosttyConfigTests.swift:1290/1304` 的 `TelemetrySettings` 测试。**注意 CLAUDE.md 设置政策**：删设置项须同步 `cmux.json` schema + 配置文档 + 本地化。
 - [ ] 🗑️ `Sources/PostHogAnalytics.swift`、`Sources/SentryHelper.swift`、Sentry/PostHog 的 pbxproj 包引用、相关测试与本地化串；**保留** `Packages/CMUXDebugLog`（本地 dogfood 日志）
 - [ ] **修改 CI/release**：`release.yml:412`、`nightly.yml:592` 的 dSYM→Sentry 上传步骤——同步删除或停用
 
@@ -458,7 +462,7 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 
 **Phase 3**：其余非终端 Panel（markdown / filePreview / project）
 - [ ] **步骤 1**：断入口（创建路径、命令、快捷键），编译通过。
-- [ ] **步骤 2**：删 `PanelType.{markdown,filePreview,project}` + intent，补齐各 `case`；删文件与 `CMUXProjectModel`、`Resources/markdown-viewer/`；**删 `diff-viewer/` + `scripts/build-diff-viewer-app.sh`/`check-diff-viewer-react-compiler.mjs` + `ci.yml:139-159` diff-viewer job**；删 `scripts/verify-cmd-click-file-previews.sh`（验的是已删的 filePreview，且读 `web/public` fixture——一并去免得 Phase 8a 删 web/ 时再处理）。
+- [ ] **步骤 2**：删 `PanelType.{markdown,filePreview,project}` + intent，补齐各 `case`；删文件与 `CMUXProjectModel`、`Resources/markdown-viewer/`；**删 `diff-viewer/` + `scripts/{build-diff-viewer-app.sh,check-diff-viewer-react-compiler.mjs,open-diff-viewer-stress-samples.sh}` + `ci.yml:139-159` diff-viewer job + CLI runtime（`cmux.swift:2991` `diff-viewer-server`/`runDiffViewerServerCommand`、`cmux_open.swift` 的 `cmux-diff-viewer` server/asset 服务）**；删 `scripts/verify-cmd-click-file-previews.sh`（验的是已删的 filePreview，且读 `web/public` fixture——一并去免得 Phase 8a 删 web/ 时再处理）。
 - [ ] **步骤 3**：门控 G + 旧快照回归。
 
 **Phase 4**：旧右侧栏 modes + Feed 面板 UI（保留管道）
@@ -499,10 +503,10 @@ XXXL 计划，**每个 phase = 一个独立 PR**。审查后阶段重排为：**
 - [ ] **步骤 1**：roomID 侧边栏稳定后，移除 `WorkspaceGroup`/`groupId`/ungroup 路径，收缩 `Workspace`/`TabManager`/`TerminalController` 不可达旧分支；门控 G + 恢复/侧边栏/关闭不变量测试（见测试计划）。
 
 **Phase 11**：更新器 / 分发删除（D4，独立 PR）
-- [ ] **步骤 1**：删 `AppDelegate` 的 `import CmuxUpdater(UI)`/`UpdateActionsHost` 装配 + `ContentView` update pill；删 `Sources/Update/`、`Packages/CmuxUpdater(UI)`、`homebrew-cmux/`；停用 `update-homebrew.yml` 与 release/nightly 的 Sparkle/appcast 步骤，**并移除 `scripts/release_asset_guard.js` 的 `"appcast.xml"` 资产行 + 其 test**（否则 `release.yml:72` 的 guard 仍要求 appcast 资产）；门控 G。
+- [ ] **步骤 1**：删 `AppDelegate` 的 `import CmuxUpdater(UI)`/`UpdateActionsHost` 装配 + `checkForUpdates(_:)` + `ContentView` update pill；**删 updater 入口**（`CmuxHelpCommands.swift:17` Help 菜单、`MenuBarExtraController.swift:33/277` 菜单项+action、`ContentView.swift:7001` 命令面板 `palette.checkForUpdates` + 本地化）；删 `Sources/Update/`、`Packages/CmuxUpdater(UI)`、`homebrew-cmux/`、updater 测试、Info.plist Sparkle 键；**改写 `scripts/build-sign-upload.sh` 去 Sparkle/appcast/homebrew（保留 DMG 构建签名公证上传）+ 删 orphan `sparkle_*`/`derive_sparkle_public_key.swift`/`remove-sparkle-sandbox-xpc-services.sh` + `release-pretag-guard.sh` 去 appcast 检查 + 删 `tests/test_ci_sparkle_build_monotonic.sh`/`test_nightly_universal_build.sh` Sparkle 部分**；停用 `update-homebrew.yml` 与 release/nightly 的 Sparkle/appcast 步骤、移除 `scripts/release_asset_guard.js` 的 `"appcast.xml"` 资产行 + 其 test（否则 `release.yml:72` 的 guard 仍要求 appcast 资产）；门控 G。
 
 **Phase 12**：遥测 / 崩溃上报删除（D7，独立 PR）
-- [ ] **步骤 1**：删 `GhosttyTerminalView.swift:13` 的 `import Sentry` + 全部 `SentrySDK`/`PostHog` 调用点；删 `PostHogAnalytics.swift`、`SentryHelper.swift` + pbxproj 包引用；停用 release/nightly 的 dSYM→Sentry 上传；**保留** `CMUXDebugLog`；门控 G。
+- [ ] **步骤 1**：删 `GhosttyTerminalView.swift:13` 的 `import Sentry` + 全部 `SentrySDK`/`PostHog` 调用点；删 `PostHogAnalytics.swift`、`SentryHelper.swift` + pbxproj 包引用；**删用户可见遥测设置**（`CommandPaletteSettingsToggle.swift:310` 开关、`SettingsSearchAliases.swift:76` 别名、`AppSection.swift:536` UI 行、`CmuxSettings` 目录 `app.sendAnonymousTelemetry` + `TelemetrySettings` 模型、本地化、`GhosttyConfigTests.swift` 测试、`cmux.json` schema/文档）；停用 release/nightly 的 dSYM→Sentry 上传；**保留** `CMUXDebugLog`；门控 G。
 
 > **D5 命令面板目录清理**：在每个删除 phase 内随手做（删哪个面就删它的命令条目），不单列 phase。
 
