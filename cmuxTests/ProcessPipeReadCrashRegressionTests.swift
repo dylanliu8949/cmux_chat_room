@@ -56,20 +56,6 @@ final class ProcessPipeReadCrashRegressionTests: XCTestCase {
         }
     }
 
-    func testProcessOutputCollectorTreatsBrokenReadDescriptorAsClosedPipe() {
-        let stdout = Pipe()
-        let stderr = Pipe()
-        let collector = ProcessOutputCollector(stdout: stdout, stderr: stderr)
-
-        try? stdout.fileHandleForWriting.close()
-        try? stderr.fileHandleForWriting.close()
-        Darwin.close(stdout.fileHandleForReading.fileDescriptor)
-
-        let output = collector.finish()
-
-        XCTAssertEqual(output, "")
-    }
-
     func testReadToEndPreservesPartialDataWhenLaterReadFails() {
         let partialData = Data("partial output".utf8)
         let readError = ProcessPipeReadError(

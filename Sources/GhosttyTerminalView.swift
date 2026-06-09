@@ -1839,23 +1839,6 @@ class GhosttyApp {
                 TerminalImageTransferPlanner.execute(
                     plan: plan,
                     operation: operation,
-                    uploadWorkspaceRemote: { fileURLs, operation, finish in
-                        guard let workspace = MainActor.assumeIsolated({
-                            callbackContext.terminalSurface?.owningWorkspace()
-                        }) else {
-                            finish(.failure(NSError(domain: "cmux.remote.paste", code: 3)))
-                            GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(fileURLs)
-                            return
-                        }
-                        workspace.uploadDroppedFilesForRemoteTerminal(
-                            fileURLs,
-                            operation: operation,
-                            completion: { result in
-                                finish(result)
-                                GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(fileURLs)
-                            }
-                        )
-                    },
                     uploadDetectedSSH: { session, fileURLs, operation, finish in
                         session.uploadDroppedFiles(
                             fileURLs,
@@ -4721,8 +4704,7 @@ class GhosttyApp {
             if !trimmedUrlString.isEmpty {
                 let filePathResolution: (routed: Bool, fallbackPath: String?) = performOnMain {
                     guard let termSurface = surfaceView.terminalSurface,
-                          let workspace = termSurface.owningWorkspace(),
-                          !workspace.isRemoteTerminalSurface(termSurface.id) else {
+                          let workspace = termSurface.owningWorkspace() else {
                         return (false, nil)
                     }
                     let cwd = CommandClickFileOpenRouter.resolveWorkingDirectory(
@@ -4777,7 +4759,6 @@ class GhosttyApp {
                 let routed: Bool = performOnMain {
                     guard let termSurface = surfaceView.terminalSurface,
                           let workspace = termSurface.owningWorkspace(),
-                          !workspace.isRemoteTerminalSurface(termSurface.id),
                           CommandClickFileOpenRouter.shouldRouteInCmux(path: fileURL.path) else {
                         return false
                     }
@@ -10280,8 +10261,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         guard let surface = surface else { return nil }
 
         guard let termSurface = terminalSurface,
-              let workspace = termSurface.owningWorkspace(),
-              !workspace.isRemoteTerminalSurface(termSurface.id) else { return nil }
+              let workspace = termSurface.owningWorkspace() else { return nil }
 
         guard let cwd = resolvedWordPathWorkingDirectory(workspace: workspace, terminalSurface: termSurface) else {
             return nil
@@ -10690,7 +10670,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         // editor so the click never silently no-ops.
         if let termSurface = terminalSurface,
            let workspace = termSurface.owningWorkspace(),
-           !workspace.isRemoteTerminalSurface(termSurface.id),
            CommandClickFileOpenRouter.openInCmux(
                workspace: workspace,
                sourcePanelId: termSurface.id,
@@ -11213,10 +11192,9 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     }
 
     static func dropPlanForTesting(
-        pasteboard: NSPasteboard,
-        isRemoteTerminalSurface: Bool
+        pasteboard: NSPasteboard
     ) -> DropPlan {
-        let target: TerminalImageTransferTarget = isRemoteTerminalSurface ? .remote(.workspaceRemote) : .local
+        let target: TerminalImageTransferTarget = .local
         switch TerminalImageTransferPlanner.plan(
             pasteboard: pasteboard,
             mode: .drop,
@@ -11231,61 +11209,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         case .reject:
             return .reject
         }
-    }
-
-    static func performRemoteDropUploadForTesting(
-        upload: (@escaping (Result<[String], Error>) -> Void) -> Void,
-        sendText: @escaping (String) -> Void,
-        onFailure: @escaping () -> Void
-    ) {
-        upload { result in
-            switch result {
-            case .success(let remotePaths):
-                let content = remotePaths
-                    .map { Self.escapeDropForShell($0) }
-                    .joined(separator: " ")
-                guard !content.isEmpty else {
-                    onFailure()
-                    return
-                }
-                sendText(content)
-            case .failure:
-                onFailure()
-            }
-        }
-    }
-
-    @discardableResult
-    static func handleDropForTesting(
-        pasteboard: NSPasteboard,
-        isRemoteTerminalSurface: Bool,
-        uploadRemote: ([URL], @escaping (Result<[String], Error>) -> Void) -> Void,
-        sendText: @escaping (String) -> Void,
-        onFailure: @escaping () -> Void
-    ) -> Bool {
-        let target: TerminalImageTransferTarget = isRemoteTerminalSurface ? .remote(.workspaceRemote) : .local
-        let plan = TerminalImageTransferPlanner.plan(
-            pasteboard: pasteboard,
-            mode: .drop,
-            target: target
-        )
-        guard plan != .reject else { return false }
-
-        TerminalImageTransferPlanner.execute(
-            plan: plan,
-            uploadWorkspaceRemote: { urls, _, finish in
-                uploadRemote(urls) { result in
-                    finish(result)
-                    GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(urls)
-                }
-            },
-            uploadDetectedSSH: { _, _, _, finish in
-                finish(.failure(NSError(domain: "cmux.remote.drop", code: 4)))
-            },
-            insertText: sendText,
-            onFailure: { _ in onFailure() }
-        )
-        return true
     }
 
     private func executeImageTransferPlan(
@@ -11312,23 +11235,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         TerminalImageTransferPlanner.execute(
             plan: plan,
             operation: operation,
-            uploadWorkspaceRemote: { [weak self] fileURLs, operation, finish in
-                guard let workspace = MainActor.assumeIsolated({
-                    self?.terminalSurface?.owningWorkspace()
-                }) else {
-                    finish(.failure(NSError(domain: "cmux.remote.drop", code: 3)))
-                    GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(fileURLs)
-                    return
-                }
-                workspace.uploadDroppedFilesForRemoteTerminal(
-                    fileURLs,
-                    operation: operation,
-                    completion: { result in
-                        finish(result)
-                        GhosttyPasteboardHelper.cleanupTransferredTemporaryImageFiles(fileURLs)
-                    }
-                )
-            },
             uploadDetectedSSH: { session, fileURLs, operation, finish in
                 session.uploadDroppedFiles(
                     fileURLs,

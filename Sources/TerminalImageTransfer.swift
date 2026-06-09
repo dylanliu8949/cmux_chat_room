@@ -8,7 +8,6 @@ enum TerminalImageTransferMode {
 }
 
 enum TerminalRemoteUploadTarget: Equatable {
-    case workspaceRemote
     case detectedSSH(DetectedSSHSession)
 }
 
@@ -240,7 +239,6 @@ enum TerminalImageTransferPlanner {
     static func executeForTesting(
         plan: TerminalImageTransferPlan,
         operation: TerminalImageTransferOperation? = nil,
-        uploadWorkspaceRemote: ([URL], TerminalImageTransferOperation, @escaping (Result<[String], Error>) -> Void) -> Void,
         uploadDetectedSSH: (DetectedSSHSession, [URL], TerminalImageTransferOperation, @escaping (Result<[String], Error>) -> Void) -> Void,
         insertText: @escaping (String) -> Void,
         scheduleAfter: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, work in
@@ -251,7 +249,6 @@ enum TerminalImageTransferPlanner {
         execute(
             plan: plan,
             operation: operation,
-            uploadWorkspaceRemote: uploadWorkspaceRemote,
             uploadDetectedSSH: uploadDetectedSSH,
             insertText: insertText,
             scheduleAfter: scheduleAfter,
@@ -263,7 +260,6 @@ enum TerminalImageTransferPlanner {
     static func execute(
         plan: TerminalImageTransferPlan,
         operation: TerminalImageTransferOperation? = nil,
-        uploadWorkspaceRemote: ([URL], TerminalImageTransferOperation, @escaping (Result<[String], Error>) -> Void) -> Void,
         uploadDetectedSSH: (DetectedSSHSession, [URL], TerminalImageTransferOperation, @escaping (Result<[String], Error>) -> Void) -> Void,
         insertText: @escaping (String) -> Void,
         scheduleAfter: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, work in
@@ -288,13 +284,6 @@ enum TerminalImageTransferPlanner {
                 insertText: insertText,
                 scheduleAfter: scheduleAfter
             )
-            return operation
-        case .uploadFiles(let fileURLs, .workspaceRemote):
-            let operation = operation ?? TerminalImageTransferOperation()
-            uploadWorkspaceRemote(fileURLs, operation) { result in
-                guard operation.finish() else { return }
-                finishUpload(result: result, insertText: insertText, onFailure: onFailure)
-            }
             return operation
         case .uploadFiles(let fileURLs, .detectedSSH(let session)):
             let operation = operation ?? TerminalImageTransferOperation()
@@ -485,9 +474,6 @@ extension TerminalSurface {
     @MainActor
     func resolvedImageTransferTarget() -> TerminalImageTransferTarget {
         guard let workspace = owningWorkspace() else { return .local }
-        if workspace.isRemoteTerminalSurface(id) {
-            return .remote(.workspaceRemote)
-        }
         if let ttyName = workspace.surfaceTTYNames[id],
            let session = TerminalSSHSessionDetector.detect(forTTY: ttyName) {
             return .remote(.detectedSSH(session))

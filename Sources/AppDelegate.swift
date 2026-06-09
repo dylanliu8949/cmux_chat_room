@@ -1758,7 +1758,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         _ = saveSessionSnapshotIncludingProcessDetectedIndexes(includeScrollback: true, removeWhenEmpty: false)
         ClosedItemHistoryStore.shared.flushPendingSaves()
         stopSessionAutosaveTimer()
-        CmuxSSHURLProcessLauncher.shared.terminateAll()
         TerminalController.shared.stop()
         GhosttyPasteboardHelper.cleanupAllOwnedTemporaryImageFiles()
         VSCodeServeWebController.shared.stop()
@@ -3597,7 +3596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func debugSeedSessionSnapshotScrollback(charactersPerTerminal: Int) -> [String: Any] {
         let workspaces = sortedMainWindowContextsForSessionSnapshot().flatMap { context in
-            context.tabManager.tabs.filter { !$0.isRemoteWorkspace }
+            context.tabManager.tabs
         }
         return SessionSnapshotDebugBenchmark.seedScrollback(
             workspaces: workspaces,

@@ -3139,18 +3139,6 @@ struct TextBoxInputContainer: View {
         }
 
         switch remoteTarget {
-        case .workspaceRemote:
-            guard let workspace = MainActor.assumeIsolated({
-                surface.owningWorkspace()
-            }) else {
-                finish(.failure(NSError(domain: "cmux.textbox.attachment", code: 3)))
-                return
-            }
-            workspace.uploadDroppedFilesForRemoteTerminal(
-                fileURLs,
-                operation: operation,
-                completion: finish
-            )
         case .detectedSSH(let session):
             session.uploadDroppedFiles(
                 fileURLs,

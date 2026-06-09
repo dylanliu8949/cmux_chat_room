@@ -1384,8 +1384,6 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
     var hibernation: SessionAgentHibernationSnapshot?
     var resumeBinding: SurfaceResumeBindingSnapshot?
     var textBoxDraft: SessionTextBoxInputDraftSnapshot?
-    var isRemoteTerminal: Bool?
-    var remotePTYSessionID: String?
     /// Whether the agent process was actively running when this snapshot was captured.
     /// Nil means unknown (legacy snapshots); treated as true for backwards compatibility.
     var wasAgentRunning: Bool?
@@ -1398,8 +1396,6 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
         hibernation: SessionAgentHibernationSnapshot? = nil,
         resumeBinding: SurfaceResumeBindingSnapshot? = nil,
         textBoxDraft: SessionTextBoxInputDraftSnapshot? = nil,
-        isRemoteTerminal: Bool? = nil,
-        remotePTYSessionID: String? = nil,
         wasAgentRunning: Bool? = nil
     ) {
         self.workingDirectory = workingDirectory
@@ -1409,8 +1405,6 @@ struct SessionTerminalPanelSnapshot: Codable, Sendable {
         self.hibernation = hibernation
         self.resumeBinding = resumeBinding
         self.textBoxDraft = textBoxDraft
-        self.isRemoteTerminal = isRemoteTerminal
-        self.remotePTYSessionID = remotePTYSessionID
         self.wasAgentRunning = wasAgentRunning
     }
 }
@@ -1815,7 +1809,6 @@ struct SessionWorkspaceSnapshot: Codable, Sendable {
     var logEntries: [SessionLogEntrySnapshot]
     var progress: SessionProgressSnapshot?
     var gitBranch: SessionGitBranchSnapshot?
-    var remote: SessionRemoteWorkspaceSnapshot?
     // Chat-room model (all optional; old snapshots decode as nil → migrated on restore).
     // Kept last so the synthesized memberwise-init argument order matches `Workspace.sessionSnapshot()`.
     /// `WorkspaceRole.rawValue`; nil/absent ⇒ legacy ⇒ treated as `.agent`.

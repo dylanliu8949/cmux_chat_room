@@ -100,7 +100,7 @@ struct DetectedSSHSession: Equatable {
                     ])
                 }
 
-                let remotePath = WorkspaceRemoteSessionController.remoteDropPath(for: normalizedLocalURL)
+                let remotePath = Self.remoteDropPath(for: normalizedLocalURL)
                 let result = try Self.runProcess(
                     executable: "/usr/bin/scp",
                     arguments: scpArguments(localPath: normalizedLocalURL.path, remotePath: remotePath),
@@ -124,6 +124,12 @@ struct DetectedSSHSession: Equatable {
             cleanupUploadedRemotePaths(uploadedRemotePaths)
             throw error
         }
+    }
+
+    static func remoteDropPath(for fileURL: URL, uuid: UUID = UUID()) -> String {
+        let extensionSuffix = fileURL.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercasedSuffix = extensionSuffix.isEmpty ? "" : ".\(extensionSuffix.lowercased())"
+        return "/tmp/cmux-drop-\(uuid.uuidString.lowercased())\(lowercasedSuffix)"
     }
 
     private func scpArguments(localPath: String, remotePath: String) -> [String] {

@@ -42,7 +42,7 @@ extension ContentView {
         )
 
         let fallbackSnapshot = currentContext.workspace.restoredAgentSnapshotsByPanelId[panelId]
-        let isRemoteContext = currentContext.workspace.isRemoteTerminalSurface(panelId)
+        let isRemoteContext = false
         let selection = Self.commandPaletteImmediateForkExecutionSnapshotSelection(
             workspaceId: workspaceId,
             panelId: panelId,
@@ -109,12 +109,6 @@ extension ContentView {
                     inheritWorkingDirectory: launch.terminalWorkingDirectory != nil,
                     autoWelcomeIfNeeded: false
                 )
-                if let remoteConfiguration = launch.remoteConfiguration {
-                    forkWorkspace.configureRemoteConnection(
-                        remoteConfiguration,
-                        autoConnect: launch.autoConnectRemoteConfiguration
-                    )
-                }
                 if let workingDirectory = launch.workingDirectory,
                    launch.terminalWorkingDirectory == nil,
                    let forkPanelId = forkWorkspace.focusedPanelId {

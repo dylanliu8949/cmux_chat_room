@@ -975,10 +975,6 @@ private final class SelectedWorkspaceDirectoryObserver: ObservableObject {
     private struct Snapshot: Equatable {
         let workspaceId: UUID?
         let currentDirectory: String?
-        let remoteConfiguration: WorkspaceRemoteConfiguration?
-        let remoteConnectionState: WorkspaceRemoteConnectionState?
-        let remoteConnectionDetail: String?
-        let remoteDaemonStatus: WorkspaceRemoteDaemonStatus?
     }
 
     @Published private(set) var directoryChangeGeneration: UInt64 = 0
@@ -999,36 +995,16 @@ private final class SelectedWorkspaceDirectoryObserver: ObservableObject {
                     return Just(
                         Snapshot(
                             workspaceId: nil,
-                            currentDirectory: nil,
-                            remoteConfiguration: nil,
-                            remoteConnectionState: nil,
-                            remoteConnectionDetail: nil,
-                            remoteDaemonStatus: nil
+                            currentDirectory: nil
                         )
                     )
                     .eraseToAnyPublisher()
                 }
                 return workspace.$currentDirectory
-                    .combineLatest(
-                        workspace.$remoteConfiguration,
-                        workspace.$remoteConnectionState,
-                        workspace.$remoteConnectionDetail
-                    )
-                    .combineLatest(workspace.$remoteDaemonStatus)
-                    .map { values, remoteDaemonStatus in
-                        let (
-                            currentDirectory,
-                            remoteConfiguration,
-                            remoteConnectionState,
-                            remoteConnectionDetail
-                        ) = values
-                        return Snapshot(
+                    .map { currentDirectory in
+                        Snapshot(
                             workspaceId: workspace.id,
-                            currentDirectory: currentDirectory,
-                            remoteConfiguration: remoteConfiguration,
-                            remoteConnectionState: remoteConnectionState,
-                            remoteConnectionDetail: remoteConnectionDetail,
-                            remoteDaemonStatus: remoteDaemonStatus
+                            currentDirectory: currentDirectory
                         )
                     }
                     .eraseToAnyPublisher()
@@ -2368,11 +2344,6 @@ struct ContentView: View {
               let tab = tabManager.tabs.first(where: { $0.id == selectedId }) else {
             // No selection means we have no local cwd to scope by; clear so the
             // sessions panel doesn't keep filtering by a stale previous tab.
-            sessionIndexStore.setCurrentDirectoryIfChanged(nil)
-            return
-        }
-
-        if tab.isRemoteWorkspace {
             sessionIndexStore.setCurrentDirectoryIfChanged(nil)
             return
         }
@@ -5755,7 +5726,7 @@ struct ContentView: View {
 
         let workspaceId = panelContext.workspace.id
         let panelId = panelContext.panelId
-        let isRemoteTerminal = panelContext.workspace.isRemoteTerminalSurface(panelId)
+        let isRemoteTerminal = false
         let panelKey = Self.commandPaletteForkableAgentPanelKey(workspaceId: workspaceId, panelId: panelId)
         let panelChanged = commandPaletteForkableAgentActivePanelKey != panelKey
         commandPaletteForkableAgentActivePanelKey = panelKey
@@ -6203,7 +6174,7 @@ struct ContentView: View {
             let workspace = panelContext.workspace
             let panelId = panelContext.panelId
             let panelIsTerminal = panelContext.panel.panelType == .terminal
-            let panelIsRemoteTerminal = workspace.isRemoteTerminalSurface(panelId)
+            let panelIsRemoteTerminal = false
             snapshot.setBool(CommandPaletteContextKeys.hasFocusedPanel, true)
             snapshot.setString(CommandPaletteContextKeys.panelName, panelDisplayName(workspace: workspace, panelId: panelId, fallback: panelContext.panel.displayTitle))
             // Markdown zoom only affects the rendered preview, so don't surface
@@ -9901,14 +9872,9 @@ struct VerticalTabsSidebar: View {
         let workspaceById = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
         let orderedSelectedTabs = tabs.filter { selectedTabIds.contains($0.id) }
         let selectedContextTargetIds = orderedSelectedTabs.map(\.id)
-        let selectedRemoteContextMenuTargets = orderedSelectedTabs.filter { $0.isRemoteWorkspace }
-        let selectedRemoteContextMenuWorkspaceIds = selectedRemoteContextMenuTargets.map(\.id)
-        let allSelectedRemoteContextMenuTargetsConnecting = !selectedRemoteContextMenuTargets.isEmpty &&
-            selectedRemoteContextMenuTargets.allSatisfy {
-                $0.remoteConnectionState == .connecting || $0.remoteConnectionState == .reconnecting
-            }
-        let allSelectedRemoteContextMenuTargetsDisconnected = !selectedRemoteContextMenuTargets.isEmpty &&
-            selectedRemoteContextMenuTargets.allSatisfy { $0.remoteConnectionState == .disconnected }
+        let selectedRemoteContextMenuWorkspaceIds: [UUID] = []
+        let allSelectedRemoteContextMenuTargetsConnecting = false
+        let allSelectedRemoteContextMenuTargetsDisconnected = false
         let workspaceGroups = tabManager.workspaceGroups
         let workspaceGroupById = Dictionary(uniqueKeysWithValues: workspaceGroups.map { ($0.id, $0) })
         let workspaceGroupMenuSnapshot = WorkspaceGroupMenuSnapshot(
@@ -10445,16 +10411,13 @@ struct VerticalTabsSidebar: View {
             : [tab.id]
         let remoteContextMenuWorkspaceIds = usesSelectedContextMenuTargets
             ? renderContext.selectedRemoteContextMenuWorkspaceIds
-            : (tab.isRemoteWorkspace ? [tab.id] : [])
+            : []
         let allRemoteContextMenuTargetsConnecting = usesSelectedContextMenuTargets
             ? renderContext.allSelectedRemoteContextMenuTargetsConnecting
-            : (
-                tab.isRemoteWorkspace &&
-                    (tab.remoteConnectionState == .connecting || tab.remoteConnectionState == .reconnecting)
-            )
+            : false
         let allRemoteContextMenuTargetsDisconnected = usesSelectedContextMenuTargets
             ? renderContext.allSelectedRemoteContextMenuTargetsDisconnected
-            : (tab.isRemoteWorkspace && tab.remoteConnectionState == .disconnected)
+            : false
         let contextMenuPinTarget = WorkspaceActionDispatcher.Target(
             workspaceIds: contextMenuWorkspaceIds,
             anchorWorkspaceId: tab.id
@@ -13210,54 +13173,15 @@ struct TabItemView: View, Equatable {
     }
 
     private var remoteWorkspaceSidebarText: String? {
-        guard tab.hasActiveRemoteTerminalSessions else { return nil }
-        let trimmedTarget = tab.remoteDisplayTarget?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let trimmedTarget, !trimmedTarget.isEmpty {
-            return trimmedTarget
-        }
-        return String(localized: "sidebar.remote.subtitleFallback", defaultValue: "SSH workspace")
+        nil
     }
 
     private var copyableSidebarSSHError: String? {
-        let fallbackTarget = tab.remoteDisplayTarget ?? String(
-            localized: "sidebar.remote.help.targetFallback",
-            defaultValue: "remote host"
-        )
-        let trimmedDetail = tab.remoteConnectionDetail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if tab.remoteConnectionState == .error, let trimmedDetail, !trimmedDetail.isEmpty {
-            let entry = SidebarRemoteErrorCopyEntry(
-                workspaceTitle: tab.title,
-                target: fallbackTarget,
-                detail: trimmedDetail
-            )
-            return SidebarRemoteErrorCopySupport.clipboardText(for: [entry])
-        }
-        if let statusValue = tab.statusEntries["remote.error"]?.value
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !statusValue.isEmpty {
-            let entry = SidebarRemoteErrorCopyEntry(
-                workspaceTitle: tab.title,
-                target: fallbackTarget,
-                detail: statusValue
-            )
-            return SidebarRemoteErrorCopySupport.clipboardText(for: [entry])
-        }
-        return nil
+        nil
     }
 
     private var remoteConnectionStatusText: String {
-        switch tab.remoteConnectionState {
-        case .connected:
-            return String(localized: "remote.status.connected", defaultValue: "Connected")
-        case .connecting:
-            return String(localized: "remote.status.connecting", defaultValue: "Connecting")
-        case .reconnecting:
-            return String(localized: "remote.status.reconnecting", defaultValue: "Reconnecting")
-        case .error:
-            return String(localized: "remote.status.error", defaultValue: "Error")
-        case .disconnected:
-            return String(localized: "remote.status.disconnected", defaultValue: "Disconnected")
-        }
+        ""
     }
 
     private var rowHeightProbe: some View {
@@ -13930,24 +13854,6 @@ struct TabItemView: View, Equatable {
 
         }
 
-        if !remoteContextMenuWorkspaceIds.isEmpty {
-            Divider()
-
-            Button(reconnectLabel) {
-                for workspace in remoteContextMenuWorkspaces() {
-                    workspace.reconnectRemoteConnection()
-                }
-            }
-            .disabled(allRemoteContextMenuTargetsConnecting)
-
-            Button(disconnectLabel) {
-                for workspace in remoteContextMenuWorkspaces() {
-                    workspace.disconnectRemoteConnection(clearConfiguration: false)
-                }
-            }
-            .disabled(allRemoteContextMenuTargetsDisconnected)
-        }
-
         Menu(String(localized: "contextMenu.workspaceColor", defaultValue: "Workspace Color")) {
             if tab.customColor != nil {
                 Button {
@@ -14267,69 +14173,7 @@ struct TabItemView: View, Equatable {
     }
 
     private var remoteStateHelpText: String {
-        let target = tab.remoteDisplayTarget ?? String(
-            localized: "sidebar.remote.help.targetFallback",
-            defaultValue: "remote host"
-        )
-        let detail = tab.remoteConnectionDetail?.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch tab.remoteConnectionState {
-        case .connected:
-            return String(
-                format: String(
-                    localized: "sidebar.remote.help.connected",
-                    defaultValue: "SSH connected to %@"
-                ),
-                locale: .current,
-                target
-            )
-        case .connecting:
-            return String(
-                format: String(
-                    localized: "sidebar.remote.help.connecting",
-                    defaultValue: "SSH connecting to %@"
-                ),
-                locale: .current,
-                target
-            )
-        case .reconnecting:
-            return String(
-                format: String(
-                    localized: "sidebar.remote.help.reconnecting",
-                    defaultValue: "SSH reconnecting to %@"
-                ),
-                locale: .current,
-                target
-            )
-        case .error:
-            if let detail, !detail.isEmpty {
-                return String(
-                    format: String(
-                        localized: "sidebar.remote.help.errorWithDetail",
-                        defaultValue: "SSH error for %@: %@"
-                    ),
-                    locale: .current,
-                    target,
-                    detail
-                )
-            }
-            return String(
-                format: String(
-                    localized: "sidebar.remote.help.error",
-                    defaultValue: "SSH error for %@"
-                ),
-                locale: .current,
-                target
-            )
-        case .disconnected:
-            return String(
-                format: String(
-                    localized: "sidebar.remote.help.disconnected",
-                    defaultValue: "SSH disconnected from %@"
-                ),
-                locale: .current,
-                target
-            )
-        }
+        ""
     }
 
     private func makeWorkspaceSnapshot() -> SidebarWorkspaceSnapshotBuilder.Snapshot {

@@ -1510,7 +1510,7 @@ class TabManager: ObservableObject {
     }
 
     private func restartWorkspaceGitMetadataWatching(reason: String) {
-        for workspace in tabs where !workspace.isRemoteWorkspace {
+        for workspace in tabs {
             for panelId in workspace.panels.keys {
                 guard workspace.terminalPanel(for: panelId) != nil else {
                     continue
@@ -2225,8 +2225,7 @@ class TabManager: ObservableObject {
             reason: reason
         )
 #endif
-        guard let workspace = tabs.first(where: { $0.id == workspaceId }),
-              !workspace.isRemoteWorkspace else {
+        guard tabs.contains(where: { $0.id == workspaceId }) else {
             return
         }
         scheduleWorkspaceGitMetadataRefreshIfPossible(
@@ -5104,7 +5103,6 @@ class TabManager: ObservableObject {
         guard tabs.count > 1 else { return }
         sentryBreadcrumb("workspace.close", data: ["tabCount": tabs.count - 1])
         if recordHistory,
-           workspace.isRestorableInSessionSnapshot,
            let index = tabs.firstIndex(where: { $0.id == workspace.id }) {
             let snapshot = workspace.sessionSnapshot(
                 includeScrollback: true,
@@ -5126,7 +5124,6 @@ class TabManager: ObservableObject {
         workspace.withClosedPanelHistorySuppressed {
             workspace.teardownAllPanels()
         }
-        workspace.teardownRemoteConnection()
         workspace.owningTabManager = nil
 
         if let index = tabs.firstIndex(where: { $0.id == workspace.id }) {
@@ -5887,35 +5884,13 @@ class TabManager: ObservableObject {
     func closePanelAfterChildExited(tabId: UUID, surfaceId: UUID) {
         guard let tab = tabs.first(where: { $0.id == tabId }) else { return }
         guard tab.panels[surfaceId] != nil else { return }
-        let keepsPersistentRemoteSurfaceOpen =
-            tab.shouldKeepPersistentRemoteSurfaceOpenAfterChildExit(surfaceId)
-        let handlesRemoteExitThroughWorkspace =
-            tab.panels.count <= 1 && tab.shouldDemoteWorkspaceAfterChildExit(surfaceId: surfaceId)
 
 #if DEBUG
         cmuxDebugLog(
             "surface.close.childExited tab=\(tabId.uuidString.prefix(5)) " +
-            "surface=\(surfaceId.uuidString.prefix(5)) panels=\(tab.panels.count) workspaces=\(tabs.count) " +
-            "remoteWorkspace=\(tab.isRemoteWorkspace ? 1 : 0) keepRemote=\(handlesRemoteExitThroughWorkspace ? 1 : 0) " +
-            "keepPersistentRemote=\(keepsPersistentRemoteSurfaceOpen ? 1 : 0)"
+            "surface=\(surfaceId.uuidString.prefix(5)) panels=\(tab.panels.count) workspaces=\(tabs.count)"
         )
 #endif
-
-        // A persistent SSH workspace must never silently replace a failed remote attach with
-        // a local login shell. Keep the exited surface visible so the user can see the error
-        // and retry instead of making a detached remote workspace look local after relaunch.
-        if keepsPersistentRemoteSurfaceOpen {
-            tab.markPersistentRemotePTYAttachFailed(surfaceId: surfaceId)
-            return
-        }
-
-        // Exiting the last non-persistent SSH surface should demote the workspace back to a
-        // local one. Route through Workspace close handling so remote teardown and replacement
-        // panel logic run before TabManager considers removing the workspace itself.
-        if handlesRemoteExitThroughWorkspace {
-            closeRuntimeSurface(tabId: tabId, surfaceId: surfaceId)
-            return
-        }
 
         // Child-exit on the last panel should collapse the workspace, matching explicit close
         // semantics (and close the window when it was the last workspace).
@@ -7169,8 +7144,7 @@ class TabManager: ObservableObject {
         initialCommand: String? = nil,
         tmuxStartCommand: String? = nil,
         startupEnvironment: [String: String] = [:],
-        initialDividerPosition: CGFloat? = nil,
-        remotePTYSessionID: String? = nil
+        initialDividerPosition: CGFloat? = nil
     ) -> UUID? {
         guard let tab = tabs.first(where: { $0.id == tabId }) else { return nil }
         return tab.newTerminalSplit(
@@ -7182,8 +7156,7 @@ class TabManager: ObservableObject {
             initialCommand: initialCommand,
             tmuxStartCommand: tmuxStartCommand,
             startupEnvironment: startupEnvironment,
-            initialDividerPosition: initialDividerPosition,
-            remotePTYSessionID: remotePTYSessionID
+            initialDividerPosition: initialDividerPosition
         )?.id
     }
 
@@ -9018,7 +8991,6 @@ extension TabManager {
         surfaceResumeBindingIndex: SurfaceResumeBindingIndex? = nil
     ) -> SessionTabManagerSnapshot {
         let restorableTabs = tabs
-            .filter(\.isRestorableInSessionSnapshot)
             .prefix(SessionPersistencePolicy.maxWorkspacesPerWindow)
         let workspaceSnapshots = restorableTabs
             .map {
@@ -9072,7 +9044,6 @@ extension TabManager {
     func sessionSnapshotWorkspaceIds() -> [UUID] {
         Array(
             tabs
-                .filter(\.isRestorableInSessionSnapshot)
                 .prefix(SessionPersistencePolicy.maxWorkspacesPerWindow)
                 .map(\.id)
         )
@@ -9084,7 +9055,6 @@ extension TabManager {
         // panel/socket callbacks cannot keep mutating hidden pre-restore state.
         AppDelegate.shared?.notificationStore?.clearNotifications(forTabId: workspace.id)
         workspace.teardownAllPanels()
-        workspace.teardownRemoteConnection()
         workspace.owningTabManager = nil
     }
 
