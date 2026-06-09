@@ -167,7 +167,6 @@ class TerminalController {
         "focus_surface_by_panel",
         "focus_notification",
         "activate_app",
-        "debug_right_sidebar_focus",
     ]
 
     private nonisolated static let focusIntentV2Methods: Set<String> = [
@@ -186,7 +185,6 @@ class TerminalController {
         "debug.command_palette.toggle",
         "debug.notification.focus",
         "debug.app.activate",
-        "debug.right_sidebar.focus",
         "feed.jump"
     ]
 
@@ -356,23 +354,7 @@ class TerminalController {
             return focusIntentV2Methods.contains(commandKey)
                 || explicitFocusParamAllowsFocus(commandKey: commandKey, params: params)
         }
-        if commandKey == "right_sidebar" {
-            return rightSidebarCommandAllowsInAppFocusMutations(args: params["args"] as? String ?? "")
-        }
         return focusIntentV1Commands.contains(commandKey)
-    }
-
-    private nonisolated static func rightSidebarCommandAllowsInAppFocusMutations(args: String) -> Bool {
-        let parsed = RightSidebarRemoteRequest.parse(tokens: Self.tokenizeArgs(args))
-        guard case .success(let request) = parsed else { return false }
-        switch request.command {
-        case .toggle, .show, .focus:
-            return true
-        case .setMode(_, let focus):
-            return focus
-        case .hide, .getState:
-            return false
-        }
     }
 
     nonisolated func withSocketCommandPolicy<T>(commandKey: String, isV2: Bool, params: [String: Any] = [:], _ body: () -> T) -> T {
@@ -1366,7 +1348,7 @@ class TerminalController {
         let cmd = parts[0].lowercased()
         let args = parts.count > 1 ? parts[1] : ""
 
-        let policyParams = cmd == "right_sidebar" ? ["args": args] : [:]
+        let policyParams: [String: Any] = [:]
         return withSocketCommandPolicy(commandKey: cmd, isV2: false, params: policyParams) {
             switch cmd {
         case "ping":
@@ -1549,9 +1531,6 @@ class TerminalController {
         case "reset_sidebar":
             return resetSidebar(args)
 
-        case "right_sidebar":
-            return rightSidebar(args)
-
         case "read_screen":
             return readScreenText(args)
 
@@ -1637,9 +1616,6 @@ class TerminalController {
 
         case "focus_notification":
             return focusFromNotification(args)
-
-        case "debug_right_sidebar_focus":
-            return debugRightSidebarFocus(args)
 
         case "flash_count":
             return flashCount(args)
@@ -2049,8 +2025,6 @@ class TerminalController {
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputSelection(params: params))
         case "debug.command_palette.rename_input.select_all":
             return v2Result(id: id, self.v2DebugCommandPaletteRenameInputSelectAll(params: params))
-        case "debug.right_sidebar.focus":
-            return v2Result(id: id, self.v2DebugRightSidebarFocus(params: params))
         case "debug.sidebar.visible":
             return v2Result(id: id, self.v2DebugSidebarVisible(params: params))
         case "debug.terminal.is_focused":
@@ -2255,7 +2229,6 @@ class TerminalController {
             "debug.command_palette.rename_input.delete_backward",
             "debug.command_palette.rename_input.selection",
             "debug.command_palette.rename_input.select_all",
-            "debug.right_sidebar.focus",
             "debug.sidebar.visible",
             "debug.terminal.is_focused",
             "debug.terminal.read_text",
@@ -10752,94 +10725,6 @@ class TerminalController {
         ])
     }
 
-#if DEBUG
-    private func v2DebugRightSidebarFocus(params: [String: Any]) -> V2CallResult {
-        let modeName = v2String(params, "mode") ?? RightSidebarMode.dock.rawValue
-        guard let mode = RightSidebarMode(rawValue: modeName) else {
-            return .err(code: "invalid_params", message: "Invalid right sidebar mode", data: ["mode": modeName])
-        }
-        let requestedWindowId = v2UUID(params, "window_id")
-        let focusFirstItem = v2Bool(params, "focus_first_item") ?? true
-        var focused = false
-        var focusApplied = false
-        var contextFound = false
-        var stateFound = false
-        var visible = false
-        var activeMode: String?
-        var missingWindow = false
-
-        let preferredWindow: NSWindow?
-        if let requestedWindowId {
-            preferredWindow = AppDelegate.shared?.mainWindow(for: requestedWindowId)
-            missingWindow = preferredWindow == nil
-        } else {
-            preferredWindow = NSApp.keyWindow ?? NSApp.mainWindow
-        }
-        guard !missingWindow else {
-            return .err(
-                code: "not_found",
-                message: "Window not found",
-                data: requestedWindowId.map { ["window_id": $0.uuidString, "window_ref": v2Ref(kind: .window, uuid: $0)] }
-            )
-        }
-        let result = AppDelegate.shared?.debugRevealRightSidebarInActiveMainWindow(
-            mode: mode,
-            focusFirstItem: focusFirstItem,
-            preferredWindow: preferredWindow
-        )
-        focused = result?.revealed ?? false
-        focusApplied = result?.focusApplied ?? false
-        contextFound = result?.contextFound ?? false
-        stateFound = result?.stateFound ?? false
-        visible = result?.visible ?? false
-        activeMode = result?.activeMode
-
-        return .ok([
-            "focused": focused,
-            "focus_applied": focusApplied,
-            "context_found": contextFound,
-            "state_found": stateFound,
-            "visible": visible,
-            "active_mode": v2OrNull(activeMode),
-            "mode": mode.rawValue,
-            "window_id": v2OrNull(requestedWindowId?.uuidString),
-            "window_ref": v2Ref(kind: .window, uuid: requestedWindowId)
-        ])
-    }
-
-    private func debugRightSidebarFocus(_ args: String) -> String {
-        let modeName = args.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? RightSidebarMode.dock.rawValue
-            : args.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let mode = RightSidebarMode(rawValue: modeName) else {
-            return "ERROR: Invalid right sidebar mode: \(modeName)"
-        }
-
-        var revealed = false
-        var focusApplied = false
-        var contextFound = false
-        var stateFound = false
-        var visible = false
-        var activeMode = ""
-
-        let result = AppDelegate.shared?.debugRevealRightSidebarInActiveMainWindow(
-            mode: mode,
-            focusFirstItem: false,
-            preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
-        )
-        revealed = result?.revealed ?? false
-        focusApplied = result?.focusApplied ?? false
-        contextFound = result?.contextFound ?? false
-        stateFound = result?.stateFound ?? false
-        visible = result?.visible ?? false
-        activeMode = result?.activeMode ?? ""
-
-        let details = "mode=\(mode.rawValue) active=\(activeMode) visible=\(visible ? 1 : 0) " +
-            "context=\(contextFound ? 1 : 0) state=\(stateFound ? 1 : 0) focus=\(focusApplied ? 1 : 0)"
-        return revealed ? "OK: \(details)" : "ERROR: \(details)"
-    }
-#endif
-
     private func v2DebugSidebarVisible(params: [String: Any]) -> V2CallResult {
         guard let windowId = v2UUID(params, "window_id") else {
             return .err(code: "invalid_params", message: "Missing or invalid window_id", data: nil)
@@ -11538,7 +11423,6 @@ class TerminalController {
           report_pr_action <merge|close|reopen|create|checkout|ready|edit|view> [--target=X] [--tab=X] [--panel=Y] - Hint that a PR-affecting command completed in the panel
           report_pwd <path> [--tab=X] [--panel=Y] - Report current working directory
           clear_ports [--tab=X] [--panel=Y] - Clear listening ports
-          right_sidebar <toggle|show|hide|focus|set|mode> [mode] [--tab=X] [--window=Y] [--no-focus] - Control right sidebar visibility, mode, and focus
           sidebar_state [--tab=X] - Dump sidebar metadata
           reset_sidebar [--tab=X] - Clear sidebar metadata
 
@@ -15627,52 +15511,6 @@ class TerminalController {
         }
         return result
     }
-
-    private func rightSidebar(_ args: String) -> String {
-        let parsed = RightSidebarRemoteRequest.parse(tokens: Self.tokenizeArgs(args))
-        let request: RightSidebarRemoteRequest
-        switch parsed {
-        case .success(let value):
-            request = value
-        case .failure(let error):
-            return error.message
-        }
-
-        return v2MainSync {
-            guard let app = AppDelegate.shared else {
-                return String(localized: "rightSidebar.remote.error.appDelegateUnavailable", defaultValue: "ERROR: App delegate not available")
-            }
-            switch app.applyRightSidebarRemoteCommand(request.command, target: request.target) {
-            case .ok:
-                return "OK"
-            case .state(let state):
-                return v2Encode([
-                    "visible": state.visible,
-                    "mode": state.mode.rawValue
-                ])
-            case .failure(let message):
-                return message
-            }
-        }
-    }
-
-#if DEBUG
-    func parseRightSidebarRemoteRequestForTesting(_ commandLine: String) -> Result<RightSidebarRemoteRequest, RightSidebarRemoteParseError> {
-        let trimmed = commandLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: " ", maxSplits: 1).map(String.init)
-        guard parts.first?.lowercased() == "right_sidebar" else {
-            return .failure(.init(message: "ERROR: Usage: right_sidebar <toggle|show|hide|focus|set|mode>"))
-        }
-        return RightSidebarRemoteRequest.parse(tokens: Self.tokenizeArgs(parts.count > 1 ? parts[1] : ""))
-    }
-
-    func rightSidebarCommandAllowsInAppFocusMutationsForTesting(_ commandLine: String) -> Bool {
-        let trimmed = commandLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        let parts = trimmed.split(separator: " ", maxSplits: 1).map(String.init)
-        guard parts.first?.lowercased() == "right_sidebar" else { return false }
-        return Self.rightSidebarCommandAllowsInAppFocusMutations(args: parts.count > 1 ? parts[1] : "")
-    }
-#endif
 
     private func resetSidebar(_ args: String) -> String {
         var result = "OK"

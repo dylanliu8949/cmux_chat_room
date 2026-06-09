@@ -87,7 +87,7 @@ extension AppDelegate {
         let shortcutWindow = shortcutResolvedEventWindow(event) ?? NSApp.keyWindow ?? NSApp.mainWindow
         let context = ShortcutEventFocusContext(
             markdownPanel: shortcutFocusedMarkdownPanel(in: shortcutWindow),
-            rightSidebarFocused: shortcutWindow.map { shouldRouteRightSidebarModeShortcut(in: $0) } ?? false
+            rightSidebarFocused: false
         )
         shortcutEventFocusContextCache = ShortcutEventFocusContextCache(event: event, context: context)
         return context

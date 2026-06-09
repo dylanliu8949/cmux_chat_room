@@ -1087,8 +1087,7 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
                     tmuxStartCommand: nil
                 ),
                 browser: nil,
-                markdown: nil,
-                rightSidebarTool: nil
+                markdown: nil
             )
         ]
 

@@ -236,16 +236,14 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             windowId: windowAId,
             tabManager: managerA,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             windowB,
             windowId: windowBId,
             tabManager: managerB,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         windowB.makeKeyAndOrderFront(nil)
@@ -278,16 +276,14 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             windowId: windowAId,
             tabManager: managerA,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             windowB,
             windowId: windowBId,
             tabManager: managerB,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         // Seed active manager and clear focus windows to force fallback routing.
@@ -316,8 +312,7 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         // SwiftUI can replace the NSWindow identifier string at runtime.
@@ -348,16 +343,14 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             windowId: windowAId,
             tabManager: managerA,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             windowB,
             windowId: windowBId,
             tabManager: managerB,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         windowA.makeKeyAndOrderFront(nil)
@@ -392,8 +385,7 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         window.makeKeyAndOrderFront(nil)
@@ -442,8 +434,7 @@ final class AppDelegateWindowContextRoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         window.makeKeyAndOrderFront(nil)
@@ -1793,87 +1784,6 @@ final class WindowDragHandleHitTests: XCTestCase {
             windowDragHandleShouldCaptureHit(point, in: dragHandle, eventType: .leftMouseDown, eventWindow: window),
             "Reentrant same-window top-hit resolution should not trigger exclusivity crashes"
         )
-    }
-
-    func testRightSidebarModeBarEmptySpaceDoubleClickPerformsTitlebarAction() {
-        _ = NSApplication.shared
-
-        let previousGlobalDefaults = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)
-        var testGlobalDefaults = previousGlobalDefaults ?? [:]
-        testGlobalDefaults["AppleActionOnDoubleClick"] = "Fill"
-        testGlobalDefaults["AppleMiniaturizeOnDoubleClick"] = false
-        UserDefaults.standard.setPersistentDomain(testGlobalDefaults, forName: UserDefaults.globalDomain)
-        defer {
-            if let previousGlobalDefaults {
-                UserDefaults.standard.setPersistentDomain(previousGlobalDefaults, forName: UserDefaults.globalDomain)
-            } else {
-                UserDefaults.standard.removePersistentDomain(forName: UserDefaults.globalDomain)
-            }
-        }
-
-        let window = RecordingTitlebarActionWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 260),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        defer { window.orderOut(nil) }
-
-        let rootView = RightSidebarPanelView(
-            tabManager: TabManager(),
-            fileExplorerStore: FileExplorerStore(),
-            fileExplorerState: FileExplorerState(),
-            sessionIndexStore: SessionIndexStore(),
-            titlebarHeight: 36,
-            workspaceId: nil,
-            onResumeSession: nil,
-            onOpenFilePreview: { _ in },
-            onOpenAsPane: { _ in },
-            onClose: {}
-        )
-        let hostingView = NSHostingView(rootView: rootView)
-        hostingView.frame = window.contentRect(forFrameRect: window.frame)
-        window.contentView = hostingView
-        window.makeKeyAndOrderFront(nil)
-        window.displayIfNeeded()
-        hostingView.layoutSubtreeIfNeeded()
-
-        guard let dragHandle = Self.firstSubview(
-            in: hostingView,
-            matching: { $0.identifier == WindowDragHandleView.viewIdentifier }
-        ) else {
-            XCTFail("Expected right-sidebar mode bar to install a titlebar drag handle")
-            return
-        }
-
-        guard let emptyModeBarLocalPoint = Self.firstCapturableTitlebarPoint(
-            in: dragHandle,
-            window: window
-        ) else {
-            XCTFail("Expected right-sidebar mode bar to expose at least one empty titlebar point")
-            return
-        }
-
-        let emptyModeBarPoint = dragHandle.convert(emptyModeBarLocalPoint, to: nil as NSView?)
-        guard let event = NSEvent.mouseEvent(
-            with: .leftMouseDown,
-            location: emptyModeBarPoint,
-            modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: window.windowNumber,
-            context: nil,
-            eventNumber: 1,
-            clickCount: 2,
-            pressure: 1.0
-        ) else {
-            XCTFail("Expected to create right-sidebar mode-bar double-click event")
-            return
-        }
-
-        NSApp.sendEvent(event)
-
-        XCTAssertEqual(window.zoomCallCount, 1)
-        XCTAssertEqual(window.miniaturizeCallCount, 0)
     }
 }
 

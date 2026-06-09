@@ -208,8 +208,6 @@ extension Workspace {
             return "terminal"
         case .markdown:
             return "markdown"
-        case .rightSidebarTool:
-            return "right_sidebar_tool"
         case .extensionBrowser:
             return "extension_browser"
         }
@@ -222,7 +220,7 @@ private enum MainWindowKeyRegainRefresh {
         // Window focus regain owns the redraw invariant. Cursor tracking and
         // focused subviews can update themselves only after this invalidation.
         invalidateContentDisplayTree(window: window)
-        _ = context.keyboardFocusCoordinator.restoreTargetAfterWindowBecameKey()
+        _ = context
     }
 
     private static func invalidateContentDisplayTree(window: NSWindow) {

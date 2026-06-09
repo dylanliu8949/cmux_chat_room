@@ -560,7 +560,6 @@ extension Workspace {
         let terminalSnapshot: SessionTerminalPanelSnapshot?
         let browserSnapshot: SessionBrowserPanelSnapshot?
         let markdownSnapshot: SessionMarkdownPanelSnapshot?
-        let rightSidebarToolSnapshot: SessionRightSidebarToolPanelSnapshot?
         switch panel.panelType {
         case .terminal:
             guard let terminalPanel = panel as? TerminalPanel else { return nil }
@@ -629,19 +628,11 @@ extension Workspace {
             )
             browserSnapshot = nil
             markdownSnapshot = nil
-            rightSidebarToolSnapshot = nil
         case .markdown:
             guard let markdownPanel = panel as? MarkdownPanel else { return nil }
             terminalSnapshot = nil
             browserSnapshot = nil
             markdownSnapshot = SessionMarkdownPanelSnapshot(filePath: markdownPanel.filePath)
-            rightSidebarToolSnapshot = nil
-        case .rightSidebarTool:
-            guard let toolPanel = panel as? RightSidebarToolPanel else { return nil }
-            terminalSnapshot = nil
-            browserSnapshot = nil
-            markdownSnapshot = nil
-            rightSidebarToolSnapshot = SessionRightSidebarToolPanelSnapshot(mode: toolPanel.mode)
         case .extensionBrowser:
             return nil
         }
@@ -662,8 +653,7 @@ extension Workspace {
             ttyName: ttyName,
             terminal: terminalSnapshot,
             browser: browserSnapshot,
-            markdown: markdownSnapshot,
-            rightSidebarTool: rightSidebarToolSnapshot
+            markdown: markdownSnapshot
         )
     }
 
@@ -1791,18 +1781,6 @@ extension Workspace {
             }
             applySessionPanelMetadata(snapshot, toPanelId: markdownPanel.id)
             return markdownPanel.id
-        case .rightSidebarTool:
-            guard let mode = snapshot.rightSidebarTool?.mode,
-                  mode.canOpenAsPane,
-                  let toolPanel = newRightSidebarToolSurface(
-                    inPane: paneId,
-                    mode: mode,
-                    focus: false
-                  ) else {
-                return nil
-            }
-            applySessionPanelMetadata(snapshot, toPanelId: toolPanel.id)
-            return toolPanel.id
         case .extensionBrowser:
             return nil
         }
@@ -10556,7 +10534,6 @@ final class Workspace: Identifiable, ObservableObject {
         static let terminal = "terminal"
         static let markdown = "markdown"
         static let filePreview = "filePreview"
-        static let rightSidebarTool = "rightSidebarTool"
         static let project = "project"
         static let extensionBrowser = "extensionBrowser"
     }
@@ -11377,8 +11354,6 @@ final class Workspace: Identifiable, ObservableObject {
             return SurfaceKind.terminal
         case .markdown:
             return SurfaceKind.markdown
-        case .rightSidebarTool:
-            return SurfaceKind.rightSidebarTool
         case .extensionBrowser:
             return SurfaceKind.extensionBrowser
         }
@@ -14669,74 +14644,6 @@ final class Workspace: Identifiable, ObservableObject {
         focusPanel(markdownPanel.id)
         installMarkdownPanelSubscription(markdownPanel)
         return markdownPanel
-    }
-
-    func openOrFocusRightSidebarToolSurface(
-        inPane paneId: PaneID,
-        mode: RightSidebarMode,
-        focus: Bool = true
-    ) -> RightSidebarToolPanel? {
-        guard mode.canOpenAsPane else { return nil }
-        for (existingId, panel) in panels {
-            guard let toolPanel = panel as? RightSidebarToolPanel,
-                  toolPanel.mode == mode else {
-                continue
-            }
-            if focus {
-                focusPanel(existingId)
-            }
-            return toolPanel
-        }
-        return newRightSidebarToolSurface(inPane: paneId, mode: mode, focus: focus)
-    }
-
-    @discardableResult
-    func newRightSidebarToolSurface(
-        inPane paneId: PaneID,
-        mode: RightSidebarMode,
-        focus: Bool? = nil,
-        targetIndex: Int? = nil
-    ) -> RightSidebarToolPanel? {
-        guard mode.canOpenAsPane else { return nil }
-        let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
-        let previousFocusedPanelId = focusedPanelId
-        let previousHostedView = focusedTerminalPanel?.hostedView
-
-        let toolPanel = RightSidebarToolPanel(workspace: self, mode: mode)
-        panels[toolPanel.id] = toolPanel
-        panelTitles[toolPanel.id] = toolPanel.displayTitle
-
-        guard let newTabId = bonsplitController.createTab(
-            title: toolPanel.displayTitle,
-            icon: toolPanel.displayIcon,
-            kind: SurfaceKind.rightSidebarTool,
-            isDirty: false,
-            isLoading: false,
-            isPinned: false,
-            inPane: paneId
-        ) else {
-            panels.removeValue(forKey: toolPanel.id)
-            panelTitles.removeValue(forKey: toolPanel.id)
-            return nil
-        }
-
-        surfaceIdToPanelId[newTabId] = toolPanel.id
-        if let targetIndex {
-            _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex)
-        }
-        publishCmuxSurfaceCreated(toolPanel.id, paneId: paneId, kind: "right_sidebar_tool", origin: "right_sidebar_tool_tab", focused: shouldFocusNewTab)
-
-        if shouldFocusNewTab {
-            focusPanel(toolPanel.id)
-        } else {
-            preserveFocusAfterNonFocusSplit(
-                preferredPanelId: previousFocusedPanelId,
-                splitPanelId: toolPanel.id,
-                previousHostedView: previousHostedView
-            )
-        }
-
-        return toolPanel
     }
 
     /// Tear down all panels in this workspace, freeing their Ghostty surfaces.

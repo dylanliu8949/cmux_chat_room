@@ -519,25 +519,6 @@ struct cmuxApp: App {
                     Button("Debug Window Controls…") {
                         DebugWindowControlsWindowController.shared.show()
                     }
-                    Button("Feed Preview…") {
-                        FeedPreviewWindowController.shared.show()
-                    }
-                    Button(
-                        String(
-                            localized: "debug.menu.feedTextEditorDebug",
-                            defaultValue: "Feed Text Editor Lab…"
-                        )
-                    ) {
-                        FeedTextEditorDebugWindowController.shared.show()
-                    }
-                    Button(
-                        String(
-                            localized: "debug.menu.feedButtonStyleDebug",
-                            defaultValue: "Feed Button Style Debug…"
-                        )
-                    ) {
-                        FeedButtonStyleDebugWindowController.shared.show()
-                    }
                     Button(
                         String(
                             localized: "debug.menu.startupAppearanceDebug",
@@ -578,9 +559,6 @@ struct cmuxApp: App {
                         )
                     ) {
                         TabBarBackdropLabWindowController.shared.show()
-                    }
-                    Button("File Explorer Style Debug…") {
-                        FileExplorerStyleDebugWindowController.shared.show()
                     }
                     Button("Open All Debug Windows") {
                         openAllDebugWindows()
@@ -692,12 +670,6 @@ struct cmuxApp: App {
             // Find
             CommandGroup(after: .textEditing) {
                 Menu(String(localized: "menu.find.title", defaultValue: "Find")) {
-                    let restoreFindTargetFocus = {
-                        _ = AppDelegate.shared?.restoreFocusedMainPanelFocusFromRightSidebar(
-                            preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
-                        )
-                    }
-
                     splitCommandButton(title: String(localized: "menu.find.find", defaultValue: "Find…"), shortcut: menuShortcut(for: .find)) {
 #if DEBUG
                         cmuxDebugLog("find.menu Cmd+F fired")
@@ -708,25 +680,22 @@ struct cmuxApp: App {
                     }
 
                     splitCommandButton(title: String(localized: "menu.find.findInDirectory", defaultValue: "Find in Directory…"), shortcut: menuShortcut(for: .findInDirectory)) {
-                        _ = AppDelegate.shared?.focusFileSearchInActiveMainWindow(
+                        _ = AppDelegate.shared?.performFindShortcutInActiveMainWindow(
                             preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
                         )
                     }
 
                     splitCommandButton(title: String(localized: "menu.find.findNext", defaultValue: "Find Next"), shortcut: menuShortcut(for: .findNext)) {
-                        restoreFindTargetFocus()
                         activeTabManager.findNext()
                     }
 
                     splitCommandButton(title: String(localized: "menu.find.findPrevious", defaultValue: "Find Previous"), shortcut: menuShortcut(for: .findPrevious)) {
-                        restoreFindTargetFocus()
                         activeTabManager.findPrevious()
                     }
 
                     Divider()
 
                     splitCommandButton(title: String(localized: "menu.find.hideFindBar", defaultValue: "Hide Find Bar"), shortcut: menuShortcut(for: .hideFind)) {
-                        restoreFindTargetFocus()
                         activeTabManager.hideFind()
                     }
                     .disabled(!(activeTabManager.isFindVisible))
@@ -734,7 +703,6 @@ struct cmuxApp: App {
                     Divider()
 
                     splitCommandButton(title: String(localized: "menu.find.useSelectionForFind", defaultValue: "Use Selection for Find"), shortcut: menuShortcut(for: .useSelectionForFind)) {
-                        restoreFindTargetFocus()
                         activeTabManager.searchSelection()
                     }
                     .disabled(!(activeTabManager.canUseSelectionForFind))
@@ -742,9 +710,7 @@ struct cmuxApp: App {
                     Divider()
 
                     splitCommandButton(title: String(localized: "menu.find.sendCtrlFToTerminal", defaultValue: "Send Ctrl-F to Terminal"), shortcut: menuShortcut(for: .sendCtrlFToTerminal)) {
-                        // Restore focus to the terminal if the right sidebar grabbed it, then
-                        // forward a faithfully-encoded Ctrl-F (e.g. Claude Code force-stop).
-                        restoreFindTargetFocus()
+                        // Forward a faithfully-encoded Ctrl-F (e.g. Claude Code force-stop).
                         if !activeTabManager.sendCtrlFToFocusedTerminal() {
                             NSSound.beep()
                         }
@@ -793,23 +759,6 @@ struct cmuxApp: App {
                 }
             }
 
-            splitCommandButton(title: String(localized: "menu.view.toggleRightSidebar", defaultValue: "Toggle Right Sidebar"), shortcut: menuShortcut(for: .toggleRightSidebar)) {
-                if AppDelegate.shared?.toggleRightSidebarInActiveMainWindow(
-                    preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
-                ) != true {
-                    NSSound.beep()
-                }
-            }
-
-            splitCommandButton(title: String(localized: "menu.view.focusRightSidebar", defaultValue: "Toggle Right Sidebar Focus"), shortcut: menuShortcut(for: .focusRightSidebar)) {
-                if AppDelegate.shared?.toggleRightSidebarKeyboardFocusInActiveMainWindow() != true {
-                    if AppDelegate.shared?.focusRightSidebarInActiveMainWindow(
-                        preferredWindow: NSApp.keyWindow ?? NSApp.mainWindow
-                    ) != true {
-                        NSSound.beep()
-                    }
-                }
-            }
             Divider()
             splitCommandButton(title: String(localized: "menu.view.nextSurface", defaultValue: "Next Surface"), shortcut: menuShortcut(for: .nextSurface)) {
                 activeTabManager.selectNextSurface()
@@ -1208,9 +1157,6 @@ struct cmuxApp: App {
         BackgroundDebugWindowController.shared.show()
         StartupAppearanceDebugWindowController.shared.show()
         MenuBarExtraDebugWindowController.shared.show()
-        FeedPreviewWindowController.shared.show()
-        FeedTextEditorDebugWindowController.shared.show()
-        FeedButtonStyleDebugWindowController.shared.show()
         BonsplitTabBarDebugWindowController.shared.show()
     }
 #endif
@@ -1241,10 +1187,6 @@ private let cmuxAuxiliaryWindowIdentifiers: Set<String> = [
     "cmux.browserProfilePopoverDebug",
     "cmux.configEditor",
     "cmux.defaultTerminalRegistrationError",
-    "cmux.feedButtonStyleDebug",
-    "cmux.feedPreview",
-    "cmux.feedTextEditorDebug",
-    "cmux.fileExplorerStyleDebug",
     "cmux.folderDragIcon",
     "cmux.pdfPreviewChromeDebug",
     "cmux.recentlyClosedHistory",
@@ -1857,14 +1799,6 @@ private struct DebugWindowControlsView: View {
                         ) {
                             TabBarBackdropLabWindowController.shared.show()
                         }
-                        Button(
-                            String(
-                                localized: "debug.menu.feedTextEditorDebug",
-                                defaultValue: "Feed Text Editor Lab…"
-                            )
-                        ) {
-                            FeedTextEditorDebugWindowController.shared.show()
-                        }
                         Button("Open All Debug Windows") {
                             DebugWindowControlsWindowController.shared.show()
                             AboutTitlebarDebugWindowController.shared.show()
@@ -1875,7 +1809,6 @@ private struct DebugWindowControlsView: View {
                             StartupAppearanceDebugWindowController.shared.show()
                             MenuBarExtraDebugWindowController.shared.show()
                             TabBarBackdropLabWindowController.shared.show()
-                            FeedTextEditorDebugWindowController.shared.show()
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -2005,115 +1938,8 @@ private struct AcknowledgmentsView: View {
     }
 }
 
-// MARK: - File Explorer Style Debug
-
-private struct FileExplorerStyleDebugView: View {
-    @AppStorage("fileExplorer.style") private var styleRawValue: Int = 0
-
-    private var currentStyle: FileExplorerStyle {
-        FileExplorerStyle(rawValue: styleRawValue) ?? .liquidGlass
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("File Explorer Style")
-                .font(.headline)
-
-            ForEach(FileExplorerStyle.allCases, id: \.rawValue) { style in
-                HStack(spacing: 8) {
-                    Button(action: {
-                        styleRawValue = style.rawValue
-                        // Post notification so outline view reloads with new style
-                        NotificationCenter.default.post(name: .fileExplorerStyleDidChange, object: nil)
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: styleRawValue == style.rawValue ? "checkmark.circle.fill" : "circle")
-                                .foregroundColor(styleRawValue == style.rawValue ? .accentColor : .secondary)
-                                .frame(width: 16)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(style.label)
-                                    .font(.system(size: 13, weight: .medium))
-                                Text(styleDescription(style))
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(styleRawValue == style.rawValue
-                                    ? Color.accentColor.opacity(0.1)
-                                    : Color.clear)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Current: \(currentStyle.label)")
-                    .font(.system(size: 11, weight: .medium))
-                Text("Row: \(Int(currentStyle.rowHeight))pt, Indent: \(Int(currentStyle.indentation))pt, Icon: \(Int(currentStyle.iconSize))pt")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(16)
-        .frame(width: 320)
-    }
-
-    private func styleDescription(_ style: FileExplorerStyle) -> String {
-        switch style {
-        case .liquidGlass: return "Modern macOS, vibrancy, rounded selections"
-        case .highDensity: return "VS Code, compact rows, edge-to-edge"
-        case .terminalStealth: return "Monospace, border selection, desaturated"
-        case .proStudio: return "Logic Pro, chunky rows, pill selection"
-        case .finder: return "Finder sidebar, filled icons, hover tint"
-        }
-    }
-}
-
 extension Notification.Name {
-    static let fileExplorerStyleDidChange = Notification.Name("fileExplorerStyleDidChange")
     static let titlebarShortcutHintsVisibilityChanged = Notification.Name("titlebarShortcutHintsVisibilityChanged")
-}
-
-private final class FileExplorerStyleDebugWindowController: NSWindowController, NSWindowDelegate {
-    static let shared = FileExplorerStyleDebugWindowController()
-
-    private init() {
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 380),
-            styleMask: [.titled, .closable, .utilityWindow],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "File Explorer Style"
-        window.titleVisibility = .visible
-        window.titlebarAppearsTransparent = false
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.identifier = NSUserInterfaceItemIdentifier("cmux.fileExplorerStyleDebug")
-        window.center()
-        window.contentView = NSHostingView(rootView: FileExplorerStyleDebugView())
-        AppDelegate.shared?.applyWindowDecorations(to: window)
-        super.init(window: window)
-        window.delegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-    }
 }
 
 private final class SidebarDebugWindowController: NSWindowController, NSWindowDelegate {

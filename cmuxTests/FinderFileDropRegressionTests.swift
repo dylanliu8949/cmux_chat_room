@@ -388,23 +388,6 @@ final class FinderFileDropRegressionTests: XCTestCase {
         XCTAssertTrue(urls.allSatisfy { $0.lastPathComponent.hasPrefix("clipboard-") && $0.pathExtension == "png" })
         XCTAssertTrue(urls.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
     }
-
-    func testFileExplorerPathInsertionEscapesMultiplePathsLikeTerminalDrop() {
-        let paths = [
-            "/tmp/cmux path/one file.txt",
-            "/tmp/cmux path/quote's file.txt"
-        ]
-
-        let text = FileExplorerTerminalPathInsertion.insertedText(forPaths: paths)
-
-        XCTAssertEqual(
-            text,
-            paths
-                .map(TerminalImageTransferPlanner.escapeForShell)
-                .joined(separator: " ")
-        )
-    }
-
     func testFileURLTextInsertionIsExtensionAgnostic() {
         let urls = [
             URL(fileURLWithPath: "/tmp/cmux drop/image.png"),
@@ -540,60 +523,6 @@ final class FinderFileDropRegressionTests: XCTestCase {
             [URL(fileURLWithPath: filePath).standardizedFileURL.path]
         )
     }
-
-    func testFileExplorerRelativePathInsertionUsesWorkspaceRelativePaths() {
-        let rootPath = "/Users/example/project"
-        let paths = [
-            "/Users/example/project/README.md",
-            "/Users/example/project/Folder With Spaces/file.txt"
-        ]
-
-        let text = FileExplorerTerminalPathInsertion.insertedText(
-            forPaths: paths,
-            relativeToRootPath: rootPath
-        )
-
-        XCTAssertEqual(text, "README.md Folder\\ With\\ Spaces/file.txt")
-        XCTAssertEqual(
-            FileExplorerTerminalPathInsertion.relativePath(
-                for: rootPath,
-                rootPath: rootPath
-            ),
-            "."
-        )
-        XCTAssertEqual(
-            FileExplorerTerminalPathInsertion.relativePath(
-                for: rootPath,
-                rootPath: rootPath + "/"
-            ),
-            "."
-        )
-        XCTAssertEqual(
-            FileExplorerTerminalPathInsertion.relativePath(
-                for: "/Users/example/project-backup/file.txt",
-                rootPath: rootPath
-            ),
-            "/Users/example/project-backup/file.txt"
-        )
-        XCTAssertEqual(
-            FileExplorerTerminalPathInsertion.relativePath(
-                for: "Sources/App.swift",
-                rootPath: rootPath
-            ),
-            "Sources/App.swift"
-        )
-    }
-
-    func testFileExplorerRelativePathInsertionStandardizesMacOSSymlinkedRoots() {
-        XCTAssertEqual(
-            FileExplorerTerminalPathInsertion.relativePath(
-                for: "/private/tmp/cmux-project/Sources/App.swift",
-                rootPath: "/tmp/cmux-project"
-            ),
-            "Sources/App.swift"
-        )
-    }
-
     private func makeImagePasteboardItem(color: NSColor) throws -> NSPasteboardItem {
         let item = NSPasteboardItem()
         item.setData(try make1x1PNG(color: color), forType: .png)

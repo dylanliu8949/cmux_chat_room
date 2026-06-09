@@ -2869,3 +2869,152 @@ private struct DragCancelMonitor: NSViewRepresentable {
         }
     }
 }
+
+// MARK: - Session vault chrome styling
+//
+// Previously colocated with the now-removed right-sidebar chrome and its
+// Bonsplit UITest geometry instrumentation. The session vault still renders
+// inside the Task Manager, so the styling helpers are kept here; the UITest
+// geometry reporters are now no-ops since the right-sidebar harness is gone.
+
+enum RightSidebarChromeControlStyle {
+    static let modeIconSize: CGFloat = 11
+    static let secondaryIconSize: CGFloat = 10
+    static let labelSize: CGFloat = 11
+    static let iconWeight = HeaderChromeIconStyle.weight
+    static let labelWeight = HeaderChromeIconStyle.weight
+    static let foregroundColor = HeaderChromeIconStyle.foregroundColor
+
+    static func foregroundOpacity(isSelected: Bool, isHovered: Bool, isEnabled: Bool = true) -> Double {
+        guard isEnabled else { return HeaderChromeIconStyle.disabledOpacity }
+        if isSelected {
+            return HeaderChromeIconStyle.pressedOpacity
+        }
+        return HeaderChromeIconStyle.foregroundOpacity(
+            isHovering: isHovered,
+            isPressed: false,
+            isEnabled: isEnabled
+        )
+    }
+}
+
+private struct RightSidebarChromeBarModifier: ViewModifier {
+    var leadingPadding: CGFloat
+    var trailingPadding: CGFloat
+    var height: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.leading, leadingPadding)
+            .padding(.trailing, trailingPadding)
+            .padding(.vertical, RightSidebarChromeMetrics.barVerticalPadding)
+            .frame(height: height)
+    }
+}
+
+private struct RightSidebarChromePillModifier: ViewModifier {
+    var isSelected: Bool
+    var isHovered: Bool
+    var horizontalPadding: CGFloat = RightSidebarChromeMetrics.controlHorizontalPadding
+    var geometryKeyPrefix: String?
+
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(
+                RightSidebarChromeControlStyle.foregroundColor.opacity(foregroundOpacity)
+            )
+            .padding(.horizontal, horizontalPadding)
+            .frame(height: RightSidebarChromeMetrics.controlHeight)
+            .background(
+                RoundedRectangle(cornerRadius: RightSidebarChromeMetrics.controlCornerRadius, style: .continuous)
+                    .fill(backgroundColor)
+            )
+            .contentShape(
+                RoundedRectangle(cornerRadius: RightSidebarChromeMetrics.controlCornerRadius, style: .continuous)
+            )
+    }
+
+    private var foregroundOpacity: Double {
+        RightSidebarChromeControlStyle.foregroundOpacity(
+            isSelected: isSelected,
+            isHovered: isHovered
+        )
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return Color.primary.opacity(0.10)
+        }
+        if isHovered {
+            return Color.primary.opacity(0.05)
+        }
+        return Color.clear
+    }
+}
+
+private struct RightSidebarChromeBottomBorderModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            WindowChromeBorder(orientation: .horizontal, ignoresSafeArea: false)
+        }
+    }
+}
+
+extension View {
+    func rightSidebarChromeBar(
+        leadingPadding: CGFloat = RightSidebarChromeMetrics.barHorizontalPadding,
+        trailingPadding: CGFloat = RightSidebarChromeMetrics.barHorizontalPadding,
+        height: CGFloat = RightSidebarChromeMetrics.secondaryBarHeight
+    ) -> some View {
+        modifier(
+            RightSidebarChromeBarModifier(
+                leadingPadding: leadingPadding,
+                trailingPadding: trailingPadding,
+                height: height
+            )
+        )
+    }
+
+    func rightSidebarChromePill(
+        isSelected: Bool,
+        isHovered: Bool,
+        horizontalPadding: CGFloat = RightSidebarChromeMetrics.controlHorizontalPadding,
+        geometryKeyPrefix: String? = nil
+    ) -> some View {
+        modifier(
+            RightSidebarChromePillModifier(
+                isSelected: isSelected,
+                isHovered: isHovered,
+                horizontalPadding: horizontalPadding,
+                geometryKeyPrefix: geometryKeyPrefix
+            )
+        )
+    }
+
+    func rightSidebarChromeBottomBorder() -> some View {
+        modifier(RightSidebarChromeBottomBorderModifier())
+    }
+
+    func reportRightSidebarChromeGeometryForBonsplitUITest(
+        role: SessionVaultChromeGeometryRole = .modeBar,
+        isVisible: Bool,
+        titlebarHeight: CGFloat
+    ) -> some View {
+        _ = (role, isVisible, titlebarHeight)
+        return self
+    }
+
+    func reportRightSidebarChromeNamedGeometryForBonsplitUITest(
+        keyPrefix: String?,
+        isVisible: Bool
+    ) -> some View {
+        _ = (keyPrefix, isVisible)
+        return self
+    }
+}
+
+enum SessionVaultChromeGeometryRole {
+    case modeBar
+    case secondaryBar
+    case named(String)
+}

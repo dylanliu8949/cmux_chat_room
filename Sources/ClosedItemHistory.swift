@@ -703,11 +703,6 @@ final class ClosedItemHistoryStore: ObservableObject {
             return String(localized: "menu.history.recentlyClosed.panel.terminal", defaultValue: "Terminal")
         case .markdown:
             return String(localized: "menu.history.recentlyClosed.panel.markdown", defaultValue: "Markdown")
-        case .rightSidebarTool:
-            if let mode = snapshot.rightSidebarTool?.mode {
-                return mode.label
-            }
-            return String(localized: "menu.history.recentlyClosed.panel.tool", defaultValue: "Tool")
         case .extensionBrowser:
             return String(localized: "sidebar.extensions.browser.title", defaultValue: "Sidebar Extensions")
         }

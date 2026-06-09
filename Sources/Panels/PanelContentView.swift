@@ -61,16 +61,6 @@ struct PanelContentView: View {
                     onRequestPanelFocus: onRequestPanelFocus
                 )
             }
-        case .rightSidebarTool:
-            if let rightSidebarToolPanel = panel as? RightSidebarToolPanel {
-                RightSidebarToolPanelView(
-                    panel: rightSidebarToolPanel,
-                    isFocused: isFocused,
-                    isVisibleInUI: isVisibleInUI,
-                    appearance: appearance,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
         case .extensionBrowser:
             if let extensionBrowserPanel = panel as? CMUXSidebarExtensionBrowserPanel {
                 CMUXSidebarExtensionBrowserPanelView(
@@ -96,7 +86,7 @@ struct PanelContentView: View {
     private var shouldInstallPaneDropTarget: Bool {
         guard isVisibleInUI else { return false }
         switch panel.panelType {
-        case .markdown, .rightSidebarTool, .extensionBrowser:
+        case .markdown, .extensionBrowser:
             return true
         case .terminal:
             return false

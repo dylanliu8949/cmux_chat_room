@@ -6,7 +6,6 @@ import AppKit
 public enum PanelType: String, Codable, Sendable {
     case terminal
     case markdown
-    case rightSidebarTool
     case extensionBrowser
 
     public init(from decoder: Decoder) throws {
@@ -14,10 +13,6 @@ public enum PanelType: String, Codable, Sendable {
         let rawValue = try container.decode(String.self)
         if let type = Self(rawValue: rawValue) {
             self = type
-            return
-        }
-        if rawValue.lowercased() == Self.rightSidebarTool.rawValue.lowercased() {
-            self = .rightSidebarTool
             return
         }
         throw DecodingError.dataCorruptedError(

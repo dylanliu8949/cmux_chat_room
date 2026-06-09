@@ -9724,10 +9724,6 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
 #if DEBUG
         ensureSurfaceMs = (ProcessInfo.processInfo.systemUptime - ensureSurfaceStart) * 1000.0
 #endif
-        if let mode = RightSidebarMode.modeShortcut(for: event), let window, AppDelegate.shared?.shouldRouteRightSidebarModeShortcut(in: window) == true {
-            _ = AppDelegate.shared?.focusRightSidebarInActiveMainWindow(mode: mode, focusFirstItem: true, preferredWindow: window)
-            return
-        }
         if let terminalSurface {
 #if DEBUG
             let dismissNotificationStart = ProcessInfo.processInfo.systemUptime
@@ -10525,15 +10521,11 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         // callback. Treat pointer-down as explicit focus intent so clicking a ghost pane still
         // repairs workspace/pane active state before key routing runs.
         if let terminalSurface {
-            if terminalSurface.focusPlacement == .rightSidebarDock {
-                AppDelegate.shared?.noteRightSidebarKeyboardFocusIntent(mode: .dock, in: window)
-            } else {
-                AppDelegate.shared?.noteTerminalKeyboardFocusIntent(
-                    workspaceId: terminalSurface.tabId,
-                    panelId: terminalSurface.id,
-                    in: window
-                )
-            }
+            AppDelegate.shared?.noteTerminalKeyboardFocusIntent(
+                workspaceId: terminalSurface.tabId,
+                panelId: terminalSurface.id,
+                in: window
+            )
             terminalSurface.hostedView.clearReparentFocusSuppressionForPointerFocus()
         }
         requestPointerFocusRecovery()

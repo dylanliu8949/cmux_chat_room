@@ -189,8 +189,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -245,16 +244,14 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId1,
             tabManager: manager1,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             window2,
             windowId: windowId2,
             tabManager: manager2,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager1)
 
@@ -297,8 +294,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -336,16 +332,14 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: firstWindowId,
             tabManager: firstManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             secondWindow,
             windowId: secondWindowId,
             tabManager: secondManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(firstManager)
 
@@ -404,16 +398,14 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: firstWindowId,
             tabManager: firstManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             secondWindow,
             windowId: secondWindowId,
             tabManager: secondManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(firstManager)
 
@@ -462,8 +454,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -508,16 +499,14 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: firstWindowId,
             tabManager: firstManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             secondWindow,
             windowId: secondWindowId,
             tabManager: secondManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(firstManager)
 
@@ -558,8 +547,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -612,8 +600,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -688,8 +675,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -755,8 +741,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -803,8 +788,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -851,8 +835,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -905,8 +888,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -1006,16 +988,14 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: registeredWindowId,
             tabManager: registeredManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             recoveredWindow,
             windowId: recoveredWindowId,
             tabManager: recoveredManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         registeredWindow.makeKeyAndOrderFront(nil)
@@ -1058,8 +1038,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -1104,16 +1083,14 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: terminalWindowId,
             tabManager: terminalManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         app.registerMainWindow(
             browserOnlyWindow,
             windowId: browserOnlyWindowId,
             tabManager: browserOnlyManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
 
         let terminalWorkspace = try XCTUnwrap(terminalManager.selectedWorkspace)
@@ -1154,8 +1131,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: liveWindowId,
             tabManager: liveManager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         liveWindow.makeKeyAndOrderFront(nil)
         app.tabManager = staleManager
@@ -1194,8 +1170,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -1254,8 +1229,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 
@@ -1317,8 +1291,7 @@ final class AppDelegateIssue2907RoutingTests: XCTestCase {
             windowId: windowId,
             tabManager: manager,
             sidebarState: SidebarState(),
-            sidebarSelectionState: SidebarSelectionState(),
-            fileExplorerState: FileExplorerState()
+            sidebarSelectionState: SidebarSelectionState()
         )
         TerminalController.shared.setActiveTabManager(manager)
 

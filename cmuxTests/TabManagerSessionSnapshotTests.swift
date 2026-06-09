@@ -1300,13 +1300,6 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         XCTAssertTrue(item.menuTitle.contains("\n"))
         XCTAssertTrue(item.menuSubtitle.contains(String(localized: "menu.history.recentlyClosed.kind.tab", defaultValue: "Tab")))
     }
-
-    func testRightSidebarToolSnapshotTolerantlyDecodesObsoleteHistoryMode() throws {
-        let json = #"{"mode":"history"}"#.data(using: .utf8)!
-        let snapshot = try JSONDecoder().decode(SessionRightSidebarToolPanelSnapshot.self, from: json)
-        XCTAssertNil(snapshot.mode)
-    }
-
     func testReopenSpecificRecentlyClosedRowRestoresOnlyThatRecord() throws {
         let originalAppDelegate = AppDelegate.shared
         AppDelegate.shared = nil
@@ -1603,7 +1596,6 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         panelSnapshot.terminal = nil
         panelSnapshot.browser = nil
         panelSnapshot.markdown = nil
-        panelSnapshot.rightSidebarTool = nil
         snapshot.customTitle = "Broken Workspace"
         snapshot.panels = [panelSnapshot]
         snapshot.layout = .pane(SessionPaneLayoutSnapshot(
@@ -3126,8 +3118,7 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
             ttyName: nil,
             terminal: SessionTerminalPanelSnapshot(),
             browser: nil,
-            markdown: nil,
-            rightSidebarTool: nil
+            markdown: nil
         )
     }
 }

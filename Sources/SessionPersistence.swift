@@ -1587,24 +1587,6 @@ struct SessionMarkdownPanelSnapshot: Codable, Sendable {
     var filePath: String
 }
 
-struct SessionRightSidebarToolPanelSnapshot: Codable, Sendable {
-    var mode: RightSidebarMode?
-
-    init(mode: RightSidebarMode?) {
-        self.mode = mode
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case mode
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let raw = try container.decodeIfPresent(String.self, forKey: .mode)
-        self.mode = raw.flatMap { RightSidebarMode(rawValue: $0) }
-    }
-}
-
 struct SessionNotificationSnapshot: Codable, Sendable {
     var id: UUID
     var title: String
@@ -1682,7 +1664,6 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var terminal: SessionTerminalPanelSnapshot?
     var browser: SessionBrowserPanelSnapshot?
     var markdown: SessionMarkdownPanelSnapshot?
-    var rightSidebarTool: SessionRightSidebarToolPanelSnapshot?
 }
 
 enum SessionSplitOrientation: String, Codable, Sendable {
