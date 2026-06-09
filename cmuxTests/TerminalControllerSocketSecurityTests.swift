@@ -509,21 +509,8 @@ final class TerminalControllerSocketSecurityTests: XCTestCase {
             let expectedMethods: Set<String> = [
                 "system.ping",
                 "system.capabilities",
-                "mobile.host.status",
-                "mobile.attach_ticket.create",
-                "mobile.workspace.list",
                 "workspace.list",
                 "workspace.create",
-                "mobile.terminal.create",
-                "terminal.create",
-                "mobile.terminal.input",
-                "terminal.input",
-                "mobile.terminal.replay",
-                "terminal.replay",
-                "mobile.terminal.viewport",
-                "terminal.viewport",
-                "mobile.events.subscribe",
-                "mobile.events.unsubscribe",
             ]
             XCTAssertTrue(
                 expectedMethods.isSubset(of: advertisedMethods),

@@ -2,10 +2,8 @@ public import Foundation
 
 /// The shared, localized error vocabulary for cmux authentication flows.
 ///
-/// Lifted out of the iOS-only `CmuxMobileAuth` package so both the macOS and iOS
-/// apps share one error type. Error descriptions resolve from the app target's
-/// `Localizable.xcstrings` via `Bundle.main`, matching the strings the iOS app
-/// previously surfaced through `CMUXMobileCore.L10n`.
+/// Error descriptions resolve from the app target's `Localizable.xcstrings` via
+/// `Bundle.main`.
 public enum AuthError: Error, LocalizedError, Equatable, Sendable {
     /// The device has no network connectivity; the flow failed fast.
     case offline

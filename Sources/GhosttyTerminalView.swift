@@ -13,7 +13,6 @@ import os
 import Sentry
 import Bonsplit
 import CMUXAgentLaunch
-import CMUXMobileCore
 import CMUXPasteboardFidelity
 import IOSurface
 import UniformTypeIdentifiers
@@ -5210,11 +5209,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private let surfaceView: GhosttyNSView
     private var lastPixelWidth: UInt32 = 0
     private var lastPixelHeight: UInt32 = 0
-    private var lastUncappedPixelWidth: UInt32 = 0
-    private var lastUncappedPixelHeight: UInt32 = 0
     private var lastXScale: CGFloat = 0
     private var lastYScale: CGFloat = 0
-    private var mobileViewportCellLimit: (columns: Int, rows: Int)?
     private let debugMetadataLock = NSLock()
     private let createdAt: Date = Date()
     private var runtimeSurfaceCreatedAt: Date?
@@ -5229,13 +5225,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     private var runtimeSurfaceSuspendedForAgentHibernation = false
     private var headlessStartupWindow: NSWindow?
     private var surfaceCallbackContext: Unmanaged<GhosttySurfaceCallbackContext>?
-    /// Heap-allocated userdata for the libghostty PTY tee callback (cmux
-    /// fork extension). Installed in `createSurface` after
-    /// `ghostty_surface_new` succeeds; released alongside
-    /// `surfaceCallbackContext` whenever we tear down or rebuild the
-    /// surface. The Mac sync server reads the tee'd bytes to broadcast
-    /// raw PTY output to paired iPhones (`MobileTerminalByteTee`).
-    private var mobileByteTeeContext: Unmanaged<MobileTerminalByteTeeUserdata>?
     /// The desired focus state for the Ghostty C surface. May be set before the
     /// C surface exists (e.g. during layout restoration); `createSurface`
     /// reapplies this value once the runtime surface exists, then keeps using it
@@ -5606,8 +5595,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
               cmuxSurfacePointerAppearsLive(surface) else {
             let callbackContext = surfaceCallbackContext
             surfaceCallbackContext = nil
-            let teeContext = mobileByteTeeContext
-            mobileByteTeeContext = nil
             registry.unregisterRuntimeSurface(surface, ownerId: id)
             self.surface = nil
             activePortalHostLease = nil
@@ -5622,55 +5609,9 @@ final class TerminalSurface: Identifiable, ObservableObject {
             )
 #endif
             callbackContext?.release()
-            teeContext?.release()
             return nil
         }
         return surface
-    }
-
-    /// Forward a mobile scroll gesture to this real surface. libghostty does the
-    /// mode-correct thing: a normal screen moves the viewport into scrollback;
-    /// an alt screen with mouse reporting encodes mouse-wheel to the PTY for the
-    /// program (vim/less/htop). `col`/`row` is the grid cell under the finger so
-    /// the alt-screen wheel reports at the right cell. Runs on the main actor
-    /// like the desktop's own scroll path.
-    @MainActor
-    func mobileScroll(deltaLines: Double, col: Int, row: Int) {
-        guard deltaLines != 0,
-              let surface = liveSurfaceForGhosttyAccess(reason: "mobileScroll") else { return }
-        let size = ghostty_surface_size(surface)
-        // The surface is sized in backing pixels; `ghostty_surface_mouse_pos`
-        // wants points, so divide the cell size by the content scale.
-        let scale = max(Double(lastXScale), 1)
-        let cellWidthPt = Double(size.cell_width_px) / scale
-        let cellHeightPt = Double(size.cell_height_px) / scale
-        let posX = (Double(col) + 0.5) * cellWidthPt
-        let posY = (Double(row) + 0.5) * cellHeightPt
-        ghostty_surface_mouse_pos(surface, posX, posY, GHOSTTY_MODS_NONE)
-        ghostty_surface_mouse_scroll(surface, 0, deltaLines, 0)
-    }
-
-    /// Forward a mobile tap to this real surface as a left mouse click at the
-    /// given grid cell. libghostty does the mode-correct thing: a program with
-    /// mouse reporting (alt-screen TUIs like lazygit/htop/fzf) gets an encoded
-    /// click report to its PTY; a normal screen treats it as an empty selection,
-    /// which is harmless. `col`/`row` is the grid cell under the finger. Runs on
-    /// the main actor like the desktop's own click path.
-    @MainActor
-    func mobileClick(col: Int, row: Int) {
-        guard let surface = liveSurfaceForGhosttyAccess(reason: "mobileClick") else { return }
-        let size = ghostty_surface_size(surface)
-        // The surface is sized in backing pixels; `ghostty_surface_mouse_pos`
-        // wants points, so divide the cell size by the content scale. Aim at the
-        // cell center so the click lands unambiguously inside the target cell.
-        let scale = max(Double(lastXScale), 1)
-        let cellWidthPt = Double(size.cell_width_px) / scale
-        let cellHeightPt = Double(size.cell_height_px) / scale
-        let posX = (Double(max(0, col)) + 0.5) * cellWidthPt
-        let posY = (Double(max(0, row)) + 0.5) * cellHeightPt
-        ghostty_surface_mouse_pos(surface, posX, posY, GHOSTTY_MODS_NONE)
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT, GHOSTTY_MODS_NONE)
-        _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, GHOSTTY_MODS_NONE)
     }
 
     private static let portalHostAreaThreshold: CGFloat = 4
@@ -5876,9 +5817,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         let callbackContext = surfaceCallbackContext
         surfaceCallbackContext = nil
-        let teeContext = mobileByteTeeContext
-        mobileByteTeeContext = nil
-        MobileTerminalByteTee.shared.dropSurface(surfaceID: id)
 
         let surfaceToFree = surface
         if let surfaceToFree {
@@ -5888,7 +5826,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         guard let surfaceToFree else {
             callbackContext?.release()
-            teeContext?.release()
             return
         }
 
@@ -5896,7 +5833,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         if runtimeSurfaceFreedOutOfBandForTesting {
             runtimeSurfaceFreedOutOfBandForTesting = false
             callbackContext?.release()
-            teeContext?.release()
             return
         }
 #endif
@@ -5911,9 +5847,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 callbackContext: callbackContext,
                 freeSurface: freeSurface
             )
-            // The teardown coordinator releases callbackContext; teeContext is not
-            // transported through the request, so release it here.
-            teeContext?.release()
             return
         }
 #endif
@@ -5923,7 +5856,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
             // the next main-actor turn so SIGHUP delivery is deterministic but non-reentrant.
             ghostty_surface_free(surfaceToFree)
             callbackContext?.release()
-            teeContext?.release()
         }
     }
 
@@ -5934,9 +5866,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         closeHeadlessStartupWindowIfNeeded()
         let callbackContext = surfaceCallbackContext
         surfaceCallbackContext = nil
-        let teeContext = mobileByteTeeContext
-        mobileByteTeeContext = nil
-        MobileTerminalByteTee.shared.dropSurface(surfaceID: id)
 
         let surfaceToFree = surface
         if let surfaceToFree {
@@ -5950,7 +5879,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         guard let surfaceToFree else {
             callbackContext?.release()
-            teeContext?.release()
             return
         }
 
@@ -5971,9 +5899,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
                 callbackContext: callbackContext,
                 freeSurface: freeSurface
             )
-            // The teardown coordinator releases callbackContext; teeContext is not
-            // transported through the request, so release it here.
-            teeContext?.release()
             return
         }
 #endif
@@ -5981,7 +5906,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         Task { @MainActor in
             ghostty_surface_free(surfaceToFree)
             callbackContext?.release()
-            teeContext?.release()
         }
     }
 
@@ -6493,20 +6417,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         guard let createdSurface = surface else { return }
         TerminalSurfaceRegistry.shared.registerRuntimeSurface(createdSurface, ownerId: id)
         recordRuntimeSurfaceCreation()
-        // Install the PTY tee so MobileTerminalByteTee receives every byte
-        // the read thread produces, in order, before the VT parser runs.
-        // Paired iPhones consume these bytes via `terminal.bytes` events
-        // and feed them into their own libghostty surface, guaranteeing
-        // grid parity by construction. The userdata box is released
-        // alongside `surfaceCallbackContext` when the surface tears down.
-        mobileByteTeeContext?.release()
-        let teeContext = Unmanaged.passRetained(MobileTerminalByteTeeUserdata(surfaceID: id))
-        ghostty_surface_set_pty_tee_cb(
-            createdSurface,
-            cmuxMobileTerminalByteTeeCallback,
-            teeContext.toOpaque()
-        )
-        mobileByteTeeContext = teeContext
         if runtimeInitialInput != nil {
             nextRuntimeInitialInput = nil
         }
@@ -6536,8 +6446,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
             ghostty_surface_set_size(createdSurface, wpx, hpx)
             lastPixelWidth = wpx
             lastPixelHeight = hpx
-            lastUncappedPixelWidth = wpx
-            lastUncappedPixelHeight = hpx
             lastXScale = scaleFactors.x
             lastYScale = scaleFactors.y
         }
@@ -6609,11 +6517,8 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let resolvedBackingHeight = backingSize?.height ?? (height * yScale)
         let rawWpx = pixelDimension(from: resolvedBackingWidth)
         let rawHpx = pixelDimension(from: resolvedBackingHeight)
-        lastUncappedPixelWidth = rawWpx
-        lastUncappedPixelHeight = rawHpx
-        let cappedSize = cappedByMobileViewportLimit(width: rawWpx, height: rawHpx, surface: surface)
-        let wpx = cappedSize.width
-        let hpx = cappedSize.height
+        let wpx = rawWpx
+        let hpx = rawHpx
         guard wpx > 0, hpx > 0 else { return false }
 
         let scaleChanged = !scaleApproximatelyEqual(xScale, lastXScale) || !scaleApproximatelyEqual(yScale, lastYScale)
@@ -6622,15 +6527,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         #if DEBUG
         Self.sizeLog("updateSize-call surface=\(id.uuidString.prefix(8)) size=\(wpx)x\(hpx) prev=\(lastPixelWidth)x\(lastPixelHeight) changed=\((scaleChanged || sizeChanged) ? 1 : 0)")
         #endif
-
-        if mobileViewportCellLimit != nil {
-            updateMobileViewportBorder(
-                appliedWidth: wpx,
-                appliedHeight: hpx,
-                baseWidth: rawWpx,
-                baseHeight: rawHpx
-            )
-        }
 
         guard scaleChanged || sizeChanged else { return false }
 
@@ -6655,162 +6551,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
 
         // Let Ghostty continue rendering on its own wakeups for steady-state frames.
         return true
-    }
-
-    @discardableResult
-    @MainActor
-    func applyMobileViewportLimit(columns: Int, rows: Int, reason: String) -> Bool {
-        guard let surface = liveSurfaceForGhosttyAccess(reason: "applyMobileViewportLimit") else {
-            hostedView.setMobileViewportBorder(size: nil, drawRight: false, drawBottom: false)
-            return false
-        }
-        let size = ghostty_surface_size(surface)
-        let cellWidth = max(1, Int(size.cell_width_px))
-        let cellHeight = max(1, Int(size.cell_height_px))
-        let currentColumns = max(1, Int(size.columns))
-        let currentRows = max(1, Int(size.rows))
-        let horizontalNonGridPixels = max(0, Int(size.width_px) - currentColumns * cellWidth)
-        let verticalNonGridPixels = max(0, Int(size.height_px) - currentRows * cellHeight)
-        let targetWidth = safePixelDimension(
-            cellCount: columns,
-            cellSize: cellWidth,
-            nonGridPixels: horizontalNonGridPixels
-        )
-        let targetHeight = safePixelDimension(
-            cellCount: rows,
-            cellSize: cellHeight,
-            nonGridPixels: verticalNonGridPixels
-        )
-
-        mobileViewportCellLimit = (columns: max(1, columns), rows: max(1, rows))
-        let baseWidth = lastUncappedPixelWidth > 0 ? lastUncappedPixelWidth : targetWidth
-        let baseHeight = lastUncappedPixelHeight > 0 ? lastUncappedPixelHeight : targetHeight
-        let appliedWidth = min(targetWidth, baseWidth)
-        let appliedHeight = min(targetHeight, baseHeight)
-        let sizeChanged = appliedWidth != lastPixelWidth || appliedHeight != lastPixelHeight
-        updateMobileViewportBorder(
-            appliedWidth: appliedWidth,
-            appliedHeight: appliedHeight,
-            baseWidth: baseWidth,
-            baseHeight: baseHeight
-        )
-
-        #if DEBUG
-        Self.sizeLog(
-            "mobileViewportLimit surface=\(id.uuidString.prefix(8)) cells=\(columns)x\(rows) " +
-            "capPx=\(targetWidth)x\(targetHeight) appliedPx=\(appliedWidth)x\(appliedHeight) " +
-            "basePx=\(baseWidth)x\(baseHeight) prev=\(lastPixelWidth)x\(lastPixelHeight) " +
-            "changed=\(sizeChanged ? 1 : 0) reason=\(reason)"
-        )
-        #endif
-
-        guard sizeChanged else { return false }
-        ghostty_surface_set_size(surface, appliedWidth, appliedHeight)
-        lastPixelWidth = appliedWidth
-        lastPixelHeight = appliedHeight
-        ghostty_surface_refresh(surface)
-        return true
-    }
-
-    @discardableResult
-    @MainActor
-    func clearMobileViewportLimit(reason: String) -> Bool {
-        mobileViewportCellLimit = nil
-        hostedView.setMobileViewportBorder(size: nil, drawRight: false, drawBottom: false)
-
-        let uncappedWidth = lastUncappedPixelWidth
-        let uncappedHeight = lastUncappedPixelHeight
-        guard let surface = liveSurfaceForGhosttyAccess(reason: "clearMobileViewportLimit"),
-              uncappedWidth > 0,
-              uncappedHeight > 0 else {
-            return false
-        }
-
-        let sizeChanged = uncappedWidth != lastPixelWidth || uncappedHeight != lastPixelHeight
-
-        #if DEBUG
-        Self.sizeLog(
-            "clearMobileViewportLimit surface=\(id.uuidString.prefix(8)) " +
-            "uncappedPx=\(uncappedWidth)x\(uncappedHeight) prev=\(lastPixelWidth)x\(lastPixelHeight) " +
-            "changed=\(sizeChanged ? 1 : 0) reason=\(reason)"
-        )
-        #endif
-
-        guard sizeChanged else {
-            ghostty_surface_refresh(surface)
-            return false
-        }
-        ghostty_surface_set_size(surface, uncappedWidth, uncappedHeight)
-        lastPixelWidth = uncappedWidth
-        lastPixelHeight = uncappedHeight
-        ghostty_surface_refresh(surface)
-        return true
-    }
-
-    private func cappedByMobileViewportLimit(
-        width: UInt32,
-        height: UInt32,
-        surface: ghostty_surface_t
-    ) -> (width: UInt32, height: UInt32) {
-        guard let mobileViewportPixelLimit = mobileViewportPixelLimit(for: surface) else {
-            return (width, height)
-        }
-        return (
-            width: min(width, mobileViewportPixelLimit.width),
-            height: min(height, mobileViewportPixelLimit.height)
-        )
-    }
-
-    private func mobileViewportPixelLimit(for surface: ghostty_surface_t) -> (width: UInt32, height: UInt32)? {
-        guard let mobileViewportCellLimit else {
-            return nil
-        }
-        let size = ghostty_surface_size(surface)
-        let cellWidth = max(1, Int(size.cell_width_px))
-        let cellHeight = max(1, Int(size.cell_height_px))
-        let currentColumns = max(1, Int(size.columns))
-        let currentRows = max(1, Int(size.rows))
-        let horizontalNonGridPixels = max(0, Int(size.width_px) - currentColumns * cellWidth)
-        let verticalNonGridPixels = max(0, Int(size.height_px) - currentRows * cellHeight)
-        return (
-            width: safePixelDimension(
-                cellCount: mobileViewportCellLimit.columns,
-                cellSize: cellWidth,
-                nonGridPixels: horizontalNonGridPixels
-            ),
-            height: safePixelDimension(
-                cellCount: mobileViewportCellLimit.rows,
-                cellSize: cellHeight,
-                nonGridPixels: verticalNonGridPixels
-            )
-        )
-    }
-
-    private func safePixelDimension(cellCount: Int, cellSize: Int, nonGridPixels: Int) -> UInt32 {
-        let clampedCellSize = max(1, cellSize)
-        let clampedNonGridPixels = min(max(0, nonGridPixels), Int(UInt32.max) - 1)
-        let maxCells = max(1, (Int(UInt32.max) - clampedNonGridPixels) / clampedCellSize)
-        let clampedCellCount = min(max(1, cellCount), maxCells)
-        return UInt32(clampedCellCount * clampedCellSize + clampedNonGridPixels)
-    }
-
-    private func updateMobileViewportBorder(
-        appliedWidth: UInt32,
-        appliedHeight: UInt32,
-        baseWidth: UInt32,
-        baseHeight: UInt32
-    ) {
-        let drawRightBorder = appliedWidth < baseWidth
-        let drawBottomBorder = appliedHeight < baseHeight
-        let borderScale = hostedView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        hostedView.setMobileViewportBorder(
-            size: CGSize(
-                width: CGFloat(appliedWidth) / max(1, borderScale),
-                height: CGFloat(appliedHeight) / max(1, borderScale)
-            ),
-            drawRight: drawRightBorder,
-            drawBottom: drawBottomBorder
-        )
     }
 
     /// Force a full size recalculation and surface redraw.
@@ -7008,44 +6748,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
     func visibleText() -> String? {
         guard let surface = liveSurfaceForGhosttyAccess(reason: "visibleText") else { return nil }
         return Self.readText(surface: surface, pointTag: GHOSTTY_POINT_VIEWPORT)
-    }
-
-    @MainActor
-    func mobileRenderGridFrame(
-        stateSeq: UInt64,
-        full: Bool = true,
-        changedRows: Set<Int>? = nil,
-        scrollbackLines: Int = 0
-    ) -> (frame: MobileTerminalRenderGridFrame, rows: [String])? {
-        guard let surface = liveSurfaceForGhosttyAccess(reason: "mobileRenderGrid") else { return nil }
-        let surfaceID = id.uuidString
-        let exported = surfaceID.withCString { ptr in
-            ghostty_surface_render_grid_json(
-                surface,
-                ptr,
-                UInt(surfaceID.utf8.count),
-                stateSeq,
-                UInt(max(0, scrollbackLines))
-            )
-        }
-        defer { ghostty_string_free(exported) }
-        guard let ptr = exported.ptr, exported.len > 0 else { return nil }
-
-        let data = Data(bytes: ptr, count: Int(exported.len))
-        guard let fullFrame = try? JSONDecoder().decode(MobileTerminalRenderGridFrame.self, from: data) else {
-            return nil
-        }
-        let frame: MobileTerminalRenderGridFrame
-        if full, changedRows == nil {
-            frame = fullFrame
-        } else {
-            let includedRows = changedRows ?? Set(0..<fullFrame.rows)
-            guard let filtered = try? fullFrame.filteredRows(includedRows, full: full) else {
-                return nil
-            }
-            frame = filtered
-        }
-        return (frame, frame.plainRows())
     }
 
     /// Send text with control characters (Return, Tab, etc.) delivered as key
@@ -7260,12 +6962,13 @@ final class TerminalSurface: Identifiable, ObservableObject {
         return chunks
     }
 
-    // Canonical key text for synthetic key events sent from the mobile/socket
-    // input path (see `sendKeyEvent`). The desktop `keyDown` handler fills
+    // Canonical key text for synthetic key events sent from the socket input
+    // path (see `sendKeyEvent`). The desktop `keyDown` handler fills
     // `ghostty_input_key_s.text` from `charactersIgnoringModifiers`; libghostty
     // needs that text to encode control keys whose byte is otherwise filtered by
-    // the raw-text input path. Mobile builds the event from a bare keycode, so we
-    // reproduce the same canonical text here, keyed purely off the keycode.
+    // the raw-text input path. The socket path builds the event from a bare
+    // keycode, so we reproduce the same canonical text here, keyed purely off
+    // the keycode.
     //
     // Only Backspace/Delete and Tab need this: their physical macOS keys carry
     // the DEL (0x7F) and TAB (0x09) characters in `charactersIgnoringModifiers`.
@@ -7763,21 +7466,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         let callbackContext = surfaceCallbackContext
         surfaceCallbackContext = nil
 
-        // Mirror teardownSurface/suspend: release the retained mobile byte-tee
-        // userdata and drop the per-surface tee state keyed by this surface id,
-        // BEFORE freeing the surface. A terminal closed via deinit (not explicit
-        // teardown) would otherwise leak the tee userdata and leave stale mobile
-        // replay buffers keyed by the old id. If teardown already ran, it nil'd
-        // mobileByteTeeContext, so teeContext is nil here and ?.release() no-ops.
-        let teeContext = mobileByteTeeContext
-        mobileByteTeeContext = nil
-        // `dropSurface` is @MainActor but `deinit` is nonisolated, so hop to the
-        // main actor with the surface id captured by value (no self capture).
-        // Dropping by id only clears the registry/replay state; releasing
-        // `teeContext` on each exit path frees the userdata independently.
-        let teeSurfaceID = id
-        Task { @MainActor in MobileTerminalByteTee.shared.dropSurface(surfaceID: teeSurfaceID) }
-
         // Nil out the surface pointer so any in-flight closures (e.g. geometry
         // reconcile dispatched via DispatchQueue.main.async) that read self.surface
         // before this object is fully deallocated will see nil and bail out,
@@ -7796,7 +7484,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
             )
 #endif
             callbackContext?.release()
-            teeContext?.release()
             return
         }
 
@@ -7804,7 +7491,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
         if runtimeSurfaceFreedOutOfBandForTesting {
             runtimeSurfaceFreedOutOfBandForTesting = false
             callbackContext?.release()
-            teeContext?.release()
             return
         }
 #endif
@@ -7827,9 +7513,6 @@ final class TerminalSurface: Identifiable, ObservableObject {
             surface: surfaceToFree,
             callbackContext: callbackContext
         )
-        // The teardown coordinator releases callbackContext; teeContext is not
-        // transported through the request, so release it here (mirrors teardownSurface).
-        teeContext?.release()
     }
 }
 
@@ -11892,60 +11575,6 @@ private final class GhosttyFlashOverlayView: NSView {
     }
 }
 
-private final class TerminalViewportBorderOverlayView: NSView {
-    var effectiveSize: CGSize? {
-        didSet { needsDisplay = true }
-    }
-
-    var drawsVisibleAreaBorder = false {
-        didSet { needsDisplay = true }
-    }
-    var drawsVisibleAreaRightBorder = false {
-        didSet { needsDisplay = true }
-    }
-    var drawsVisibleAreaBottomBorder = false {
-        didSet { needsDisplay = true }
-    }
-
-    override var acceptsFirstResponder: Bool { false }
-    override var isFlipped: Bool { true }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard drawsVisibleAreaBorder,
-              let effectiveSize,
-              effectiveSize.width > 1,
-              effectiveSize.height > 1 else {
-            return
-        }
-
-        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        let lineWidth = 1 / max(1, scale)
-        let width = min(effectiveSize.width, bounds.width)
-        let height = min(effectiveSize.height, bounds.height)
-        guard width > lineWidth, height > lineWidth else { return }
-
-        let path = NSBezierPath()
-        path.lineWidth = lineWidth
-        let x = width - lineWidth / 2
-        let y = height - lineWidth / 2
-        if drawsVisibleAreaRightBorder {
-            path.move(to: NSPoint(x: x, y: 0))
-            path.line(to: NSPoint(x: x, y: y))
-        }
-        if drawsVisibleAreaBottomBorder {
-            path.move(to: NSPoint(x: 0, y: y))
-            path.line(to: NSPoint(x: x, y: y))
-        }
-        NSColor.separatorColor.withAlphaComponent(0.95).setStroke()
-        path.stroke()
-    }
-}
-
 final class GhosttySurfaceScrollView: NSView {
     enum FlashStyle {
         case navigation
@@ -11980,7 +11609,6 @@ final class GhosttySurfaceScrollView: NSView {
     private let scrollView: GhosttyScrollView
     private let documentView: NSView
     private let surfaceView: GhosttyNSView
-    private let mobileViewportBorderOverlayView = TerminalViewportBorderOverlayView(frame: .zero)
     private let inactiveOverlayView: GhosttyFlashOverlayView
     private let dropZoneOverlayView: GhosttyFlashOverlayView
     private let paneDropTargetView = TerminalPaneDropTargetView(frame: .zero)
@@ -12269,8 +11897,6 @@ final class GhosttySurfaceScrollView: NSView {
         backgroundView.layer?.isOpaque = false
         addSubview(backgroundView)
         addSubview(scrollView)
-        mobileViewportBorderOverlayView.isHidden = true
-        addSubview(mobileViewportBorderOverlayView, positioned: .above, relativeTo: scrollView)
         paneDropTargetView.hostedView = self
         addSubview(paneDropTargetView, positioned: .above, relativeTo: nil)
         synchronizeScrollbarAppearance()
@@ -12677,7 +12303,6 @@ final class GhosttySurfaceScrollView: NSView {
             size: CGSize(width: scrollView.bounds.width, height: documentView.frame.height)
         )
         _ = setFrameIfNeeded(documentView, to: targetDocumentFrame)
-        _ = setFrameIfNeeded(mobileViewportBorderOverlayView, to: bounds)
         _ = setFrameIfNeeded(inactiveOverlayView, to: bounds)
         _ = setFrameIfNeeded(paneDropTargetView, to: bounds)
         if let zone = activeDropZone {
@@ -12718,15 +12343,6 @@ final class GhosttySurfaceScrollView: NSView {
         synchronizeSurfaceView()
         let didCoreSurfaceChange = synchronizeCoreSurface()
         return !sizeApproximatelyEqual(previousSurfaceSize, targetSize) || didCoreSurfaceChange
-    }
-
-    func setMobileViewportBorder(size: CGSize?, drawRight: Bool, drawBottom: Bool) {
-        let isVisible = drawRight || drawBottom
-        mobileViewportBorderOverlayView.effectiveSize = size
-        mobileViewportBorderOverlayView.drawsVisibleAreaBorder = isVisible
-        mobileViewportBorderOverlayView.drawsVisibleAreaRightBorder = drawRight
-        mobileViewportBorderOverlayView.drawsVisibleAreaBottomBorder = drawBottom
-        mobileViewportBorderOverlayView.isHidden = !isVisible
     }
 
     @discardableResult

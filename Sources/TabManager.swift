@@ -1059,8 +1059,6 @@ class TabManager: ObservableObject {
     private nonisolated static let workspacePullRequestRepoCachePruneLifetime: TimeInterval = 60
     private nonisolated static let workspacePullRequestPollJitterFraction = 0.10
     private nonisolated static let workspacePullRequestRefreshBatchLimit = 3
-    private nonisolated static let mobileHostBackgroundWorkDeferralInterval: TimeInterval = 2.0
-    private nonisolated static let mobileHostBackgroundWorkQuietInterval: TimeInterval = 60.0
     @Published var selectedTabId: UUID? {
         willSet {
 #if DEBUG
@@ -1406,31 +1404,6 @@ class TabManager: ObservableObject {
         }
     }
 
-    /// Reschedules the workspace pull-request refresh after the paired mobile
-    /// host goes quiet, so background polling does not contend with active
-    /// mobile-host request traffic. Re-arming cancels the previous deadline.
-    private func deferWorkspacePullRequestRefreshForMobileHost() {
-        workspacePullRequestPollTask?.cancel()
-        workspacePullRequestPollTask = nil
-
-        let quietDelay = MobileHostRequestActivity.quietDelay(
-            for: Self.mobileHostBackgroundWorkQuietInterval
-        )
-        let delay = max(Self.mobileHostBackgroundWorkDeferralInterval, quietDelay)
-        let clock = gitPollClock
-        workspacePullRequestPollTask = Task { @MainActor [weak self] in
-            // Bounded, cancellable mobile-host deferral on the injected clock;
-            // re-arming cancels the previous task.
-            do {
-                try await clock.sleep(for: .seconds(delay))
-            } catch {
-                return
-            }
-            guard let self, !Task.isCancelled else { return }
-            self.refreshTrackedWorkspacePullRequestsIfNeeded(reason: "mobileHostDeferred")
-        }
-    }
-
     private func updateWorkspaceGitMetadataFallbackTimer() {
         guard sidebarGitMetadataWatchEnabled,
               !workspaceGitTrackedDirectoryByKey.isEmpty else {
@@ -1672,10 +1645,6 @@ class TabManager: ObservableObject {
         reason: String,
         allowCachedResultsOverride: Bool? = nil
     ) {
-        guard !MobileHostRequestActivity.hasRecentActivity(within: Self.mobileHostBackgroundWorkQuietInterval) else {
-            deferWorkspacePullRequestRefreshForMobileHost()
-            return
-        }
         guard sidebarPullRequestPollingEnabled else {
             resetWorkspacePullRequestRefreshState()
             clearAllWorkspaceSidebarPullRequestMetadata()
@@ -1855,15 +1824,6 @@ class TabManager: ObservableObject {
         now: Date,
         reason: String
     ) {
-        guard !MobileHostRequestActivity.hasRecentActivity(within: Self.mobileHostBackgroundWorkQuietInterval) else {
-            workspacePullRequestRefreshTask = nil
-            for key in requestedKeys {
-                workspacePullRequestProbeStateByKey[key] = .idle
-                workspacePullRequestNextPollAtByKey[key] = now.addingTimeInterval(Self.mobileHostBackgroundWorkQuietInterval)
-            }
-            deferWorkspacePullRequestRefreshForMobileHost()
-            return
-        }
         guard sidebarPullRequestPollingEnabled else {
             resetWorkspacePullRequestRefreshState()
             clearAllWorkspaceSidebarPullRequestMetadata()
@@ -2807,20 +2767,6 @@ class TabManager: ObservableObject {
         expectedDirectory: String,
         isLastAttempt: Bool
     ) {
-        guard !MobileHostRequestActivity.hasRecentActivity(within: Self.mobileHostBackgroundWorkQuietInterval) else {
-            workspaceGitProbeStateByKey[probeKey] = .idle
-            scheduleWorkspaceGitMetadataRefreshIfPossible(
-                workspaceId: probeKey.workspaceId,
-                panelId: probeKey.panelId,
-                reason: "mobileHostDeferred",
-                delays: [max(
-                    Self.mobileHostBackgroundWorkDeferralInterval,
-                    MobileHostRequestActivity.quietDelay(for: Self.mobileHostBackgroundWorkQuietInterval)
-                )]
-            )
-            return
-        }
-
         switch workspaceGitProbeStateByKey[probeKey] ?? .idle {
         case .idle:
             workspaceGitProbeStateByKey[probeKey] = .inFlight(rerunPending: false)
@@ -3010,19 +2956,6 @@ class TabManager: ObservableObject {
             if case .inFlight = workspaceGitProbeStateByKey[probeKey] { return true }
             return false
         }()
-        guard !MobileHostRequestActivity.hasRecentActivity(within: Self.mobileHostBackgroundWorkQuietInterval) else {
-            workspaceGitProbeStateByKey[probeKey] = .idle
-            scheduleWorkspaceGitMetadataRefreshIfPossible(
-                workspaceId: probeKey.workspaceId,
-                panelId: probeKey.panelId,
-                reason: "mobileHostDeferred",
-                delays: [max(
-                    Self.mobileHostBackgroundWorkDeferralInterval,
-                    MobileHostRequestActivity.quietDelay(for: Self.mobileHostBackgroundWorkQuietInterval)
-                )]
-            )
-            return
-        }
         let shouldTrackPullRequests = sidebarPullRequestPollingEnabled
         let resolvedPullRequest: SidebarPullRequestState? = {
             guard shouldTrackPullRequests else { return nil }
