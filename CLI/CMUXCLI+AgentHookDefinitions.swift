@@ -200,22 +200,6 @@ extension CMUXCLI {
             events: []
         ),
         AgentHookDef(
-            name: "omp", displayName: "OMP", statusKey: "omp",
-            configDir: ".omp/agent", configFile: "extensions/cmux-omp-session.ts",
-            createConfigDirIfMissing: true,
-            configDirResolver: { CMUXCLI.resolvedOmpAgentDirectory().path },
-            sessionStoreSuffix: "omp", disableEnvVar: "CMUX_OMP_HOOKS_DISABLED",
-            hookMarker: "cmux hooks omp", format: .flat,
-            events: []
-        ),
-        AgentHookDef(
-            name: "amp", displayName: "Amp", statusKey: "amp",
-            configDir: ".config/amp", configFile: "plugins/cmux-session.ts",
-            sessionStoreSuffix: "amp", disableEnvVar: "CMUX_AMP_HOOKS_DISABLED",
-            hookMarker: "cmux hooks amp", format: .flat,
-            events: []
-        ),
-        AgentHookDef(
             name: "cursor", displayName: "Cursor", statusKey: "cursor",
             configDir: ".cursor", configFile: "hooks.json", binaryName: "cursor-agent",
             sessionStoreSuffix: "cursor", disableEnvVar: "CMUX_CURSOR_HOOKS_DISABLED",
@@ -277,37 +261,6 @@ extension CMUXCLI {
             aliases: ["agy"],
             sessionEndIsTurnBoundary: true,
             feedHookEvents: ["PreToolUse", "PostToolUse"]
-        ),
-        AgentHookDef(
-            name: "rovodev", displayName: "Rovo Dev", statusKey: "rovodev",
-            configDir: ".rovodev", configFile: "config.yml", binaryName: "acli",
-            sessionStoreSuffix: "rovodev", disableEnvVar: "CMUX_ROVODEV_HOOKS_DISABLED",
-            hookMarker: "cmux hooks rovodev", format: .rovoDevYAML,
-            events: [
-                .init(agentEvent: "on_complete", cmuxSubcommand: "stop"),
-                .init(agentEvent: "on_error", cmuxSubcommand: "stop"),
-                .init(agentEvent: "on_tool_permission", cmuxSubcommand: "prompt-submit"),
-            ],
-            aliases: ["rovo"]
-        ),
-        AgentHookDef(
-            name: "hermes-agent", displayName: "Hermes Agent", statusKey: "hermes-agent",
-            configDir: ".hermes", configFile: "config.yaml", configDirEnvOverride: "HERMES_HOME",
-            binaryName: "hermes",
-            sessionStoreSuffix: "hermes-agent", disableEnvVar: "CMUX_HERMES_AGENT_HOOKS_DISABLED",
-            hookMarker: "cmux hooks hermes-agent", format: .hermesAgentYAML,
-            events: [
-                .init(agentEvent: "on_session_start", cmuxSubcommand: "session-start"),
-                .init(agentEvent: "pre_llm_call", cmuxSubcommand: "prompt-submit"),
-                .init(agentEvent: "post_llm_call", cmuxSubcommand: "agent-response"),
-                .init(agentEvent: "pre_approval_request", cmuxSubcommand: "notification"),
-                .init(agentEvent: "post_approval_response", cmuxSubcommand: "approval-response"),
-                .init(agentEvent: "on_session_end", cmuxSubcommand: "session-end"),
-                .init(agentEvent: "on_session_finalize", cmuxSubcommand: "session-finalize"),
-                .init(agentEvent: "on_session_reset", cmuxSubcommand: "session-start"),
-            ],
-            sessionEndIsTurnBoundary: true,
-            feedHookEvents: ["pre_tool_call", "post_tool_call", "pre_approval_request", "post_approval_response"]
         ),
         AgentHookDef(
             name: "copilot", displayName: "Copilot", statusKey: "copilot",
