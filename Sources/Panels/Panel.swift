@@ -6,9 +6,7 @@ import AppKit
 public enum PanelType: String, Codable, Sendable {
     case terminal
     case markdown
-    case filePreview = "filepreview"
     case rightSidebarTool
-    case project
     case extensionBrowser
 
     public init(from decoder: Decoder) throws {
@@ -16,10 +14,6 @@ public enum PanelType: String, Codable, Sendable {
         let rawValue = try container.decode(String.self)
         if let type = Self(rawValue: rawValue) {
             self = type
-            return
-        }
-        if rawValue.lowercased() == Self.filePreview.rawValue {
-            self = .filePreview
             return
         }
         if rawValue.lowercased() == Self.rightSidebarTool.rawValue.lowercased() {
@@ -44,26 +38,9 @@ public enum TerminalPanelFocusIntent: Equatable {
     case textBoxInput
 }
 
-public enum FilePreviewPanelFocusIntent: Hashable {
-    case textEditor
-    case pdfCanvas
-    case pdfThumbnails
-    case pdfOutline
-    case imageCanvas
-    case mediaPlayer
-    case quickLook
-}
-
-public enum ProjectPanelFocusIntent: Hashable {
-    case navigator
-    case detail
-}
-
 public enum PanelFocusIntent: Equatable {
     case panel
     case terminal(TerminalPanelFocusIntent)
-    case filePreview(FilePreviewPanelFocusIntent)
-    case project(ProjectPanelFocusIntent)
 }
 
 public enum WorkspaceAttentionFlashReason: String, Equatable, Sendable {

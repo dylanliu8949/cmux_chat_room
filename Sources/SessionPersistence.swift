@@ -1587,10 +1587,6 @@ struct SessionMarkdownPanelSnapshot: Codable, Sendable {
     var filePath: String
 }
 
-struct SessionFilePreviewPanelSnapshot: Codable, Sendable {
-    var filePath: String
-}
-
 struct SessionRightSidebarToolPanelSnapshot: Codable, Sendable {
     var mode: RightSidebarMode?
 
@@ -1606,28 +1602,6 @@ struct SessionRightSidebarToolPanelSnapshot: Codable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let raw = try container.decodeIfPresent(String.self, forKey: .mode)
         self.mode = raw.flatMap { RightSidebarMode(rawValue: $0) }
-    }
-}
-
-struct SessionProjectPanelSnapshot: Codable, Sendable {
-    var projectPath: String
-    var selectedNodePath: String?
-    var activeTab: String?
-    var selectedSchemeName: String?
-    var selectedConfigurationName: String?
-
-    init(
-        projectPath: String,
-        selectedNodePath: String? = nil,
-        activeTab: String? = nil,
-        selectedSchemeName: String? = nil,
-        selectedConfigurationName: String? = nil
-    ) {
-        self.projectPath = projectPath
-        self.selectedNodePath = selectedNodePath
-        self.activeTab = activeTab
-        self.selectedSchemeName = selectedSchemeName
-        self.selectedConfigurationName = selectedConfigurationName
     }
 }
 
@@ -1708,9 +1682,7 @@ struct SessionPanelSnapshot: Codable, Sendable {
     var terminal: SessionTerminalPanelSnapshot?
     var browser: SessionBrowserPanelSnapshot?
     var markdown: SessionMarkdownPanelSnapshot?
-    var filePreview: SessionFilePreviewPanelSnapshot?
     var rightSidebarTool: SessionRightSidebarToolPanelSnapshot?
-    var project: SessionProjectPanelSnapshot?
 }
 
 enum SessionSplitOrientation: String, Codable, Sendable {

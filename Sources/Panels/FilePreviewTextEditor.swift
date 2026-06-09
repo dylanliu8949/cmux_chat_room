@@ -118,7 +118,7 @@ enum FilePreviewTextEditorLayout {
 extension SavingTextView {
     /// Builds the File Preview text view configured for large plain-text files.
     ///
-    /// File Preview opens files up to `FilePreviewPanel.maximumLoadedTextBytes` (16 MB), which can
+    /// The text loader opens files up to `FilePreviewTextLoader.maximumLoadedTextBytes` (16 MB), which can
     /// be hundreds of thousands of lines. Selection responsiveness on that content is the reason
     /// this configuration is centralized; see `manaflow-ai/cmux#4576`.
     static func makeFilePreviewTextView() -> SavingTextView {

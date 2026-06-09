@@ -231,7 +231,6 @@ final class MarkdownPanelTests: XCTestCase {
         let panel = try XCTUnwrap(workspace.markdownPanel(for: openedPanelId))
         XCTAssertEqual(panel.filePath, fileURL.path)
         XCTAssertEqual(panel.displayMode, .preview)
-        XCTAssertNil(workspace.filePreviewPanel(for: openedPanelId))
         XCTAssertEqual(payload["panel_type"] as? String, PanelType.markdown.rawValue)
         XCTAssertEqual(payload["display_mode"] as? String, MarkdownPanelDisplayMode.preview.rawValue)
     }
@@ -288,7 +287,6 @@ final class MarkdownPanelTests: XCTestCase {
         let originalMarkdownPanelID = ObjectIdentifier(originalMarkdownPanel)
         XCTAssertEqual(originalMarkdownPanel.filePath, fileURL.path)
         XCTAssertEqual(originalMarkdownPanel.displayMode, .preview)
-        XCTAssertTrue(workspace.panels.values.compactMap { $0 as? FilePreviewPanel }.isEmpty)
 
         XCTAssertTrue(
             appDelegate.openFilePreviewInPreferredMainWindow(

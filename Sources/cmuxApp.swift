@@ -582,14 +582,6 @@ struct cmuxApp: App {
                     Button("File Explorer Style Debug…") {
                         FileExplorerStyleDebugWindowController.shared.show()
                     }
-                    Button(
-                        String(
-                            localized: "debug.menu.pdfPreviewChromeDebug",
-                            defaultValue: "PDF Preview Chrome Debug…"
-                        )
-                    ) {
-                        PDFPreviewChromeDebugWindowController.shared.show()
-                    }
                     Button("Open All Debug Windows") {
                         openAllDebugWindows()
                     }
@@ -1216,7 +1208,6 @@ struct cmuxApp: App {
         BackgroundDebugWindowController.shared.show()
         StartupAppearanceDebugWindowController.shared.show()
         MenuBarExtraDebugWindowController.shared.show()
-        PDFPreviewChromeDebugWindowController.shared.show()
         FeedPreviewWindowController.shared.show()
         FeedTextEditorDebugWindowController.shared.show()
         FeedButtonStyleDebugWindowController.shared.show()
@@ -1860,14 +1851,6 @@ private struct DebugWindowControlsView: View {
                         }
                         Button(
                             String(
-                                localized: "debug.menu.pdfPreviewChromeDebug",
-                                defaultValue: "PDF Preview Chrome Debug…"
-                            )
-                        ) {
-                            PDFPreviewChromeDebugWindowController.shared.show()
-                        }
-                        Button(
-                            String(
                                 localized: "debug.menu.tabBarBackdropLab",
                                 defaultValue: "Tab Bar Backdrop Lab…"
                             )
@@ -1891,7 +1874,6 @@ private struct DebugWindowControlsView: View {
                             BonsplitTabBarDebugWindowController.shared.show()
                             StartupAppearanceDebugWindowController.shared.show()
                             MenuBarExtraDebugWindowController.shared.show()
-                            PDFPreviewChromeDebugWindowController.shared.show()
                             TabBarBackdropLabWindowController.shared.show()
                             FeedTextEditorDebugWindowController.shared.show()
                         }

@@ -61,17 +61,6 @@ struct PanelContentView: View {
                     onRequestPanelFocus: onRequestPanelFocus
                 )
             }
-        case .filePreview:
-            if let filePreviewPanel = panel as? FilePreviewPanel {
-                FilePreviewPanelView(
-                    panel: filePreviewPanel,
-                    isFocused: isFocused,
-                    isVisibleInUI: isVisibleInUI,
-                    portalPriority: portalPriority,
-                    appearance: appearance,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
         case .rightSidebarTool:
             if let rightSidebarToolPanel = panel as? RightSidebarToolPanel {
                 RightSidebarToolPanelView(
@@ -79,14 +68,6 @@ struct PanelContentView: View {
                     isFocused: isFocused,
                     isVisibleInUI: isVisibleInUI,
                     appearance: appearance,
-                    onRequestPanelFocus: onRequestPanelFocus
-                )
-            }
-        case .project:
-            if let projectPanel = panel as? ProjectPanel {
-                ProjectPanelView(
-                    panel: projectPanel,
-                    isFocused: isFocused,
                     onRequestPanelFocus: onRequestPanelFocus
                 )
             }
@@ -115,7 +96,7 @@ struct PanelContentView: View {
     private var shouldInstallPaneDropTarget: Bool {
         guard isVisibleInUI else { return false }
         switch panel.panelType {
-        case .markdown, .filePreview, .rightSidebarTool, .project, .extensionBrowser:
+        case .markdown, .rightSidebarTool, .extensionBrowser:
             return true
         case .terminal:
             return false

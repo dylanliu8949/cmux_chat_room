@@ -55,36 +55,4 @@ final class PanelOwnedNativeViewSessionTests: XCTestCase {
         XCTAssertEqual(replacementView.configureCount, 1)
         XCTAssertEqual(makeCount, 2)
     }
-
-    func testQuickLookSessionCreatesFreshViewForEachRepresentableMount() throws {
-        let fileURL = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("cmux-4455-quicklook-\(UUID().uuidString).bin")
-        try Data([0, 1, 2, 3]).write(to: fileURL)
-        defer { try? FileManager.default.removeItem(at: fileURL) }
-
-        let panel = FilePreviewPanel(workspaceId: UUID(), filePath: fileURL.path)
-        let session = FilePreviewQuickLookSession()
-
-        let firstView = session.view(
-            panel: panel,
-            isVisibleInUI: true,
-            backgroundColor: .clear,
-            drawsBackground: false
-        )
-        let remountedView = session.view(
-            panel: panel,
-            isVisibleInUI: true,
-            backgroundColor: .clear,
-            drawsBackground: false
-        )
-
-        XCTAssertFalse(
-            firstView === remountedView,
-            "QuickLook views must be owned by the SwiftUI representable mount, because AppKit can deactivate a QLPreviewView when that mount is removed"
-        )
-
-        session.dismantle(firstView)
-        session.dismantle(remountedView)
-        panel.close()
-    }
 }

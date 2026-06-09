@@ -560,9 +560,7 @@ extension Workspace {
         let terminalSnapshot: SessionTerminalPanelSnapshot?
         let browserSnapshot: SessionBrowserPanelSnapshot?
         let markdownSnapshot: SessionMarkdownPanelSnapshot?
-        let filePreviewSnapshot: SessionFilePreviewPanelSnapshot?
         let rightSidebarToolSnapshot: SessionRightSidebarToolPanelSnapshot?
-        let projectSnapshot: SessionProjectPanelSnapshot?
         switch panel.panelType {
         case .terminal:
             guard let terminalPanel = panel as? TerminalPanel else { return nil }
@@ -631,47 +629,19 @@ extension Workspace {
             )
             browserSnapshot = nil
             markdownSnapshot = nil
-            filePreviewSnapshot = nil
             rightSidebarToolSnapshot = nil
-            projectSnapshot = nil
         case .markdown:
             guard let markdownPanel = panel as? MarkdownPanel else { return nil }
             terminalSnapshot = nil
             browserSnapshot = nil
             markdownSnapshot = SessionMarkdownPanelSnapshot(filePath: markdownPanel.filePath)
-            filePreviewSnapshot = nil
             rightSidebarToolSnapshot = nil
-            projectSnapshot = nil
-        case .filePreview:
-            guard let filePreviewPanel = panel as? FilePreviewPanel else { return nil }
-            terminalSnapshot = nil
-            browserSnapshot = nil
-            markdownSnapshot = nil
-            filePreviewSnapshot = SessionFilePreviewPanelSnapshot(filePath: filePreviewPanel.filePath)
-            rightSidebarToolSnapshot = nil
-            projectSnapshot = nil
         case .rightSidebarTool:
             guard let toolPanel = panel as? RightSidebarToolPanel else { return nil }
             terminalSnapshot = nil
             browserSnapshot = nil
             markdownSnapshot = nil
-            filePreviewSnapshot = nil
             rightSidebarToolSnapshot = SessionRightSidebarToolPanelSnapshot(mode: toolPanel.mode)
-            projectSnapshot = nil
-        case .project:
-            guard let projectPanel = panel as? ProjectPanel else { return nil }
-            terminalSnapshot = nil
-            browserSnapshot = nil
-            markdownSnapshot = nil
-            filePreviewSnapshot = nil
-            rightSidebarToolSnapshot = nil
-            projectSnapshot = SessionProjectPanelSnapshot(
-                projectPath: projectPanel.projectURL.path,
-                selectedNodePath: projectPanel.selectedFilePath,
-                activeTab: projectPanel.activeTab.rawValue,
-                selectedSchemeName: projectPanel.selectedSchemeName,
-                selectedConfigurationName: projectPanel.selectedConfigurationName
-            )
         case .extensionBrowser:
             return nil
         }
@@ -693,9 +663,7 @@ extension Workspace {
             terminal: terminalSnapshot,
             browser: browserSnapshot,
             markdown: markdownSnapshot,
-            filePreview: filePreviewSnapshot,
-            rightSidebarTool: rightSidebarToolSnapshot,
-            project: projectSnapshot
+            rightSidebarTool: rightSidebarToolSnapshot
         )
     }
 
@@ -1823,17 +1791,6 @@ extension Workspace {
             }
             applySessionPanelMetadata(snapshot, toPanelId: markdownPanel.id)
             return markdownPanel.id
-        case .filePreview:
-            guard let filePath = snapshot.filePreview?.filePath,
-                  let filePreviewPanel = newFilePreviewSurface(
-                    inPane: paneId,
-                    filePath: filePath,
-                    focus: false
-                  ) else {
-                return nil
-            }
-            applySessionPanelMetadata(snapshot, toPanelId: filePreviewPanel.id)
-            return filePreviewPanel.id
         case .rightSidebarTool:
             guard let mode = snapshot.rightSidebarTool?.mode,
                   mode.canOpenAsPane,
@@ -1846,17 +1803,6 @@ extension Workspace {
             }
             applySessionPanelMetadata(snapshot, toPanelId: toolPanel.id)
             return toolPanel.id
-        case .project:
-            guard let projectPath = snapshot.project?.projectPath,
-                  let projectPanel = newProjectSurface(
-                    inPane: paneId,
-                    projectPath: projectPath,
-                    focus: false
-                  ) else {
-                return nil
-            }
-            applySessionPanelMetadata(snapshot, toPanelId: projectPanel.id)
-            return projectPanel.id
         case .extensionBrowser:
             return nil
         }
@@ -2106,15 +2052,7 @@ extension Workspace {
             break
 
         case .project:
-            if let panel = newProjectSurface(
-                inPane: paneId,
-                projectPath: surface.url ?? surface.cwd ?? "",
-                focus: false
-            ) {
-                _ = closePanel(panelId, force: true)
-                if let name = surface.name { setPanelCustomTitle(panelId: panel.id, title: name) }
-                if surface.focus == true { focusPanelId = panel.id }
-            }
+            break
         }
     }
 
@@ -2142,14 +2080,7 @@ extension Workspace {
             break
 
         case .project:
-            if let panel = newProjectSurface(
-                inPane: paneId,
-                projectPath: surface.url ?? surface.cwd ?? "",
-                focus: false
-            ) {
-                if let name = surface.name { setPanelCustomTitle(panelId: panel.id, title: name) }
-                if surface.focus == true { focusPanelId = panel.id }
-            }
+            break
         }
     }
 
@@ -11402,43 +11333,6 @@ final class Workspace: Identifiable, ObservableObject {
         panelSubscriptions[markdownPanel.id] = subscription
     }
 
-    private func installFilePreviewPanelSubscription(_ filePreviewPanel: FilePreviewPanel) {
-        let titleAndDirty = Publishers.CombineLatest(
-            filePreviewPanel.$displayTitle.removeDuplicates(),
-            filePreviewPanel.$isDirty.removeDuplicates()
-        )
-        let subscription = Publishers.CombineLatest(
-            titleAndDirty,
-            filePreviewPanel.$displayIcon.removeDuplicates()
-        )
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self, weak filePreviewPanel] titleAndDirty, displayIcon in
-            guard let self,
-                  let filePreviewPanel,
-                  let tabId = self.surfaceIdFromPanelId(filePreviewPanel.id) else { return }
-            let (newTitle, isDirty) = titleAndDirty
-            guard let existing = self.bonsplitController.tab(tabId) else { return }
-
-            if self.panelTitles[filePreviewPanel.id] != newTitle {
-                self.panelTitles[filePreviewPanel.id] = newTitle
-            }
-            let resolvedTitle = self.resolvedPanelTitle(panelId: filePreviewPanel.id, fallback: newTitle)
-            let resolvedIcon = RenderableSystemSymbol.resolvedSurfaceTabIcon(displayIcon)
-            let titleUpdate: String? = existing.title == resolvedTitle ? nil : resolvedTitle
-            let iconUpdate: String?? = existing.icon == resolvedIcon ? nil : .some(resolvedIcon)
-            let dirtyUpdate: Bool? = existing.isDirty == isDirty ? nil : isDirty
-            guard titleUpdate != nil || iconUpdate != nil || dirtyUpdate != nil else { return }
-            self.bonsplitController.updateTab(
-                tabId,
-                title: titleUpdate,
-                icon: iconUpdate,
-                hasCustomTitle: self.panelCustomTitles[filePreviewPanel.id] != nil,
-                isDirty: dirtyUpdate
-            )
-        }
-        panelSubscriptions[filePreviewPanel.id] = subscription
-    }
-
     // MARK: - Panel Access
 
     func panel(for surfaceId: TabID) -> (any Panel)? {
@@ -11452,10 +11346,6 @@ final class Workspace: Identifiable, ObservableObject {
 
     func markdownPanel(for panelId: UUID) -> MarkdownPanel? {
         panels[panelId] as? MarkdownPanel
-    }
-
-    func filePreviewPanel(for panelId: UUID) -> FilePreviewPanel? {
-        panels[panelId] as? FilePreviewPanel
     }
 
     /// The working directory app-level actions (diff viewer, configured commands)
@@ -11487,12 +11377,8 @@ final class Workspace: Identifiable, ObservableObject {
             return SurfaceKind.terminal
         case .markdown:
             return SurfaceKind.markdown
-        case .filePreview:
-            return SurfaceKind.filePreview
         case .rightSidebarTool:
             return SurfaceKind.rightSidebarTool
-        case .project:
-            return SurfaceKind.project
         case .extensionBrowser:
             return SurfaceKind.extensionBrowser
         }
@@ -14725,58 +14611,6 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     @discardableResult
-    func newProjectSurface(
-        inPane paneId: PaneID,
-        projectPath: String,
-        focus: Bool? = nil,
-        targetIndex: Int? = nil
-    ) -> ProjectPanel? {
-        guard !projectPath.isEmpty else { return nil }
-        let url = URL(fileURLWithPath: (projectPath as NSString).expandingTildeInPath).standardizedFileURL
-        let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
-        let previousFocusedPanelId = focusedPanelId
-        let previousHostedView = focusedTerminalPanel?.hostedView
-
-        let projectPanel = ProjectPanel(projectURL: url)
-        panels[projectPanel.id] = projectPanel
-        panelTitles[projectPanel.id] = projectPanel.displayTitle
-
-        guard let newTabId = bonsplitController.createTab(
-            title: projectPanel.displayTitle,
-            icon: projectPanel.displayIcon,
-            kind: SurfaceKind.project,
-            isDirty: false,
-            isLoading: false,
-            isPinned: false,
-            inPane: paneId
-        ) else {
-            panels.removeValue(forKey: projectPanel.id)
-            panelTitles.removeValue(forKey: projectPanel.id)
-            return nil
-        }
-
-        surfaceIdToPanelId[newTabId] = projectPanel.id
-        if let targetIndex {
-            _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex)
-        }
-        publishCmuxSurfaceCreated(projectPanel.id, paneId: paneId, kind: SurfaceKind.project, origin: "project_tab", focused: shouldFocusNewTab)
-        if shouldFocusNewTab {
-            bonsplitController.focusPane(paneId)
-            bonsplitController.selectTab(newTabId)
-            applyTabSelection(tabId: newTabId, inPane: paneId)
-        } else {
-            preserveFocusAfterNonFocusSplit(
-                preferredPanelId: previousFocusedPanelId,
-                splitPanelId: projectPanel.id,
-                previousHostedView: previousHostedView
-            )
-        }
-
-        projectPanel.reload()
-        return projectPanel
-    }
-
-    @discardableResult
     func openOrFocusMarkdownSurface(
         inPane paneId: PaneID,
         filePath: String,
@@ -14837,105 +14671,6 @@ final class Workspace: Identifiable, ObservableObject {
         return markdownPanel
     }
 
-    @discardableResult
-    func openOrFocusFilePreviewSurface(
-        inPane paneId: PaneID,
-        filePath: String,
-        focus: Bool = true
-    ) -> FilePreviewPanel? {
-        let canonical = (filePath as NSString).resolvingSymlinksInPath
-        for (existingId, panel) in panels {
-            guard let preview = panel as? FilePreviewPanel else { continue }
-            if (preview.filePath as NSString).resolvingSymlinksInPath == canonical {
-                if focus {
-                    focusPanel(existingId)
-                }
-                return preview
-            }
-        }
-
-        return newFilePreviewSurface(inPane: paneId, filePath: filePath, focus: focus)
-    }
-
-    @discardableResult
-    func openOrFocusFilePreviewSplit(
-        from panelId: UUID,
-        filePath: String
-    ) -> FilePreviewPanel? {
-        let canonical = (filePath as NSString).resolvingSymlinksInPath
-        for (existingId, panel) in panels {
-            guard let preview = panel as? FilePreviewPanel else { continue }
-            if (preview.filePath as NSString).resolvingSymlinksInPath == canonical {
-                focusPanel(existingId)
-                return preview
-            }
-        }
-
-        if let targetPane = preferredRightSideTargetPane(fromPanelId: panelId) {
-            return newFilePreviewSurface(inPane: targetPane, filePath: filePath, focus: true)
-        }
-
-        guard let sourcePaneId = paneId(forPanelId: panelId) else { return nil }
-        return splitPaneWithFilePreview(
-            targetPane: sourcePaneId,
-            orientation: .horizontal,
-            insertFirst: false,
-            filePath: filePath
-        )
-    }
-
-    @discardableResult
-    func newFilePreviewSurface(
-        inPane paneId: PaneID,
-        filePath: String,
-        focus: Bool? = nil,
-        targetIndex: Int? = nil
-    ) -> FilePreviewPanel? {
-        let shouldFocusNewTab = focus ?? (bonsplitController.focusedPaneId == paneId)
-        let previousFocusedPanelId = focusedPanelId
-        let previousHostedView = focusedTerminalPanel?.hostedView
-
-        let filePreviewPanel = FilePreviewPanel(workspaceId: id, filePath: filePath)
-        panels[filePreviewPanel.id] = filePreviewPanel
-        panelTitles[filePreviewPanel.id] = filePreviewPanel.displayTitle
-
-        guard let newTabId = bonsplitController.createTab(
-            title: filePreviewPanel.displayTitle,
-            icon: RenderableSystemSymbol.resolvedSurfaceTabIcon(filePreviewPanel.displayIcon),
-            kind: SurfaceKind.filePreview,
-            isDirty: filePreviewPanel.isDirty,
-            isLoading: false,
-            isPinned: false,
-            inPane: paneId
-        ) else {
-            panels.removeValue(forKey: filePreviewPanel.id)
-            panelTitles.removeValue(forKey: filePreviewPanel.id)
-            return nil
-        }
-
-        surfaceIdToPanelId[newTabId] = filePreviewPanel.id
-        if let targetIndex {
-            _ = bonsplitController.reorderTab(newTabId, toIndex: targetIndex)
-        }
-        publishCmuxSurfaceCreated(filePreviewPanel.id, paneId: paneId, kind: "file_preview", origin: "file_preview_tab", focused: shouldFocusNewTab)
-        if shouldFocusNewTab {
-            bonsplitController.focusPane(paneId)
-            bonsplitController.selectTab(newTabId)
-            filePreviewPanel.focus()
-            applyTabSelection(tabId: newTabId, inPane: paneId)
-        } else {
-            preserveFocusAfterNonFocusSplit(
-                preferredPanelId: previousFocusedPanelId,
-                splitPanelId: filePreviewPanel.id,
-                previousHostedView: previousHostedView
-            )
-        }
-
-        installFilePreviewPanelSubscription(filePreviewPanel)
-        return filePreviewPanel
-    }
-
-    @discardableResult
     func openOrFocusRightSidebarToolSurface(
         inPane paneId: PaneID,
         mode: RightSidebarMode,
@@ -15002,43 +14737,6 @@ final class Workspace: Identifiable, ObservableObject {
         }
 
         return toolPanel
-    }
-
-    @discardableResult
-    func splitPaneWithFilePreview(
-        targetPane paneId: PaneID,
-        orientation: SplitOrientation,
-        insertFirst: Bool,
-        filePath: String
-    ) -> FilePreviewPanel? {
-        let filePreviewPanel = FilePreviewPanel(workspaceId: id, filePath: filePath)
-        panels[filePreviewPanel.id] = filePreviewPanel
-        panelTitles[filePreviewPanel.id] = filePreviewPanel.displayTitle
-
-        let newTab = Bonsplit.Tab(
-            title: filePreviewPanel.displayTitle,
-            icon: RenderableSystemSymbol.resolvedSurfaceTabIcon(filePreviewPanel.displayIcon),
-            kind: SurfaceKind.filePreview,
-            isDirty: filePreviewPanel.isDirty,
-            isLoading: false,
-            isPinned: false
-        )
-        surfaceIdToPanelId[newTab.id] = filePreviewPanel.id
-
-        isProgrammaticSplit = true
-        defer { isProgrammaticSplit = false }
-        guard let newPaneId = bonsplitController.splitPane(paneId, orientation: orientation, withTab: newTab, insertFirst: insertFirst) else {
-            panels.removeValue(forKey: filePreviewPanel.id)
-            panelTitles.removeValue(forKey: filePreviewPanel.id)
-            surfaceIdToPanelId.removeValue(forKey: newTab.id)
-            return nil
-        }
-        publishCmuxSplitCreated(newPaneId, sourcePaneId: paneId, orientation: orientation, surfaceId: filePreviewPanel.id, kind: "file_preview", origin: "file_preview_split", focused: true)
-
-        bonsplitController.selectTab(newTab.id)
-        filePreviewPanel.focus()
-        installFilePreviewPanelSubscription(filePreviewPanel)
-        return filePreviewPanel
     }
 
     /// Tear down all panels in this workspace, freeing their Ghostty surfaces.
@@ -15650,10 +15348,6 @@ final class Workspace: Identifiable, ObservableObject {
         if let markdownPanel = detached.panel as? MarkdownPanel,
            panelSubscriptions[markdownPanel.id] == nil {
             installMarkdownPanelSubscription(markdownPanel)
-        }
-        if let filePreviewPanel = detached.panel as? FilePreviewPanel,
-           panelSubscriptions[filePreviewPanel.id] == nil {
-            installFilePreviewPanelSubscription(filePreviewPanel)
         }
         let didAdoptWorkspaceRemoteTracking = shouldAdoptDetachedWorkspaceRemoteTracking(detached)
         if didAdoptWorkspaceRemoteTracking,
@@ -16941,6 +16635,8 @@ final class Workspace: Identifiable, ObservableObject {
         }
     }
 
+    /// Handles a file dragged out of the file explorer onto a pane. With the in-app
+    /// file-preview panel removed, only markdown files open as surfaces.
     func handleFilePreviewDrop(
         entry: FilePreviewDragEntry,
         destination: BonsplitController.ExternalTabDropRequest.Destination
@@ -16964,32 +16660,28 @@ final class Workspace: Identifiable, ObservableObject {
     }
 
     func handleExternalFileDrop(_ request: BonsplitController.ExternalFileDropRequest) -> Bool {
-        let entries = request.urls
+        let filePaths = request.urls
             .filter(\.isFileURL)
-            .map {
-                FilePreviewDragEntry(
-                    filePath: $0.path,
-                    displayTitle: $0.lastPathComponent
-                )
-            }
-        guard !entries.isEmpty else { return false }
+            .map(\.path)
+        guard !filePaths.isEmpty else { return false }
 
         switch request.destination {
         case .insert(let paneId, let index):
             return !openFileSurfaces(
                 inPane: paneId,
-                filePaths: entries.map(\.filePath),
+                filePaths: filePaths,
                 focus: true,
                 targetIndex: index
             ).isEmpty
 
         case .split(let sourcePaneId, let orientation, let insertFirst):
-            guard let first = entries.first,
+            let markdownPaths = filePaths.filter(MarkdownPanelFileLinkResolver.isMarkdownPathLike)
+            guard let first = markdownPaths.first,
                   let firstPanel = splitPaneWithFileSurface(
                     targetPane: sourcePaneId,
                     orientation: orientation,
                     insertFirst: insertFirst,
-                    filePath: first.filePath
+                    filePath: first
                   ) else {
                 return false
             }
@@ -16997,7 +16689,7 @@ final class Workspace: Identifiable, ObservableObject {
             let targetPane = paneId(forPanelId: firstPanel.id) ?? sourcePaneId
             _ = openFileSurfaces(
                 inPane: targetPane,
-                filePaths: entries.dropFirst().map(\.filePath),
+                filePaths: Array(markdownPaths.dropFirst()),
                 focus: true
             )
             return true
@@ -17011,15 +16703,8 @@ final class Workspace: Identifiable, ObservableObject {
         insertFirst: Bool,
         filePath: String
     ) -> (any Panel)? {
-        if MarkdownPanelFileLinkResolver.isMarkdownPathLike(filePath) {
-            return splitPaneWithMarkdown(
-                targetPane: paneId,
-                orientation: orientation,
-                insertFirst: insertFirst,
-                filePath: filePath
-            )
-        }
-        return splitPaneWithFilePreview(
+        guard MarkdownPanelFileLinkResolver.isMarkdownPathLike(filePath) else { return nil }
+        return splitPaneWithMarkdown(
             targetPane: paneId,
             orientation: orientation,
             insertFirst: insertFirst,
@@ -17725,7 +17410,7 @@ extension Workspace: BonsplitDelegate {
         switch intent {
         case .terminal(.findField), .terminal(.textBoxInput):
             return true
-        case .panel, .terminal(.surface), .filePreview, .project:
+        case .panel, .terminal(.surface):
             return false
         }
     }

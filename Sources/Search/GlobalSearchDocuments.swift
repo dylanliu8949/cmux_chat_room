@@ -32,7 +32,7 @@ enum GlobalSearchDocuments {
         switch context.panel.panelType {
         case .markdown:
             kind = .markdown
-        case .terminal, .filePreview, .rightSidebarTool, .project, .extensionBrowser:
+        case .terminal, .rightSidebarTool, .extensionBrowser:
             kind = .title
         }
 

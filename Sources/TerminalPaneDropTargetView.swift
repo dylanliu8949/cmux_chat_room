@@ -279,17 +279,6 @@ final class PaneDropTargetView: NSView {
                 window: window ?? terminalPanel.surface.uiWindow
             )
         }
-        if let filePreviewPanel = panel as? FilePreviewPanel {
-            return FileDropTextDropController.performPanelTextDrop(
-                workspace: workspace,
-                panelId: panelId,
-                focusIntent: .filePreview(.textEditor),
-                window: window,
-                insert: {
-                    filePreviewPanel.handleDroppedFileURLsAsText(urls)
-                }
-            )
-        }
         return false
     }
 
@@ -310,17 +299,9 @@ final class PaneDropTargetView: NSView {
         switch panel.panelType {
         case .terminal:
             return .terminal
-        case .filePreview:
-            guard let filePreviewPanel = panel as? FilePreviewPanel,
-                  filePreviewPanel.previewMode == .text else {
-                return nil
-            }
-            return .editor
         case .markdown:
             return nil
         case .rightSidebarTool:
-            return nil
-        case .project:
             return nil
         case .extensionBrowser:
             return nil

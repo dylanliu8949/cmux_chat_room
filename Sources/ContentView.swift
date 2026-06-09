@@ -5891,12 +5891,8 @@ struct ContentView: View {
             return String(localized: "commandPalette.kind.terminal", defaultValue: "Terminal")
         case .markdown:
             return String(localized: "commandPalette.kind.markdown", defaultValue: "Markdown")
-        case .filePreview:
-            return String(localized: "commandPalette.kind.filePreview", defaultValue: "File Preview")
         case .rightSidebarTool:
             return String(localized: "commandPalette.kind.rightSidebarTool", defaultValue: "Tool")
-        case .project:
-            return String(localized: "commandPalette.kind.project", defaultValue: "Project")
         case .extensionBrowser:
             return String(localized: "sidebar.extensions.browser.title", defaultValue: "Sidebar Extensions")
         }
@@ -5908,12 +5904,8 @@ struct ContentView: View {
             return ["terminal", "shell", "console"]
         case .markdown:
             return ["markdown", "note", "preview"]
-        case .filePreview:
-            return ["file", "preview", "text", "pdf", "image", "audio", "video"]
         case .rightSidebarTool:
             return ["tool", "files", "find", "vault", "sidebar"]
-        case .project:
-            return ["project", "xcode", "build", "settings", "schemes", "targets"]
         case .extensionBrowser:
             return ["sidebar", "extensions", "extensionkit", "browser"]
         }
@@ -7239,18 +7231,6 @@ struct ContentView: View {
         )
         contributions.append(
             CommandPaletteCommandContribution(
-                commandId: "palette.openDiffViewer",
-                title: constant(String(localized: "command.openDiffViewer.title", defaultValue: "Open Diff Viewer")),
-                subtitle: workspaceSubtitle,
-                keywords: ["diff", "changes", "git", "review", "branch", "unstaged", "codeview"],
-                when: {
-                    $0.bool(CommandPaletteContextKeys.hasWorkspace) &&
-                    !$0.bool(CommandPaletteContextKeys.browserDisabled)
-                }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
                 commandId: "palette.browserBack",
                 title: constant(String(localized: "command.browserBack.title", defaultValue: "Back")),
                 subtitle: browserPanelSubtitle,
@@ -8167,12 +8147,6 @@ struct ContentView: View {
                 }
             }
         }
-        registry.register(commandId: "palette.openDiffViewer") {
-            if AppDelegate.shared?.openDiffViewerForFocusedWorkspace(for: tabManager) != true {
-                NSSound.beep()
-            }
-        }
-
         registry.register(commandId: "palette.markdownZoomIn") {
             if !tabManager.zoomInFocusedMarkdown() {
                 NSSound.beep()
@@ -9189,24 +9163,6 @@ struct ContentView: View {
             return "terminal.findField"
         case .terminal(.textBoxInput):
             return "terminal.textBoxInput"
-        case .filePreview(.textEditor):
-            return "filePreview.textEditor"
-        case .filePreview(.pdfCanvas):
-            return "filePreview.pdfCanvas"
-        case .filePreview(.pdfThumbnails):
-            return "filePreview.pdfThumbnails"
-        case .filePreview(.pdfOutline):
-            return "filePreview.pdfOutline"
-        case .filePreview(.imageCanvas):
-            return "filePreview.imageCanvas"
-        case .filePreview(.mediaPlayer):
-            return "filePreview.mediaPlayer"
-        case .filePreview(.quickLook):
-            return "filePreview.quickLook"
-        case .project(.navigator):
-            return "project.navigator"
-        case .project(.detail):
-            return "project.detail"
         }
     }
 
@@ -11293,12 +11249,8 @@ struct VerticalTabsSidebar: View {
             return .terminal
         case .markdown:
             return .markdown
-        case .filePreview:
-            return .filePreview
         case .rightSidebarTool:
             return .rightSidebarTool
-        case .project:
-            return .project
         case .extensionBrowser:
             return .unknown
         }

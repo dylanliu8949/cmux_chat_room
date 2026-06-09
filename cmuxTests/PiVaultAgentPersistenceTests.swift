@@ -1088,7 +1088,6 @@ final class PiVaultAgentPersistenceTests: XCTestCase {
                 ),
                 browser: nil,
                 markdown: nil,
-                filePreview: nil,
                 rightSidebarTool: nil
             )
         ]

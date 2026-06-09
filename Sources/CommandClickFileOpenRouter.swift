@@ -13,15 +13,14 @@ enum CommandClickFileOpenRouter {
         sourcePanelId: UUID,
         filePath: String
     ) -> Bool {
+        // The in-app file-preview panel has been removed, so only markdown files
+        // open inside cmux now; other "supported" file types fall back to the
+        // caller's external-open path.
         if CmdClickMarkdownRouteSettings.shouldRoute(path: filePath),
            workspace.openOrFocusMarkdownSplit(from: sourcePanelId, filePath: filePath) != nil {
             return true
         }
-
-        guard CmdClickSupportedFileRouteSettings.shouldRoute(path: filePath) else {
-            return false
-        }
-        return workspace.openOrFocusFilePreviewSplit(from: sourcePanelId, filePath: filePath) != nil
+        return false
     }
 
     /// Resolve the working directory for a terminal surface, preferring the

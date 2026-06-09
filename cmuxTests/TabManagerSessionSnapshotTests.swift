@@ -1603,7 +1603,6 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
         panelSnapshot.terminal = nil
         panelSnapshot.browser = nil
         panelSnapshot.markdown = nil
-        panelSnapshot.filePreview = nil
         panelSnapshot.rightSidebarTool = nil
         snapshot.customTitle = "Broken Workspace"
         snapshot.panels = [panelSnapshot]
@@ -3128,7 +3127,6 @@ final class TabManagerSessionSnapshotTests: XCTestCase {
             terminal: SessionTerminalPanelSnapshot(),
             browser: nil,
             markdown: nil,
-            filePreview: nil,
             rightSidebarTool: nil
         )
     }
