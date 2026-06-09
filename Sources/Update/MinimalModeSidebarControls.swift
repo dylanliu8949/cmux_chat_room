@@ -195,7 +195,7 @@ final class MinimalModeSidebarControlActionView: NSView {
         }
         switch slot {
         case .toggleSidebar:
-            CmuxExtensionSidebarSelection.showMenu(anchorView: self, event: event)
+            super.rightMouseDown(with: event)
         case .newTab:
             _ = AppDelegate.shared?.showNewWorkspaceContextMenu(anchorView: self, event: event)
         case .focusHistoryBack:

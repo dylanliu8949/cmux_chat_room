@@ -301,8 +301,6 @@ final class PaneDropTargetView: NSView {
             return .terminal
         case .markdown:
             return nil
-        case .extensionBrowser:
-            return nil
         }
     }
 

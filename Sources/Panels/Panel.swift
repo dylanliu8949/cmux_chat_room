@@ -6,7 +6,6 @@ import AppKit
 public enum PanelType: String, Codable, Sendable {
     case terminal
     case markdown
-    case extensionBrowser
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
