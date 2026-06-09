@@ -65,11 +65,6 @@ TOP_LEVEL_COMMANDS = {
     "version",
     "capabilities",
     "events",
-    "auth",
-    "login",
-    "logout",
-    "vm",
-    "cloud",
     "rpc",
     "identify",
     "list-windows",
@@ -166,16 +161,6 @@ TOP_LEVEL_COMMANDS = {
 
 
 SKIPPED_CLI_COMMANDS = {
-    "auth login": "opens an external sign-in flow",
-    "auth logout": "mutates the signed-in user session",
-    "login": "alias for auth login, opens external sign-in",
-    "logout": "alias for auth logout, mutates signed-in session",
-    "vm new": "can create billable cloud VM resources",
-    "vm rm": "can destroy cloud VM resources",
-    "vm shell": "opens an interactive VM shell",
-    "vm ssh": "opens an interactive VM SSH workspace",
-    "vm ssh-attach": "opens an interactive VM SSH session",
-    "cloud new": "can create billable cloud VM resources",
     "ssh": "opens an external SSH session",
     "feedback --submit": "can send external feedback",
     "feed clear": "deletes persisted feed state",
@@ -187,13 +172,6 @@ SKIPPED_CLI_COMMANDS = {
 
 
 SKIPPED_SOCKET_METHODS = {
-    "auth.begin_sign_in": "opens an external sign-in flow",
-    "auth.sign_out": "mutates the signed-in user session",
-    "vm.create": "can create billable cloud VM resources",
-    "vm.destroy": "can destroy cloud VM resources",
-    "vm.exec": "executes commands inside a cloud VM",
-    "vm.attach_info": "requires a real VM id",
-    "vm.ssh_info": "requires a real VM id",
     "settings.open": "opens UI only, covered through CLI help",
     "feedback.open": "opens UI only",
     "feedback.submit": "can send external feedback",

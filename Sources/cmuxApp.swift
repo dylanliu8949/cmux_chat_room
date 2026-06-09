@@ -98,7 +98,6 @@ struct cmuxApp: App {
             jsonStore: JSONConfigStore(fileURL: configFileURL),
             secretStore: secretStore,
             errorLog: SettingsErrorLog(),
-            accountFlow: HostAccountFlow(authManager: .shared),
             hostActions: HostSettingsActions(configFileURL: configFileURL)
         )
 

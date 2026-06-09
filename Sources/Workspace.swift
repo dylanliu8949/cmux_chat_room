@@ -17948,11 +17948,8 @@ extension Workspace: BonsplitDelegate {
             case .newWorkspace:
                 owningTabManager?.addWorkspace()
             case .cloudVM:
-                _ = AppDelegate.shared?.performCloudVMAction(
-                    tabManager: owningTabManager,
-                    preferredWindow: presentingWindow,
-                    debugSource: "surfaceTabBar.cloudVM"
-                )
+                // Cloud VM support has been removed; the action is a no-op.
+                break
             case .newTerminal, .newBrowser, .splitRight, .splitDown:
                 break
             }
