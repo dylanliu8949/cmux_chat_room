@@ -554,21 +554,8 @@ class TerminalController {
         target: ServerEventTarget
     ) -> SocketControlServerEvents {
         SocketControlServerEvents(
-            breadcrumb: { message, data in
-                sentryBreadcrumb(message, category: "socket", data: data)
-            },
-            failure: { message, stage, errnoCode, data in
-                sentryBreadcrumb(message, category: "socket", data: data)
-                guard shouldCaptureSocketListenerFailure(
-                    message: message,
-                    stage: stage,
-                    path: data["path"] as? String ?? "",
-                    errnoCode: errnoCode
-                ) else {
-                    return
-                }
-                sentryCaptureError(message, category: "socket", data: data, contextKey: "socket_listener")
-            },
+            breadcrumb: { _, _ in },
+            failure: { _, _, _, _ in },
             listenerDidStart: { path, _ in
                 target.controller?.socketListenerDidStart(path: path)
             },
@@ -666,16 +653,6 @@ class TerminalController {
         let restartMode = socketServer.accessMode
         guard socketServer.shouldRestartForMissingPath(path: path, generation: generation) else { return }
 
-        sentryBreadcrumb(
-            "socket.listener.restart",
-            category: "socket",
-            data: [
-                "mode": restartMode.rawValue,
-                "path": path,
-                "source": "path_monitor",
-                "generation": generation
-            ]
-        )
         stop()
         start(tabManager: tabManager, socketPath: path, accessMode: restartMode)
     }

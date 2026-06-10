@@ -49,7 +49,6 @@ public struct AppSection: View {
     @State private var soundName: DefaultsValueModel<String>
     @State private var soundCommand: DefaultsValueModel<String>
     @State private var customSoundFile: DefaultsValueModel<String>
-    @State private var telemetry: DefaultsValueModel<Bool>
     @State private var confirmQuit: DefaultsValueModel<ConfirmQuitMode>
     @State private var warnCloseTab: DefaultsValueModel<Bool>
     @State private var warnCloseX: DefaultsValueModel<Bool>
@@ -58,7 +57,6 @@ public struct AppSection: View {
     @State private var paletteAllSurfaces: DefaultsValueModel<Bool>
 
     @State private var languageAtAppear: AppLanguage?
-    @State private var telemetryAtAppear: Bool?
 
     public init(
         defaultsStore: UserDefaultsSettingsStore,
@@ -93,7 +91,6 @@ public struct AppSection: View {
         _soundName = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.notifications.sound))
         _soundCommand = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.notifications.command))
         _customSoundFile = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.notifications.customSoundFilePath))
-        _telemetry = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.app.sendAnonymousTelemetry))
         _confirmQuit = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.app.confirmQuitMode))
         _warnCloseTab = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.app.warnBeforeClosingTab))
         _warnCloseX = State(initialValue: DefaultsValueModel(store: defaultsStore, key: catalog.app.warnBeforeClosingTabXButton))
@@ -123,7 +120,6 @@ public struct AppSection: View {
         }
         .task {
             if languageAtAppear == nil { languageAtAppear = language.current }
-            if telemetryAtAppear == nil { telemetryAtAppear = telemetry.current }
         }
     }
 
@@ -530,20 +526,6 @@ public struct AppSection: View {
                 )
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 200)
-            }
-            SettingsCardDivider()
-
-            // Telemetry
-            SettingsCardRow(
-                configurationReview: .json("app.sendAnonymousTelemetry"),
-                String(localized: "settings.app.telemetry", defaultValue: "Send anonymous telemetry"),
-                subtitle: (telemetryAtAppear != nil && telemetry.current != telemetryAtAppear)
-                    ? String(localized: "settings.app.telemetry.subtitleChanged", defaultValue: "Change takes effect on next launch.")
-                    : String(localized: "settings.app.telemetry.subtitle", defaultValue: "Share anonymized crash and usage data to help improve cmux.")
-            ) {
-                Toggle("", isOn: Binding(get: { telemetry.current }, set: { telemetry.set($0) }))
-                    .labelsHidden()
-                    .controlSize(.small)
             }
             SettingsCardDivider()
 

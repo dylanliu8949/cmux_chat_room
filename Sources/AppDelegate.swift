@@ -10,7 +10,6 @@ import Bonsplit
 import CMUXWorkstream
 import CoreServices
 import UserNotifications
-import Sentry
 import WebKit
 import Combine
 import ObjectiveC.runtime
@@ -1179,12 +1178,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Notification) {
         let env = ProcessInfo.processInfo.environment
         let isRunningUnderXCTest = isRunningUnderXCTest(env)
-        let telemetryEnabled = TelemetrySettings.enabledForCurrentLaunch
         StartupBreadcrumbLog.append(
             "appDelegate.didFinish.begin",
             fields: [
-                "xctest": isRunningUnderXCTest ? "1" : "0",
-                "telemetry": telemetryEnabled ? "1" : "0"
+                "xctest": isRunningUnderXCTest ? "1" : "0"
             ]
         )
         AppIconLaunchState.markDidFinishLaunching()
@@ -1255,47 +1252,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.writeUITestDiagnosticsIfNeeded(stage: "after1s")
         }
 #endif
-
-        if telemetryEnabled {
-            // Pre-warm locale before Sentry to avoid a startup data race.
-            // Locale initialization (os.locale.ensureLocale / NSLocale._preferredLanguages)
-            // on the main thread can race with Sentry's background init thread
-            // calling posix.getenv, causing a SIGSEGV ~134ms after launch.
-            // Forcing locale access here before SentrySDK.start eliminates the race.
-            // Related to: #836
-            _ = Locale.current
-            _ = NSLocale.preferredLanguages
-
-            StartupBreadcrumbLog.append("appDelegate.didFinish.sentry.begin")
-            SentrySDK.start { options in
-                options.dsn = "https://ecba1ec90ecaee02a102fba931b6d2b3@o4507547940749312.ingest.us.sentry.io/4510796264636416"
-                #if DEBUG
-                options.environment = "development"
-                options.debug = true
-                #else
-                options.environment = "production"
-                options.debug = false
-                #endif
-                options.sendDefaultPii = false
-
-                // Performance tracing (10% of transactions)
-                options.tracesSampleRate = 0.1
-                // Keep app-hang tracking enabled, but avoid reporting short main-thread stalls
-                // as hangs in normal user interaction flows.
-                options.appHangTimeoutInterval = 8.0
-                // Attach stack traces to all events
-                options.attachStacktrace = true
-                // Avoid recursively capturing failed requests from Sentry's own ingestion endpoint.
-                options.enableCaptureFailedRequests = false
-            }
-            StartupBreadcrumbLog.append("appDelegate.didFinish.sentry.complete")
-        }
-
-        if telemetryEnabled && !isRunningUnderXCTest {
-            StartupBreadcrumbLog.append("appDelegate.didFinish.posthog.begin")
-            PostHogAnalytics.shared.startIfNeeded()
-            StartupBreadcrumbLog.append("appDelegate.didFinish.posthog.complete")
-        }
 
         let forceDuplicateLaunchObserver = env["CMUX_UI_TEST_ENABLE_DUPLICATE_LAUNCH_OBSERVER"] == "1"
 
@@ -1632,13 +1588,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if mainWindowVisibilityController.finishPendingApplicationActivationRestore(windows: activationWindows, reason: .applicationDidBecomeActive) == nil, !hasVisibleMainTerminalWindow() {
             _ = mainWindowVisibilityController.restoreApplicationWindowsAfterActivation(windows: activationWindows, reason: .applicationDidBecomeActive)
         }
-        sentryBreadcrumb("app.didBecomeActive", category: "lifecycle", data: [
-            "tabCount": tabManager?.tabs.count ?? 0
-        ])
-        if TelemetrySettings.enabledForCurrentLaunch && !isRunningUnderXCTestCached {
-            PostHogAnalytics.shared.trackActive(reason: "didBecomeActive")
-        }
-
         guard let notificationStore else { return }
         notificationStore.handleApplicationDidBecomeActive()
         guard let tabManager else { return }
@@ -1761,9 +1710,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         TerminalController.shared.stop()
         GhosttyPasteboardHelper.cleanupAllOwnedTemporaryImageFiles()
         VSCodeServeWebController.shared.stop()
-        if TelemetrySettings.enabledForCurrentLaunch {
-            PostHogAnalytics.shared.flush()
-        }
         ghosttyCrashBreadcrumbTask?.cancel()
         ghosttyCrashBreadcrumbTask = nil
         notificationStore?.clearAll()
@@ -3390,11 +3336,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return
         }
         let path = TerminalController.shared.activeSocketPath(preferredPath: config.path)
-        sentryBreadcrumb("socket.listener.start", category: "socket", data: [
-            "mode": config.mode.rawValue,
-            "path": path,
-            "source": source
-        ])
         TerminalController.shared.start(tabManager: tabManager, socketPath: path, accessMode: config.mode)
     }
 
@@ -3408,12 +3349,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let health = TerminalController.shared.socketListenerHealth(expectedSocketPath: path)
         guard !health.isHealthy else { return }
 
-        sentryBreadcrumb("socket.listener.ensure", category: "socket", data: [
-            "mode": config.mode.rawValue,
-            "path": path,
-            "source": source,
-            "failureSignals": health.failureSignals.joined(separator: ",")
-        ])
         TerminalController.shared.start(tabManager: tabManager, socketPath: path, accessMode: config.mode)
     }
 
@@ -3423,11 +3358,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             ?? mainWindowContexts.values.first?.tabManager,
               let config = socketListenerConfigurationIfEnabled() else { return }
         let restartPath = TerminalController.shared.activeSocketPath(preferredPath: config.path)
-        sentryBreadcrumb("socket.listener.restart", category: "socket", data: [
-            "mode": config.mode.rawValue,
-            "path": restartPath,
-            "source": source
-        ])
         TerminalController.shared.stop()
         TerminalController.shared.start(tabManager: manager, socketPath: restartPath, accessMode: config.mode)
     }
@@ -8600,9 +8530,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
     }
 
-    @objc func triggerSentryTestCrash(_ sender: Any?) {
-        SentrySDK.crash()
-    }
 #endif
 
 #if DEBUG
@@ -12689,9 +12616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         register: @escaping (CFURL) -> OSStatus = { url in
             LSRegisterURL(url, true)
         },
-        breadcrumb: @escaping (_ message: String, _ data: [String: Any]) -> Void = { message, data in
-            sentryBreadcrumb(message, category: "startup", data: data)
-        }
+        breadcrumb: @escaping (_ message: String, _ data: [String: Any]) -> Void = { _, _ in }
     ) {
         let normalizedURL = bundleURL.standardizedFileURL
         breadcrumb("launchservices.register.schedule", [

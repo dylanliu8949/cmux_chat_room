@@ -451,9 +451,6 @@ final class CmuxSettingsFileStore {
         if let value = jsonBool(section["iMessageMode"]) {
             snapshot.managedUserDefaults[IMessageModeSettings.key] = .bool(value)
         }
-        if let value = jsonBool(section["sendAnonymousTelemetry"]) {
-            snapshot.managedUserDefaults[TelemetrySettings.sendAnonymousTelemetryKey] = .bool(value)
-        }
         var parsedConfirmQuitMode: QuitConfirmationMode?
         if let raw = jsonString(section["confirmQuit"]) {
             if let mode = QuitConfirmationMode(rawValue: raw) {
