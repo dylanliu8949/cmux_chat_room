@@ -384,7 +384,7 @@ struct cmuxApp: App {
             }
 
             CommandGroup(replacing: .appInfo) {
-                Button(String(localized: "menu.app.about", defaultValue: "About cmux")) {
+                Button(String(localized: "menu.app.about", defaultValue: "About Bus")) {
                     showAboutPanel()
                 }
             }
@@ -1186,7 +1186,7 @@ private enum AboutWindowKind: String, CaseIterable, Identifiable {
     var fallbackTitle: String {
         switch self {
         case .about:
-            return "About cmux"
+            return "About Bus"
         }
     }
 
@@ -1282,7 +1282,7 @@ private struct AboutTitlebarDebugOptions: Equatable {
         case .about:
             return AboutTitlebarDebugOptions(
                 overridesEnabled: false,
-                windowTitle: "About cmux",
+                windowTitle: "About Bus",
                 titleVisibility: .hidden,
                 titlebarAppearsTransparent: true,
                 movableByWindowBackground: false,
@@ -1954,7 +1954,7 @@ private struct AboutPanelView: View {
 
             VStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .center, spacing: 8) {
-                    Text(String(localized: "about.appName", defaultValue: "cmux"))
+                    Text(String(localized: "about.appName", defaultValue: "Bus"))
                         .bold()
                         .font(.title)
                     Text(String(localized: "about.description", defaultValue: "A Ghostty-based terminal with vertical tabs\nand a notification panel for macOS."))

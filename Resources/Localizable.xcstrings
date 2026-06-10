@@ -16080,115 +16080,115 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "bs": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "nb": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "th": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux"
+            "value": "Bus"
           }
         }
       }
@@ -66751,115 +66751,115 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "About cmux"
+            "value": "About Bus"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmuxについて"
+            "value": "Busについて"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关于 cmux"
+            "value": "关于 Bus"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "關於 cmux"
+            "value": "關於 Bus"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux에 관하여"
+            "value": "Bus에 관하여"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Über cmux"
+            "value": "Über Bus"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Acerca de cmux"
+            "value": "Acerca de Bus"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "À propos de cmux"
+            "value": "À propos de Bus"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Informazioni su cmux"
+            "value": "Informazioni su Bus"
           }
         },
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Om cmux"
+            "value": "Om Bus"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "O cmux"
+            "value": "O Bus"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "О программе cmux"
+            "value": "О программе Bus"
           }
         },
         "bs": {
           "stringUnit": {
             "state": "translated",
-            "value": "O programu cmux"
+            "value": "O programu Bus"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "حول cmux"
+            "value": "حول Bus"
           }
         },
         "nb": {
           "stringUnit": {
             "state": "translated",
-            "value": "Om cmux"
+            "value": "Om Bus"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sobre o cmux"
+            "value": "Sobre o Bus"
           }
         },
         "th": {
           "stringUnit": {
             "state": "translated",
-            "value": "เกี่ยวกับ cmux"
+            "value": "เกี่ยวกับ Bus"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "cmux Hakkında"
+            "value": "Bus Hakkında"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Про cmux"
+            "value": "Про Bus"
           }
         }
       }
