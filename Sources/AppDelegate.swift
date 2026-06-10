@@ -3,8 +3,6 @@ import CmuxControlSocket
 import CmuxSettings
 import CmuxSettingsUI
 import CmuxSocketControl
-import CmuxUpdater
-import CmuxUpdaterUI
 import SwiftUI
 import Bonsplit
 import CMUXWorkstream
@@ -862,7 +860,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var browserWebViewFirstResponderObserver: NSObjectProtocol?
     let updateLog = UpdateLogStore()
     let focusLog = FocusLogStore()
-    private lazy var updateController = UpdateController(log: updateLog)
     private lazy var titlebarAccessoryController = UpdateTitlebarAccessoryController(updateLog: updateLog)
     private let windowDecorationsController = WindowDecorationsController()
     private var menuBarExtraController: MenuBarExtraController?
@@ -1063,10 +1060,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private static let commandPaletteRequestGraceInterval: TimeInterval = 1.25
     private static let commandPalettePendingOpenMaxAge: TimeInterval = 8.0
     private static let sessionAutosaveTypingQuietPeriod: TimeInterval = 0.65
-
-    var updateViewModel: UpdateStateModel {
-        updateController.model
-    }
 
 #if DEBUG
     private func pointerString(_ object: AnyObject?) -> String {
@@ -1284,8 +1277,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             configureUserNotifications()
             installMenuBarVisibilityObserver()
             syncApplicationPresentationPreferences()
-            updateController.actionDelegate = self
-            updateController.startUpdaterIfNeeded()
         }
         titlebarAccessoryController.start()
         windowDecorationsController.start()
@@ -1303,25 +1294,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         scheduleInitialMainWindowBootstrap(debugSource: "didFinishLaunching")
         StartupBreadcrumbLog.append("appDelegate.didFinish.complete")
 #if DEBUG
-        UpdateTestSupport(model: updateController.model, log: updateLog).applyIfNeeded()
-        if env["CMUX_UI_TEST_MODE"] == "1" {
-            let trigger = env["CMUX_UI_TEST_TRIGGER_UPDATE_CHECK"] ?? "<nil>"
-            let feed = env["CMUX_UI_TEST_FEED_URL"] ?? "<nil>"
-            updateLog.append("ui test env: trigger=\(trigger) feed=\(feed)")
-        }
-        if env["CMUX_UI_TEST_TRIGGER_UPDATE_CHECK"] == "1" {
-            updateLog.append("ui test trigger update check detected")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                guard let self else { return }
-                let windowIds = NSApp.windows.map { $0.identifier?.rawValue ?? "<nil>" }
-                updateLog.append("ui test windows: count=\(NSApp.windows.count) ids=\(windowIds.joined(separator: ","))")
-                if UpdateTestSupport(model: self.updateController.model, log: updateLog).performMockFeedCheckIfNeeded() {
-                    return
-                }
-                self.checkForUpdates(nil)
-            }
-        }
-
         // In UI tests, `WindowGroup` occasionally fails to materialize a window quickly on the VM.
         // If there are no windows shortly after launch, force-create one so XCUITest can proceed.
         if isRunningUnderXCTest {
@@ -7058,7 +7030,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         cmuxConfigStore.wireDirectoryTracking(tabManager: tabManager)
         cmuxConfigStore.loadAll()
 
-        let root = ContentView(updateViewModel: updateViewModel, windowId: windowId)
+        let root = ContentView(windowId: windowId)
             .environmentObject(tabManager)
             .environmentObject(notificationStore)
             .environmentObject(sidebarState)
@@ -7216,16 +7188,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return windowId
     }
 
-    @objc func checkForUpdates(_ sender: Any?) {
-        updateController.model.setOverrideState(nil)
-        updateController.checkForUpdates()
-    }
-
-    func checkForUpdatesInCustomUI() {
-        updateController.model.setOverrideState(nil)
-        updateController.checkForUpdatesInCustomUI()
-    }
-
     func openWelcomeWorkspace() {
         guard let context = preferredMainWindowContextForWorkspaceCreation(event: nil, debugSource: "welcome") else {
             return
@@ -7244,16 +7206,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 UserDefaults.standard.set(true, forKey: WelcomeSettings.shownKey)
             }
         })
-    }
-
-    @objc func applyUpdateIfAvailable(_ sender: Any?) {
-        updateController.model.setOverrideState(nil)
-        updateController.installUpdate()
-    }
-
-    @objc func attemptUpdate(_ sender: Any?) {
-        updateController.model.setOverrideState(nil)
-        updateController.attemptUpdate()
     }
 
     func isCmuxCLIInstalledInPATH() -> Bool {
@@ -7362,9 +7314,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             },
             onOpenTaskManager: {
                 TaskManagerWindowController.shared.show()
-            },
-            onCheckForUpdates: { [weak self] in
-                self?.checkForUpdates(nil)
             },
             onOpenPreferences: { [weak self] in
                 self?.openPreferencesWindow(debugSource: "menuBarExtra")
@@ -7580,33 +7529,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.titlebarAccessoryController.showNotificationsPopover(animated: false)
         }
     }
-
-    #if DEBUG
-    @objc func showUpdatePill(_ sender: Any?) {
-        updateViewModel.debugOverrideText = nil
-        updateController.model.setOverrideState(.installing(.init(isAutoUpdate: true, retryTerminatingApplication: {}, dismiss: {})))
-    }
-
-    @objc func showUpdatePillLongNightly(_ sender: Any?) {
-        updateViewModel.debugOverrideText = "Update Available: 0.32.0-nightly+20260216.abc1234"
-        updateController.model.setOverrideState(.notFound(.init(acknowledgement: {})))
-    }
-
-    @objc func showUpdatePillLoading(_ sender: Any?) {
-        updateViewModel.debugOverrideText = nil
-        updateController.model.setOverrideState(.checking(.init(cancel: {})))
-    }
-
-    @objc func hideUpdatePill(_ sender: Any?) {
-        updateViewModel.debugOverrideText = nil
-        updateController.model.setOverrideState(.idle)
-    }
-
-    @objc func clearUpdatePillOverride(_ sender: Any?) {
-        updateViewModel.debugOverrideText = nil
-        updateController.model.setOverrideState(nil)
-    }
-#endif
 
     @objc func copyUpdateLogs(_ sender: Any?) {
         let logText = updateLog.snapshot()
@@ -12463,8 +12385,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        // User-initiated update checks are always allowed; other items are unconditionally valid
-        // (this preserves the prior UpdateController.validateMenuItem behavior).
+        // All menu items are unconditionally valid.
         true
     }
 
@@ -14267,31 +14188,3 @@ private extension NSWindow {
 
 }
 
-// MARK: - CmuxUpdater seams
-
-/// Conforms the composition root to the updater package's inversion seams: the host actions the
-/// updater triggers (``UpdateActionsHost``) and the retry/relaunch hooks it calls back into
-/// (``UpdateActionDelegate``). `checkForUpdatesInCustomUI()` is satisfied by the method on the
-/// main `AppDelegate` declaration.
-extension AppDelegate: UpdateActionDelegate, UpdateActionsHost {
-    func updaterRequestsRetryCheckForUpdates() {
-        checkForUpdates(nil)
-    }
-
-    func updaterWillRelaunchApplication() {
-        persistSessionForUpdateRelaunch()
-        TerminalController.shared.stop()
-        NSApp.invalidateRestorableState()
-        for window in NSApp.windows {
-            window.invalidateRestorableState()
-        }
-    }
-
-    func attemptUpdate() {
-        attemptUpdate(nil)
-    }
-
-    var updateLogPath: String {
-        updateLog.logPath()
-    }
-}

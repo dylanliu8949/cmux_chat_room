@@ -4,8 +4,6 @@ import Bonsplit
 import Combine
 import CmuxSettings
 import CmuxSettingsUI
-import CmuxUpdater
-import CmuxUpdaterUI
 import ImageIO
 import Observation
 import SwiftUI
@@ -1027,7 +1025,6 @@ func titlebarShortcutHintShouldShow(
 }
 
 struct ContentView: View {
-    var updateViewModel: UpdateStateModel
     let windowId: UUID
     @EnvironmentObject var tabManager: TabManager
     @EnvironmentObject var notificationStore: TerminalNotificationStore
@@ -1455,7 +1452,6 @@ struct ContentView: View {
         static let panelShouldPin = "panel.shouldPin"
         static let panelHasUnread = "panel.hasUnread"
         static let panelCanMoveToNewWorkspace = "panel.canMoveToNewWorkspace"
-        static let updateHasAvailable = "update.hasAvailable"
         static let cliInstalledInPATH = "cli.installedInPATH"
         static let defaultTerminalIsDefault = "defaultTerminal.isDefault"
         static let browserDisabled = "browser.disabled"
@@ -1888,7 +1884,6 @@ struct ContentView: View {
 
     private var sidebarView: some View {
         VerticalTabsSidebar(
-            updateViewModel: updateViewModel,
             windowId: windowId,
             onSendFeedback: presentFeedbackComposer,
             onToggleSidebar: { sidebarState.toggle() },
@@ -6211,10 +6206,6 @@ struct ContentView: View {
             }
         }
 
-        if case .updateAvailable = updateViewModel.effectiveState {
-            snapshot.setBool(CommandPaletteContextKeys.updateHasAvailable, true)
-        }
-
         return snapshot
     }
 
@@ -6538,31 +6529,6 @@ struct ContentView: View {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty },
                 when: { !$0.bool(CommandPaletteContextKeys.defaultTerminalIsDefault) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.checkForUpdates",
-                title: constant(String(localized: "command.checkForUpdates.title", defaultValue: "Check for Updates")),
-                subtitle: constant(String(localized: "command.checkForUpdates.subtitle", defaultValue: "Global")),
-                keywords: ["update", "upgrade", "release"]
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.applyUpdateIfAvailable",
-                title: constant(String(localized: "command.applyUpdateIfAvailable.title", defaultValue: "Apply Update (If Available)")),
-                subtitle: constant(String(localized: "command.applyUpdateIfAvailable.subtitle", defaultValue: "Global")),
-                keywords: ["apply", "install", "update", "available"],
-                when: { $0.bool(CommandPaletteContextKeys.updateHasAvailable) }
-            )
-        )
-        contributions.append(
-            CommandPaletteCommandContribution(
-                commandId: "palette.attemptUpdate",
-                title: constant(String(localized: "command.attemptUpdate.title", defaultValue: "Attempt Update")),
-                subtitle: constant(String(localized: "command.attemptUpdate.subtitle", defaultValue: "Global")),
-                keywords: ["attempt", "check", "update", "upgrade", "release"]
             )
         )
         contributions.append(
@@ -7581,15 +7547,6 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.makeDefaultTerminal") {
             DefaultTerminalUserAction.setAsDefault(debugSource: "palette.makeDefaultTerminal")
-        }
-        registry.register(commandId: "palette.checkForUpdates") {
-            AppDelegate.shared?.checkForUpdates(nil)
-        }
-        registry.register(commandId: "palette.applyUpdateIfAvailable") {
-            AppDelegate.shared?.applyUpdateIfAvailable(nil)
-        }
-        registry.register(commandId: "palette.attemptUpdate") {
-            AppDelegate.shared?.attemptUpdate(nil)
         }
         registry.register(commandId: "palette.restartSocketListener") {
             AppDelegate.shared?.restartSocketListener(nil)
@@ -9620,7 +9577,6 @@ enum SidebarShortcutHintFreezePolicy {
 }
 
 struct VerticalTabsSidebar: View {
-    var updateViewModel: UpdateStateModel
     let windowId: UUID
     let onSendFeedback: () -> Void
     let onToggleSidebar: () -> Void
@@ -9903,7 +9859,7 @@ struct VerticalTabsSidebar: View {
 
         ZStack(alignment: .bottomLeading) {
             workspaceScrollArea(renderContext: renderContext)
-            SidebarFooter(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
+            SidebarFooter(onSendFeedback: onSendFeedback)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityIdentifier("Sidebar")
@@ -11495,14 +11451,13 @@ final class WindowScopedShortcutHintModifierMonitor {
 }
 
 private struct SidebarFooter: View {
-    var updateViewModel: UpdateStateModel
     let onSendFeedback: () -> Void
 
     var body: some View {
 #if DEBUG
-        SidebarDevFooter(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
+        SidebarDevFooter(onSendFeedback: onSendFeedback)
 #else
-        SidebarFooterButtons(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
+        SidebarFooterButtons(onSendFeedback: onSendFeedback)
             .padding(.leading, 6)
             .padding(.trailing, 10)
             .padding(.bottom, 6)
@@ -11511,15 +11466,11 @@ private struct SidebarFooter: View {
 }
 
 private struct SidebarFooterButtons: View {
-    var updateViewModel: UpdateStateModel
     let onSendFeedback: () -> Void
 
     var body: some View {
         HStack(spacing: 4) {
             SidebarHelpMenuButton(onSendFeedback: onSendFeedback)
-            if let updateActionsHost = AppDelegate.shared {
-                UpdatePill(model: updateViewModel, accent: cmuxAccentColor(), actions: updateActionsHost)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -11771,7 +11722,6 @@ private enum SidebarHelpMenuAction {
     case github
     case githubIssues
     case discord
-    case checkForUpdates
     case sendFeedback
     case welcome
 }
@@ -12387,12 +12337,6 @@ private struct SidebarHelpMenuButton: View {
                     isExternalLink: true
                 )
             }
-            helpOptionButton(
-                title: String(localized: "command.checkForUpdates.title", defaultValue: "Check for Updates"),
-                action: .checkForUpdates,
-                accessibilityIdentifier: "SidebarHelpMenuOptionCheckForUpdates",
-                isExternalLink: false
-            )
         }
         .padding(8)
         .frame(minWidth: 200)
@@ -12482,10 +12426,6 @@ private struct SidebarHelpMenuButton: View {
         case .discord:
             guard let discordURL else { return }
             NSWorkspace.shared.open(discordURL)
-        case .checkForUpdates:
-            Task { @MainActor in
-                AppDelegate.shared?.checkForUpdates(nil)
-            }
         case .sendFeedback:
             isPopoverPresented = false
             onSendFeedback()
@@ -12683,14 +12623,13 @@ private struct SidebarFooterIconButtonStyleBody: View {
 
 #if DEBUG
 private struct SidebarDevFooter: View {
-    var updateViewModel: UpdateStateModel
     let onSendFeedback: () -> Void
     @AppStorage(DevBuildBannerDebugSettings.sidebarBannerVisibleKey)
     private var showSidebarDevBuildBanner = DevBuildBannerDebugSettings.defaultShowSidebarBanner
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SidebarFooterButtons(updateViewModel: updateViewModel, onSendFeedback: onSendFeedback)
+            SidebarFooterButtons(onSendFeedback: onSendFeedback)
             if showSidebarDevBuildBanner {
                 Text(String(localized: "debug.devBuildBanner.title", defaultValue: "THIS IS A DEV BUILD"))
                     .font(.system(size: 11, weight: .semibold))

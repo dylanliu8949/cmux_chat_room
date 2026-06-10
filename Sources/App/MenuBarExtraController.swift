@@ -12,7 +12,6 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
     private let onOpenNotification: (TerminalNotification) -> Void
     private let onJumpToLatestUnread: () -> Void
     private let onOpenTaskManager: () -> Void
-    private let onCheckForUpdates: () -> Void
     private let onOpenPreferences: () -> Void
     private let onQuitApp: () -> Void
     private var notificationMenuSnapshotCancellable: AnyCancellable?
@@ -28,7 +27,6 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
     private let jumpToUnreadItem = NSMenuItem(title: String(localized: "statusMenu.jumpToLatestUnread", defaultValue: "Jump to Latest Unread"), action: nil, keyEquivalent: "")
     private let markAllReadItem = NSMenuItem(title: String(localized: "statusMenu.markAllRead", defaultValue: "Mark All Read"), action: nil, keyEquivalent: "")
     private let clearAllItem = NSMenuItem(title: String(localized: "statusMenu.clearAll", defaultValue: "Clear All"), action: nil, keyEquivalent: "")
-    private let checkForUpdatesItem = NSMenuItem(title: String(localized: "menu.checkForUpdates", defaultValue: "Check for Updates…"), action: nil, keyEquivalent: "")
     private let preferencesItem = NSMenuItem(title: String(localized: "menu.preferences", defaultValue: "Preferences…"), action: nil, keyEquivalent: "")
     private let quitItem = NSMenuItem(title: String(localized: "menu.quitCmux", defaultValue: "Quit cmux"), action: nil, keyEquivalent: "")
 
@@ -40,7 +38,6 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
         onOpenNotification: @escaping (TerminalNotification) -> Void,
         onJumpToLatestUnread: @escaping () -> Void,
         onOpenTaskManager: @escaping () -> Void,
-        onCheckForUpdates: @escaping () -> Void,
         onOpenPreferences: @escaping () -> Void,
         onQuitApp: @escaping () -> Void
     ) {
@@ -50,7 +47,6 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
         self.onOpenNotification = onOpenNotification
         self.onJumpToLatestUnread = onJumpToLatestUnread
         self.onOpenTaskManager = onOpenTaskManager
-        self.onCheckForUpdates = onCheckForUpdates
         self.onOpenPreferences = onOpenPreferences
         self.onQuitApp = onQuitApp
         self.buildHintTitle = MenuBarBuildHintFormatter.menuTitle()
@@ -118,10 +114,6 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
         menu.addItem(clearAllItem)
 
         menu.addItem(.separator())
-
-        checkForUpdatesItem.target = self
-        checkForUpdatesItem.action = #selector(checkForUpdatesAction)
-        menu.addItem(checkForUpdatesItem)
 
         preferencesItem.target = self
         preferencesItem.action = #selector(preferencesAction)
@@ -252,10 +244,6 @@ final class MenuBarExtraController: NSObject, NSMenuDelegate {
 
     @objc private func clearAllAction() {
         notificationStore.clearAll()
-    }
-
-    @objc private func checkForUpdatesAction() {
-        onCheckForUpdates()
     }
 
     @objc private func preferencesAction() {

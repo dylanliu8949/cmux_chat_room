@@ -23,36 +23,6 @@ final class SidebarHelpMenuUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testHelpMenuCheckForUpdatesTriggersSidebarUpdatePill() {
-        let app = XCUIApplication()
-        app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"
-        app.launchEnvironment["CMUX_UI_TEST_FEED_URL"] = "https://cmux.test/appcast.xml"
-        app.launchEnvironment["CMUX_UI_TEST_FEED_MODE"] = "available"
-        app.launchEnvironment["CMUX_UI_TEST_UPDATE_VERSION"] = "9.9.9"
-        app.launchEnvironment["CMUX_UI_TEST_AUTO_ALLOW_PERMISSION"] = "1"
-        launchAndActivate(app)
-
-        XCTAssertTrue(waitForWindowCount(atLeast: 1, app: app, timeout: 6.0))
-
-        let helpButton = requireElement(
-            candidates: helpButtonCandidates(in: app),
-            timeout: 6.0,
-            description: "sidebar help button"
-        )
-        helpButton.click()
-
-        let checkForUpdatesItem = requireElement(
-            candidates: helpMenuItemCandidates(in: app, identifier: "SidebarHelpMenuOptionCheckForUpdates", title: "Check for Updates"),
-            timeout: 3.0,
-            description: "Check for Updates help menu item"
-        )
-        checkForUpdatesItem.click()
-
-        let updatePill = app.buttons["UpdatePill"]
-        XCTAssertTrue(updatePill.waitForExistence(timeout: 6.0))
-        XCTAssertEqual(updatePill.label, "Update Available: 9.9.9")
-    }
-
     func testHelpMenuSendFeedbackOpensComposerSheet() {
         let app = XCUIApplication()
         app.launchEnvironment["CMUX_UI_TEST_MODE"] = "1"

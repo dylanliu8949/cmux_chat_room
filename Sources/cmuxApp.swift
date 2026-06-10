@@ -2,7 +2,6 @@ import AppKit
 import CmuxSocketControl
 import CmuxSettings
 import CmuxSettingsUI
-import CmuxUpdaterUI
 import SwiftUI
 import Observation
 import Darwin
@@ -388,10 +387,6 @@ struct cmuxApp: App {
                 Button(String(localized: "menu.app.about", defaultValue: "About cmux")) {
                     showAboutPanel()
                 }
-                Button(String(localized: "menu.app.checkForUpdates", defaultValue: "Check for Updates…")) {
-                    appDelegate.checkForUpdates(nil)
-                }
-                InstallUpdateMenuItem(model: appDelegate.updateViewModel)
             }
 
             CommandGroup(replacing: .appTermination) {
@@ -399,26 +394,6 @@ struct cmuxApp: App {
                     NSApp.terminate(nil)
                 }
             }
-
-#if DEBUG
-            CommandMenu("Update Pill") {
-                Button("Show Update Pill") {
-                    appDelegate.showUpdatePill(nil)
-                }
-                Button("Show Long Nightly Pill") {
-                    appDelegate.showUpdatePillLongNightly(nil)
-                }
-                Button("Show Loading State") {
-                    appDelegate.showUpdatePillLoading(nil)
-                }
-                Button("Hide Update Pill") {
-                    appDelegate.hideUpdatePill(nil)
-                }
-                Button("Automatic Update Pill") {
-                    appDelegate.clearUpdatePillOverride(nil)
-                }
-            }
-#endif
 
             CommandMenu(String(localized: "menu.notifications.title", defaultValue: "Notifications")) {
                 let snapshot = notificationMenuSnapshot

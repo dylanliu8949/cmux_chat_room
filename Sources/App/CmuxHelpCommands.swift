@@ -14,10 +14,6 @@ extension cmuxApp {
                 presentFeedbackFromHelpMenu()
             }
 
-            Button(String(localized: "command.checkForUpdates.title", defaultValue: "Check for Updates")) {
-                AppDelegate.shared?.checkForUpdates(nil)
-            }
-
             Divider()
 
             helpResourceButton(.githubIssues)
