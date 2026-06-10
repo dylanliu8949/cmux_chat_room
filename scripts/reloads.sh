@@ -223,26 +223,16 @@ if [[ -f "$INFO_PLIST" ]]; then
   STAGING_SLUG="$(staging_slug_from_bundle_id "$BUNDLE_ID")"
   APP_SUPPORT_DIR="$HOME/Library/Application Support/cmux"
   if [[ -n "$STAGING_SLUG" ]]; then
-    CMUXD_SOCKET="${APP_SUPPORT_DIR}/cmuxd-${STAGING_SLUG}.sock"
     CMUX_SOCKET_PATH_VALUE="/tmp/cmux-staging-${STAGING_SLUG}.sock"
   else
-    CMUXD_SOCKET="${APP_SUPPORT_DIR}/cmuxd-staging.sock"
     CMUX_SOCKET_PATH_VALUE="/tmp/cmux-staging.sock"
   fi
   write_last_socket_path "$CMUX_SOCKET_PATH_VALUE"
   /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST" 2>/dev/null || true
   /usr/libexec/PlistBuddy -c "Set :LSEnvironment:CMUX_BUNDLE_ID \"${BUNDLE_ID}\"" "$INFO_PLIST" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:CMUX_BUNDLE_ID string \"${BUNDLE_ID}\"" "$INFO_PLIST"
-  /usr/libexec/PlistBuddy -c "Set :LSEnvironment:CMUXD_UNIX_PATH \"${CMUXD_SOCKET}\"" "$INFO_PLIST" 2>/dev/null \
-    || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:CMUXD_UNIX_PATH string \"${CMUXD_SOCKET}\"" "$INFO_PLIST"
   /usr/libexec/PlistBuddy -c "Set :LSEnvironment:CMUX_SOCKET_PATH \"${CMUX_SOCKET_PATH_VALUE}\"" "$INFO_PLIST" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :LSEnvironment:CMUX_SOCKET_PATH string \"${CMUX_SOCKET_PATH_VALUE}\"" "$INFO_PLIST"
-  if [[ -S "$CMUXD_SOCKET" ]]; then
-    for PID in $(lsof -t "$CMUXD_SOCKET" 2>/dev/null); do
-      kill "$PID" 2>/dev/null || true
-    done
-    rm -f "$CMUXD_SOCKET"
-  fi
   if [[ -S "$CMUX_SOCKET_PATH_VALUE" ]]; then
     rm -f "$CMUX_SOCKET_PATH_VALUE"
   fi
@@ -256,16 +246,6 @@ sleep 0.3
 # Kill any running staging instance; allow side-by-side with the main and dev apps.
 pkill -f "${APP_NAME}.app/Contents/MacOS/${BASE_APP_NAME}" || true
 sleep 0.3
-CMUXD_SRC="$PWD/cmuxd/zig-out/bin/cmuxd"
-if [[ -d "$PWD/cmuxd" ]]; then
-  (cd "$PWD/cmuxd" && zig build -Doptimize=ReleaseFast)
-fi
-if [[ -x "$CMUXD_SRC" ]]; then
-  BIN_DIR="$APP_PATH/Contents/Resources/bin"
-  mkdir -p "$BIN_DIR"
-  cp "$CMUXD_SRC" "$BIN_DIR/cmuxd"
-  chmod +x "$BIN_DIR/cmuxd"
-fi
 # Avoid inheriting cmux/ghostty environment variables from the terminal that
 # runs this script (often inside another cmux instance), which can cause
 # socket and resource-path conflicts.
@@ -274,7 +254,6 @@ OPEN_CLEAN_ENV=(
   -u CMUX_SOCKET_PATH
   -u CMUX_TAB_ID
   -u CMUX_PANEL_ID
-  -u CMUXD_UNIX_PATH
   -u CMUX_TAG
   -u CMUX_BUNDLE_ID
   -u CMUX_SHELL_INTEGRATION
@@ -291,7 +270,7 @@ OPEN_CLEAN_ENV=(
 
 # Always inject staging socket paths via env to ensure they take effect
 # (LSEnvironment requires app restart to pick up plist changes).
-"${OPEN_CLEAN_ENV[@]}" CMUX_BUNDLE_ID="$BUNDLE_ID" CMUX_SOCKET_PATH="$CMUX_SOCKET_PATH_VALUE" CMUXD_UNIX_PATH="$CMUXD_SOCKET" open -g "$APP_PATH"
+"${OPEN_CLEAN_ENV[@]}" CMUX_BUNDLE_ID="$BUNDLE_ID" CMUX_SOCKET_PATH="$CMUX_SOCKET_PATH_VALUE" open -g "$APP_PATH"
 
 # Safety: ensure only one instance is running.
 sleep 0.2

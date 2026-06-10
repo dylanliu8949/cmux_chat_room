@@ -45,9 +45,6 @@ class CmuxPerfRunner:
         self.tag_slug = sanitize_path(args.tag)
         self.tag_id = sanitize_bundle(args.tag)
         self.socket_path = pathlib.Path(f"/tmp/cmux-debug-{self.tag_slug}.sock")
-        self.cmuxd_socket_path = pathlib.Path(
-            os.path.expanduser(f"~/Library/Application Support/cmux/cmuxd-dev-{self.tag_slug}.sock")
-        )
         self.debug_log_path = pathlib.Path(f"/tmp/cmux-debug-{self.tag_slug}.log")
         self.stdout_path = pathlib.Path(f"/tmp/cmux-perf-{self.tag_slug}-stdout.log")
         self.app_path = pathlib.Path(args.app_path).expanduser() if args.app_path else self.default_app_path()
@@ -92,7 +89,6 @@ class CmuxPerfRunner:
         for suffix in ("", "-previous"):
             (app_support / f"session-{bundle_id}{suffix}.json").unlink(missing_ok=True)
         self.socket_path.unlink(missing_ok=True)
-        self.cmuxd_socket_path.unlink(missing_ok=True)
         self.debug_log_path.unlink(missing_ok=True)
         self.stdout_path.unlink(missing_ok=True)
         if self.fixture_root.exists():
@@ -109,7 +105,6 @@ class CmuxPerfRunner:
             "CMUX_PANEL_ID",
             "CMUX_SURFACE_ID",
             "CMUX_WORKSPACE_ID",
-            "CMUXD_UNIX_PATH",
             "CMUX_TAG",
             "CMUX_PORT",
             "CMUX_PORT_END",
@@ -130,7 +125,6 @@ class CmuxPerfRunner:
                 "CMUX_SOCKET": str(self.socket_path),
                 "CMUX_SOCKET_MODE": "automation",
                 "CMUX_SOCKET_PATH": str(self.socket_path),
-                "CMUXD_UNIX_PATH": str(self.cmuxd_socket_path),
                 "CMUX_DEBUG_LOG": str(self.debug_log_path),
                 "CMUX_TAG": self.tag,
                 "CMUX_BUNDLE_ID": f"com.cmuxterm.app.debug.{self.tag_id}",
@@ -200,7 +194,6 @@ class CmuxPerfRunner:
             check=False,
         )
         self.socket_path.unlink(missing_ok=True)
-        self.cmuxd_socket_path.unlink(missing_ok=True)
 
     def run_cli(self, args: list[str], input_text: str | None = None, timeout: float = 60, check: bool = True) -> str:
         proc = subprocess.run(

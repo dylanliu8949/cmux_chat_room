@@ -12,9 +12,6 @@ import re
 IMMUTABLE_ASSET_PATTERNS = [
     re.compile(r"^cmux-nightly-macos-(?P<build>\d+)\.dmg$"),
     re.compile(r"^cmux-nightly-universal-macos-(?P<build>\d+)\.dmg$"),
-    re.compile(r"^cmuxd-remote-(?:darwin-arm64|darwin-amd64|linux-arm64|linux-amd64)-(?P<build>\d+)$"),
-    re.compile(r"^cmuxd-remote-checksums-(?P<build>\d+)\.txt$"),
-    re.compile(r"^cmuxd-remote-manifest-(?P<build>\d+)\.json$"),
 ]
 
 

@@ -7,7 +7,6 @@
 #   /tmp/cmux-debug-<tag>.sock                             (control socket)
 #   /tmp/cmux-debug-<tag>.log                              (debug log)
 #   /tmp/cmux-reload-<tag>.log                             (build log)
-#   ~/Library/Application Support/cmux/cmuxd-dev-<tag>.sock (cmuxd socket)
 #
 # This script removes those artifacts for tags that are safe to clean.
 # Safety rules (always on):
@@ -34,7 +33,6 @@
 set -euo pipefail
 
 DERIVED_DATA_ROOT="$HOME/Library/Developer/Xcode/DerivedData"
-APP_SUPPORT_DIR="$HOME/Library/Application Support/cmux"
 LAST_CLI_PATH_FILE="/tmp/cmux-last-cli-path"
 
 apply=0
@@ -86,8 +84,7 @@ artifact_paths_for_tag() {
         "/tmp/cmux-${tag}.tar" \
         "/tmp/cmux-debug-${tag}.sock" \
         "/tmp/cmux-debug-${tag}.log" \
-        "/tmp/cmux-reload-${tag}.log" \
-        "$APP_SUPPORT_DIR/cmuxd-dev-${tag}.sock"
+        "/tmp/cmux-reload-${tag}.log"
 }
 
 bytes_in_path() {

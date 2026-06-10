@@ -77,7 +77,6 @@ unset CMUX_WORKSPACE_ID
 unset CMUX_SURFACE_ID
 unset CMUX_TAB_ID
 unset CMUX_PANEL_ID
-unset CMUXD_UNIX_PATH
 unset CMUX_DEBUG_LOG
 export CMUX_SOCKET_PATH="$socket_path"
 export CMUX_TAG="$tag_slug"

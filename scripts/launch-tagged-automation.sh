@@ -107,7 +107,6 @@ TAG_SLUG="$(sanitize_path "$TAG")"
 APP="$HOME/Library/Developer/Xcode/DerivedData/cmux-${TAG_SLUG}/Build/Products/Debug/cmux DEV ${TAG}.app"
 BID="com.cmuxterm.app.debug.${TAG_ID}"
 SOCK="/tmp/cmux-debug-${TAG_SLUG}.sock"
-DSOCK="$HOME/Library/Application Support/cmux/cmuxd-dev-${TAG_SLUG}.sock"
 LOG="/tmp/cmux-debug-${TAG_SLUG}.log"
 
 if [[ ! -d "$APP" ]]; then
@@ -118,7 +117,7 @@ fi
 /usr/bin/osascript -e "tell application id \"${BID}\" to quit" >/dev/null 2>&1 || true
 sleep 0.5
 pkill -f "cmux DEV ${TAG}.app/Contents/MacOS/cmux DEV" || true
-rm -f "$SOCK" "$DSOCK"
+rm -f "$SOCK"
 sleep 0.5
 
 OPEN_ENV=(
@@ -129,7 +128,6 @@ OPEN_ENV=(
   -u CMUX_PANEL_ID
   -u CMUX_SURFACE_ID
   -u CMUX_WORKSPACE_ID
-  -u CMUXD_UNIX_PATH
   -u CMUX_TAG
   -u CMUX_PORT
   -u CMUX_PORT_END
@@ -149,7 +147,6 @@ OPEN_ENV=(
   -u XDG_DATA_DIRS
   "CMUX_SOCKET_MODE=${MODE}"
   "CMUX_SOCKET_PATH=${SOCK}"
-  "CMUXD_UNIX_PATH=${DSOCK}"
   "CMUX_DEBUG_LOG=${LOG}"
   "CMUX_DISABLE_SESSION_RESTORE=1"
 )
@@ -176,7 +173,6 @@ fi
 echo "app: $APP"
 echo "bundle_id: $BID"
 echo "socket: $SOCK"
-echo "cmuxd_socket: $DSOCK"
 echo "log: $LOG"
 echo "mode: $MODE"
 echo "socket_ready: $(if [[ -S "$SOCK" ]]; then echo yes; else echo no; fi)"
