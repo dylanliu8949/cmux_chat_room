@@ -1,484 +1,484 @@
-**作者**：[GitHub 用户名]
-**大小**：[XS|S|M|L|XL|XXL|XXXL]
-**base commit hash**：[***********]  
-**branch name**：[分支名称]  
-**创建日期**：[YYYY-MM-DD]
-**状态**：[create-plan-in-progress|create-plan-complete|review-plan-in-progress|review-plan-complete|plan-execution-in-progress|plan-execution-complete|manual-test-in-progress|manual-test-complete|automated-ui-test-in-progress|automated-ui-test-complete|code-review-in-progress|code-review-complete|merge-complete|abandoned]
-**前置任务（如适用）**：[必须先完成的任务]
-**后续任务（如适用）**：[依赖此任务的后续工作]
+**Author**: [GitHub username]
+**Size**: [XS|S|M|L|XL|XXL|XXXL]
+**base commit hash**: [***********]  
+**branch name**: [branch name]  
+**Created**: [YYYY-MM-DD]
+**Status**: [create-plan-in-progress|create-plan-complete|review-plan-in-progress|review-plan-complete|plan-execution-in-progress|plan-execution-complete|manual-test-in-progress|manual-test-complete|automated-ui-test-in-progress|automated-ui-test-complete|code-review-in-progress|code-review-complete|merge-complete|abandoned]
+**Prerequisite tasks (if applicable)**: [tasks that must be completed first]
+**Follow-up tasks (if applicable)**: [work that depends on this task]
 
-> **大小说明**：
-> - `XS`: 超小任务（代码变更行数 < 50，涉及文件数 < 3，新增抽象数 0）
-> - `S`: 小任务（代码变更行数 50-200，涉及文件数 3-5，新增抽象数 0-1）
-> - `M`: 中等任务（代码变更行数 200-500，涉及文件数 5-10，新增抽象数 1-3）
-> - `L`: 大任务（代码变更行数 500-1000，涉及文件数 10-20，新增抽象数 3-5）
-> - `XL`: 超大任务（代码变更行数 > 1000，涉及文件数 > 20，新增抽象数 > 5）
-> - `XXL`: 特大任务（代码变更行数 > 3000，涉及文件数 > 50，跨多个模块的架构变更）— 适合由 AI Agent 主导执行、有完整单元测试和 UI 测试覆盖的场景
-> - `XXXL`: 巨型任务（代码变更行数 > 5000，涉及文件数 > 100，系统级架构重构）— 仅适用于 AI Agent 全程执行 + 完整自动化测试套件可兜底的 yolo 场景
+> **Size guide**:
+> - `XS`: extra-small task (lines of code changed < 50, files involved < 3, new abstractions 0)
+> - `S`: small task (lines of code changed 50-200, files involved 3-5, new abstractions 0-1)
+> - `M`: medium task (lines of code changed 200-500, files involved 5-10, new abstractions 1-3)
+> - `L`: large task (lines of code changed 500-1000, files involved 10-20, new abstractions 3-5)
+> - `XL`: extra-large task (lines of code changed > 1000, files involved > 20, new abstractions > 5)
+> - `XXL`: very-large task (lines of code changed > 3000, files involved > 50, architectural changes spanning multiple modules) — suited to scenarios driven by an AI Agent with full unit-test and UI-test coverage
+> - `XXXL`: gigantic task (lines of code changed > 5000, files involved > 100, system-level architectural refactor) — only for yolo scenarios executed end-to-end by an AI Agent with a full automated test suite as a backstop
 >
-> **机械性变更降级规则**：
-> 上述大小阈值衡量的是**设计/审查复杂度**，不是 diff 行数或文件数。如果绝大部分变更是纯机械操作——每处都遵循同一条可机械验证的规则、不涉及业务逻辑或设计判断——应将大小**至少降一档，必要时大幅降级**（例如：100 文件的方法重命名实际复杂度可能只是 XS/S，因为审查者抽样 3-5 处确认替换规则一致即可，不需要逐文件思考）。
+> **Mechanical-change downgrade rule**:
+> The size thresholds above measure **design/review complexity**, not diff lines or file count. If the vast majority of changes are purely mechanical — each one following the same mechanically verifiable rule, involving no business logic or design judgment — the size should be **downgraded by at least one grade, and substantially more when warranted** (e.g. a method rename across 100 files may actually be only XS/S complexity, because the reviewer only needs to sample 3-5 spots to confirm the replacement rule is consistent, without thinking through each file).
 >
-> 典型机械性变更：
-> - 重命名 public 方法 / 类 / 字段，导致全仓库 N 个调用点跟改
-> - 修改某个广泛使用的函数签名（增删参数、改返回类型），所有调用点机械跟改
-> - 模块拆分 / 重组，大量文件移动 + import 路径调整
-> - 批量修复新增 lint 规则触发的全仓库违规（参考 PR #332）
-> - 按 codemod 规则批量替换 API（旧 API → 新 API 迁移）
-> - 统一 import 顺序 / 路径 / 别名
-> - 目录重组、按规范批量重命名文件
-> - 给已有未标注的代码批量加类型注解
+> Typical mechanical changes:
+> - Renaming a public method / class / field, causing N call sites across the repo to follow
+> - Changing the signature of a widely used function (adding/removing parameters, changing return type), with all call sites following mechanically
+> - Module split / reorganization, with many file moves + import path adjustments
+> - Bulk-fixing repo-wide violations triggered by a new lint rule (see PR #332)
+> - Bulk API replacement per codemod rule (old API → new API migration)
+> - Unifying import order / paths / aliases
+> - Directory reorganization, bulk file renaming per convention
+> - Bulk-adding type annotations to existing unannotated code
 >
-> 判断准则：
-> - 审查者是否需要逐文件思考？如果只需抽样核对"是否都按同一规则改"，就是机械性变更
-> - 仍按原始复杂度计大小的部分：触发机械变更的"源头"本身（新增的 lint 规则、codemod 脚本、新 API 接口、新签名的方法声明）不参与降级
+> Judgment criteria:
+> - Does the reviewer need to think through each file? If they only need to spot-check "whether everything follows the same rule", it is a mechanical change
+> - Parts that still count at their original complexity: the "source" that triggers the mechanical change itself (the new lint rule, the codemod script, the new API interface, the method declaration with the new signature) does not participate in the downgrade
 
-> **状态说明**：
-> 状态值为 `<phase>-<phase-state>` 的组合：7 个 phase 按下表顺序线性推进；前 6 个 phase 各有 `in-progress` 和 `complete` 两个 phase-state，第 7 个 phase `merge` 只有 `merge-complete`（合并是瞬时操作，没有"进行中"的中间态——`code-review-complete` 之后下一个状态就是 `merge-complete`）。完整枚举共 14 值：`<phase>-in-progress` / `<phase>-complete` × 6 + `merge-complete` + 特殊终态 `abandoned`（任意阶段可手动写入，表示计划废弃）。该字段是机器可读的工作流门控，请勿引入此列表以外的值。
+> **Status guide**:
+> The status value is a `<phase>-<phase-state>` combination: the 7 phases advance linearly in the order of the table below; the first 6 phases each have an `in-progress` and a `complete` phase-state, and the 7th phase `merge` has only `merge-complete` (merging is an instantaneous operation with no "in-progress" intermediate state — the next state after `code-review-complete` is `merge-complete`). The full enumeration is 14 values: `<phase>-in-progress` / `<phase>-complete` × 6 + `merge-complete` + the special terminal state `abandoned` (can be written manually at any phase, indicating the plan is abandoned). This field is a machine-readable workflow gate; do not introduce values outside this list.
 >
-> | # | phase | 含义 | `in-progress` 写入时机 | `complete` 写入时机 |
-> |---|-------|------|-----------------------|---------------------|
-> | 1 | `create-plan` | 计划文档撰写 | `/create-plan` 启动 | 落盘等待审查 |
-> | 2 | `review-plan` | 计划审查 | `/review-plan` 启动 | 审查通过（`/execute-plan` 的最低门槛） |
-> | 3 | `plan-execution` | 代码生成 | `/execute-plan` 启动 | 全部步骤完成 |
-> | 4 | `manual-test` | 人工手动测试 | 开发者手动 | 开发者手动 |
-> | 5 | `automated-ui-test` | 自动化 UI 测试 | 开发者 / 脚本 | 开发者 / 脚本 |
-> | 6 | `code-review` | PR 代码审查 | PR 开启 | 审查通过 |
-> | 7 | `merge` | 合并到 main | — （无 in-progress） | 合并完成；通常由下一次 `/pr` 在 agent 确认 PR 已合并后写入（终态） |
+> | # | phase | meaning | when `in-progress` is written | when `complete` is written |
+> |---|-------|---------|-------------------------------|----------------------------|
+> | 1 | `create-plan` | plan document authoring | `/create-plan` starts | saved to disk awaiting review |
+> | 2 | `review-plan` | plan review | `/review-plan` starts | review passes (the minimum bar for `/execute-plan`) |
+> | 3 | `plan-execution` | code generation | `/execute-plan` starts | all steps complete |
+> | 4 | `manual-test` | human manual testing | developer manually | developer manually |
+> | 5 | `automated-ui-test` | automated UI testing | developer / script | developer / script |
+> | 6 | `code-review` | PR code review | PR opened | review passes |
+> | 7 | `merge` | merge to main | — (no in-progress) | merge complete; usually written by the next `/pr` after the agent confirms the PR is merged (terminal) |
 >
-> **门控规则**：
-> - `/execute-plan` 仅当状态为 `review-plan-complete` 或 `plan-execution-in-progress` 时允许执行；其他状态一律拒绝
-> - `pr-checklist.yml` 校验：PR 引用的计划文档必须是本 PR diff 中新增的文件，或者 main 上已存在但状态 ≤ `plan-execution-in-progress` 的文件；任何 `plan-execution-complete` 及之后的 main 端状态都视为已用，禁止复用
+> **Gate rules**:
+> - `/execute-plan` is allowed only when the status is `review-plan-complete` or `plan-execution-in-progress`; all other states are rejected
+> - `pr-checklist.yml` validation: the plan document referenced by the PR must be a file newly added in this PR's diff, or a file that already exists on main with a status ≤ `plan-execution-in-progress`; any main-side status at or after `plan-execution-complete` is considered used and must not be reused
 
-# [任务标题]
+# [Task title]
 
-## 当前状态分析
-简要总结与任务相关的现有实现和约束条件。
+## Current State Analysis
+Briefly summarize the existing implementation and constraints relevant to the task.
 
-> **重要**：
-> - 仅包含与任务直接相关的内容
-> - 说明当前实现的关键点
-> - 列出可能影响实现的技术约束
-> - 使用 mindpilot MCP 绘制图表，描述相关组件如何组合在一起
+> **Important**:
+> - Include only content directly relevant to the task
+> - Explain the key points of the current implementation
+> - List the technical constraints that may affect the implementation
+> - Use the mindpilot MCP to draw a diagram describing how the relevant components fit together
 
-## 参考资料
-列出任务实施所需的所有文档、参考资料和集成指南，包括库文档、现有服务的 README 文件以及第三方 SDK 的集成文档。
+## References
+List all documents, references, and integration guides needed to implement the task, including library documentation, README files of existing services, and integration docs for third-party SDKs.
 
-> **重要**：
-> - 使用 **context7** 获取文档和参考资料
-> - 如果 **context7** 没有相关文档，必须在此部分提供文档链接
-> - 如果任务需要使用现有服务，应包含该服务的 README 文件路径
-> - 如果任务涉及第三方 SDK，应包含以下链接：
->   - SDK 集成文档
->   - 如何启用 XX 功能的文档
-> - 必须包含 `guides/encyclopedia.md`，并在创建计划时先使用该文件查找相关指南与文档
-> - 必须包含 `guides/naming-guide.md`，确保新增的模块、文件、类、函数命名符合项目规范
-> - 如果计划包含单元测试，必须包含 `unit-test/docs/how_to_write_stable_unit_test.md`
-> - 如果计划涉及日志输出或运行时断言检测，必须包含 `shared-services/logger-service/docs/how_to.md`
-> - 如果此任务基于另一个任务，或未来任务依赖此任务，应包含相关任务计划文档的路径
-> - 如果找不到或未提供所有相关文档，AI 应停止计划生成并通知开发者
+> **Important**:
+> - Use **context7** to fetch documentation and references
+> - If **context7** has no relevant documentation, you must provide documentation links in this section
+> - If the task requires using an existing service, include the path to that service's README file
+> - If the task involves a third-party SDK, include the following links:
+>   - SDK integration documentation
+>   - documentation on how to enable XX feature
+> - Must include `guides/encyclopedia.md`, and use it first when creating a plan to find relevant guides and documentation
+> - Must include `guides/naming-guide.md` to ensure newly added modules, files, classes, and functions follow project naming conventions
+> - If the plan includes unit tests, must include `unit-test/docs/how_to_write_stable_unit_test.md`
+> - If the plan involves log output or runtime assertion checks, must include `shared-services/logger-service/docs/how_to.md`
+> - If this task is based on another task, or future tasks depend on this task, include the paths to the relevant task plan documents
+> - If not all relevant documents can be found or provided, the AI should stop plan generation and notify the developer
 
-## 需要决策的事项
-列出所有未解决的选择项和问题，并提供推荐选项。在开发者解决这些事项之前，不要执行计划。
+## Decisions Needed
+List all unresolved choices and questions, providing recommended options. Do not execute the plan until the developer resolves these items.
 
-**当前计划完整程度**：[留空，待开发者决策后更新]
+**Current Plan Completeness**: [leave blank, update after the developer decides]
 
-> **注意**：初始生成计划时，此完整程度应留空。随着开发者做出更多决策，AI 应更新此百分比。
+> **Note**: When initially generating the plan, this completeness should be left blank. As the developer makes more decisions, the AI should update this percentage.
 
-> **重要**：
-> - 只有当计划完整程度达到或超过 95%（AI 有 95%+ 把握能完成任务）时，开发者才可以执行计划
-> - 任何不清楚、缺失或可以用不同解决方案实现的事项都应列在此部分
-> - AI 不应猜测，应在计划执行前始终询问相关信息
-> - 如果 AI 无法推断出可用选项，可以提出开放性问题
-> - 每个决策项可以有多个选项（不限于两个），根据实际情况列出所有可行的选择
-> - 每个选项的描述应列出优缺点（pros and cons）
-> - 在做出大的方向性决策后，AI 应继续提出后续问题并更新此部分
-> - 开发者做出决策后，应更新此完整程度百分比。
+> **Important**:
+> - The developer may execute the plan only when plan completeness reaches or exceeds 95% (the AI is 95%+ confident it can complete the task)
+> - Any item that is unclear, missing, or could be implemented with a different solution should be listed in this section
+> - The AI should not guess; it should always ask for relevant information before executing the plan
+> - If the AI cannot infer the available options, it may ask an open-ended question
+> - Each decision item can have multiple options (not limited to two); list all viable choices as appropriate
+> - Each option's description should list its pros and cons
+> - After making major directional decisions, the AI should continue asking follow-up questions and update this section
+> - After the developer makes a decision, this completeness percentage should be updated.
 
-<!-- 示例：开始 -->
-1. **决策项 1**
-   - 选项 A：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - 选项 B：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - 选项 C：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - **推荐**：选项 A（推荐理由）
+<!-- Example: BEGIN -->
+1. **Decision item 1**
+   - Option A: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - Option B: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - Option C: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - **Recommendation**: Option A (reason for recommendation)
 
-2. **决策项 2**
-   - 选项 A：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - 选项 B：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - **推荐**：选项 B（推荐理由）
+2. **Decision item 2**
+   - Option A: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - Option B: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - **Recommendation**: Option B (reason for recommendation)
 
-3. **决策项 3**
-   - 选项 A：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - 选项 B：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - 选项 C：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - 选项 D：[简短描述]
-     - 优点：[优点列表]
-     - 缺点：[缺点列表]
-   - **推荐**：选项 C（推荐理由）
+3. **Decision item 3**
+   - Option A: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - Option B: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - Option C: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - Option D: [short description]
+     - Pros: [list of pros]
+     - Cons: [list of cons]
+   - **Recommendation**: Option C (reason for recommendation)
 
-4. **决策项 4（开放性问题示例）**
-   - **问题**：[如果无法推断出可用选项，可以提出开放性问题，例如：应该使用什么数据结构来存储这些数据？]
-<!-- 示例：结束 -->
+4. **Decision item 4 (open-ended question example)**
+   - **Question**: [if available options cannot be inferred, ask an open-ended question, e.g.: what data structure should be used to store this data?]
+<!-- Example: END -->
 
-## 已归档的决策
-记录在实施过程中已做出的决策，包括提供给用户的选项（简短描述）和用户的选择。
+## Archived Decisions
+Record decisions made during implementation, including the options offered to the user (short descriptions) and the user's choice.
 
-<!-- 示例：开始 -->
-1. **决策项 1**
-   - **选项**：选项 A（简短描述）、选项 B（简短描述）、选项 C（简短描述）
-   - **已选择**：选项 A
+<!-- Example: BEGIN -->
+1. **Decision item 1**
+   - **Options**: Option A (short description), Option B (short description), Option C (short description)
+   - **Chosen**: Option A
 
-2. **决策项 2**
-   - **选项**：选项 A（简短描述）、选项 B（简短描述）
-   - **已选择**：选项 B
+2. **Decision item 2**
+   - **Options**: Option A (short description), Option B (short description)
+   - **Chosen**: Option B
 
-3. **决策项 4（开放性问题示例）**
-   - **问题**：应该使用什么数据结构来存储这些数据？
-   - **已选择**：使用 HashMap（完整描述：需要快速查找和更新操作，HashMap 提供了 O(1) 的平均时间复杂度）
-<!-- 示例：结束 -->
+3. **Decision item 4 (open-ended question example)**
+   - **Question**: What data structure should be used to store this data?
+   - **Chosen**: Use a HashMap (full description: fast lookup and update operations are needed, and a HashMap provides O(1) average time complexity)
+<!-- Example: END -->
 
-## 功能控制/实验（如适用）
+## Feature Flags / Experiments (if applicable)
 
-如果任务涉及 UI 更改或实验，在此部分定义功能控制 flag 和实验配置。
+If the task involves UI changes or experiments, define the feature flags and experiment configuration in this section.
 
-> **重要**：
-> - 建议所有 UI 更改都应使用功能控制进行 A/B 测试
-> - 必须定义实验名称和所有 flag 名称
-> - 必须说明每个 flag 切换/更改的内容
-> - 每个计划文档仅限一个实验
+> **Important**:
+> - It is recommended that all UI changes use feature flags for A/B testing
+> - Must define the experiment name and all flag names
+> - Must explain what each flag toggles/changes
+> - One experiment per plan document only
 
-<!-- 示例：开始 -->
-**实验名称**：[实验名称]
+<!-- Example: BEGIN -->
+**Experiment name**: [experiment name]
 
-- **flag 名称**：[flag 名称]
-  - **切换内容**：[此 flag 启用/禁用时会发生什么变化]
+- **flag name**: [flag name]
+  - **What it toggles**: [what changes when this flag is enabled/disabled]
 
-- **flag 名称**：[flag 名称]
-  - **切换内容**：[此 flag 启用/禁用时会发生什么变化]
-<!-- 示例：结束 -->
+- **flag name**: [flag name]
+  - **What it toggles**: [what changes when this flag is enabled/disabled]
+<!-- Example: END -->
 
-## 需要修改/添加的文件
-列出所有将被添加或修改的文件，并提供高级概念代码片段和关键实现细节。
+## Files to Change
+List all files that will be added or modified, providing high-level conceptual code snippets and key implementation details.
 
-> **重要**：
-> - 开发者必须审查所有新增和修改的文件
-> - 当引入新的类、文件、函数或结构时，包含简洁的**高级概念代码片段**：
-> - 显示高级概念，包括公共类型、方法签名和结构信息
-> - **不要在代码片段中包含 import 语句**——import 是实现细节，不传达设计意图
-> - 对于关键的实现细节，可以添加代码片段，但不需要完整实现
-> - 除了代码片段，也可以在代码中使用注释来说明需要在何处添加或修改什么内容
-> - 使用 mindpilot MCP 绘制图表，描述新组件和服务如何融入现有架构
-> - 此部分应详尽，应包含所有将被添加或修改的文件。
-> - 应包含文件路径
-> - **注意**：开发者应在审查每个文件时勾选对应的复选框
-> - **例外**：以下类型的文件无需在此部分列出，可直接修改：
->   - Gradle 配置文件（如 `build.gradle.kts`、`settings.gradle.kts`、`gradle.properties` 等）
->   - Swift 包管理文件（如 `Package.swift`）
->   - 项目配置文件（如 `.xcodeproj`、`.xcworkspace`、`Info.plist`、`.idea` 配置等）
->   - 文档文件（如 `.md`、`.txt`、`.rst` 等）
->   - Python 包标识文件（`__init__.py`）
->   - 仅涉及 import 语句变更的文件（如新增/修改 import 行）
+> **Important**:
+> - The developer must review all newly added and modified files
+> - When introducing a new class, file, function, or structure, include a concise **high-level conceptual code snippet**:
+> - Show the high-level concept, including public types, method signatures, and structural information
+> - **Do not include import statements in the code snippets** — imports are implementation details and do not convey design intent
+> - For key implementation details, you may add code snippets, but a full implementation is not needed
+> - In addition to code snippets, you may also use comments in the code to explain what needs to be added or modified and where
+> - Use the mindpilot MCP to draw a diagram describing how the new components and services fit into the existing architecture
+> - This section should be exhaustive and include all files that will be added or modified.
+> - Should include file paths
+> - **Note**: The developer should check the corresponding checkbox as they review each file
+> - **Exception**: The following types of files do not need to be listed in this section and may be modified directly:
+>   - Gradle configuration files (e.g. `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`, etc.)
+>   - Swift package management files (e.g. `Package.swift`)
+>   - Project configuration files (e.g. `.xcodeproj`, `.xcworkspace`, `Info.plist`, `.idea` config, etc.)
+>   - Documentation files (e.g. `.md`, `.txt`, `.rst`, etc.)
+>   - Python package marker files (`__init__.py`)
+>   - Files involving only import statement changes (e.g. adding/modifying import lines)
 
-<!-- 示例：开始 -->
-- [ ] **新文件**：[文件路径]
-  ```kotlin
+<!-- Example: BEGIN -->
+- [ ] **New File**: [file path]
+  ```swift
   class NewClass {
-      fun publicMethod(param: Type): ReturnType
+      func publicMethod(param: Type) -> ReturnType
   }
   ```
 
-- [ ] **修改文件**：[文件路径]
-  ```kotlin
+- [ ] **Changed File**: [file path]
+  ```swift
   class ExistingClass {
-      fun newMethod(param: Type): ReturnType
+      func newMethod(param: Type) -> ReturnType
   }
   ```
-<!-- 示例：结束 -->
+<!-- Example: END -->
 
-## 埋点事件分析（如适用）
-如果任务涉及分析事件，在此部分定义所有分析事件名称/事件代码和事件属性。
+## Analytics Events (if applicable)
+If the task involves analytics events, define all analytics event names/event codes and event properties in this section.
 
-> **重要**：
-> - 必须跟踪所有用户操作，例如按钮点击
-> - 对于任务（如登陆、下载、页面加载、保存到相册等），必须同时跟踪启动任务的操作和任务完成事件
-> - 必须定义所有分析事件的名称或事件代码
-> - 必须定义每个事件的所有属性及其类型
-> - 必须指定应添加每个事件的文件路径
+> **Important**:
+> - Must track all user actions, e.g. button clicks
+> - For tasks (such as login, download, page load, save to album, etc.), must track both the action that starts the task and the task-completion event
+> - Must define the names or event codes of all analytics events
+> - Must define all properties of each event and their types
+> - Must specify the file path where each event should be added
 
-<!-- 示例：开始 -->
-- **事件名称/代码**：[事件名称或代码]
-  - **文件路径**：[应添加此事件的文件路径]
-  - **埋点触发条件**：[何时触发此埋点]
-  - **事件属性**：
-    - `property1` (String): [属性描述]
-    - `property2` (Int): [属性描述]
-    - `property3` (Boolean): [属性描述]
+<!-- Example: BEGIN -->
+- **Event name/code**: [event name or code]
+  - **File path**: [file path where this event should be added]
+  - **Trigger condition**: [when this event is triggered]
+  - **Event properties**:
+    - `property1` (String): [property description]
+    - `property2` (Int): [property description]
+    - `property3` (Boolean): [property description]
 
-- **事件名称/代码**：[事件名称或代码]
-  - **文件路径**：[应添加此事件的文件路径]
-  - **埋点触发条件**：[何时触发此埋点]
-  - **事件属性**：
-    - `property1` (String): [属性描述]
-<!-- 示例：结束 -->
+- **Event name/code**: [event name or code]
+  - **File path**: [file path where this event should be added]
+  - **Trigger condition**: [when this event is triggered]
+  - **Event properties**:
+    - `property1` (String): [property description]
+<!-- Example: END -->
 
-## 错误跟踪（如适用）
+## Error Tracking (if applicable)
 
-如果任务涉及可能失败的运行时操作（网络、IO、权限、用户输入校验等），在此部分定义错误日志配置。**预期可能发生的错误**（非 bug），目标是观测和上报，不是终止进程。**绝不应发生的不变量违反**走下面的「断言检测」section，不要写在这里。
+If the task involves runtime operations that may fail (network, IO, permissions, user input validation, etc.), define the error logging configuration in this section. **Errors that may be expected to occur** (not bugs); the goal is observation and reporting, not terminating the process. **Invariant violations that should never occur** go in the "Assertion Checks" section below, not here.
 
-> **重要**：
-> - 所有错误使用 `Logger.logError(tag, message)` 输出，参见 `shared-services/logger-service/docs/how_to.md`
-> - 严重级别对应 Logger 的 `LogLevel`：`ERROR`（失败，需要关注）或 `WARNING`（可恢复的异常情况）
-> - 对于可能因多种原因失败的操作（如下载可能因网络、权限、存储空间不足等原因失败），必须定义错误代码以区分错误类型
-> - 每个错误必须包含错误描述
+> **Important**:
+> - Output all errors using `Logger.logError(tag, message)`, see `shared-services/logger-service/docs/how_to.md`
+> - Severity levels map to Logger's `LogLevel`: `ERROR` (failure, needs attention) or `WARNING` (recoverable abnormal situation)
+> - For operations that may fail for multiple reasons (e.g. a download may fail due to network, permissions, insufficient storage, etc.), an error code must be defined to distinguish error types
+> - Each error must include an error description
 
-<!-- 示例：开始 -->
-### 错误日志（Logger.logError）
+<!-- Example: BEGIN -->
+### Error logs (Logger.logError)
 
-预期中可能发生的错误——网络超时、文件不存在、权限不足等。
+Errors that may be expected to occur — network timeout, file not found, insufficient permissions, etc.
 
-- **错误名称**：[错误名称]
-  - **级别**：`ERROR` 或 `WARNING`
-  - **tag**：[Logger tag，如 "ImageLoader"、"PhotoService"]
-  - **错误属性**：
-    - `errorDescription` (String): [错误描述]
-    - `property1` (String): [其他属性描述]
+- **Error name**: [error name]
+  - **Level**: `ERROR` or `WARNING`
+  - **tag**: [Logger tag, e.g. "ImageLoader", "PhotoService"]
+  - **Error properties**:
+    - `errorDescription` (String): [error description]
+    - `property1` (String): [other property description]
 
-- **错误名称**：[错误名称]（可能因多种原因失败）
-  - **级别**：`ERROR`
-  - **tag**：[Logger tag]
-  - **错误代码**：
-    - `ERROR_CODE_1`: [错误类型 1 描述，例如：网络连接失败]
-    - `ERROR_CODE_2`: [错误类型 2 描述，例如：权限不足]
-  - **错误属性**：
-    - `errorCode` (String): [错误代码]
-    - `errorDescription` (String): [错误描述]
-<!-- 示例：结束 -->
+- **Error name**: [error name] (may fail for multiple reasons)
+  - **Level**: `ERROR`
+  - **tag**: [Logger tag]
+  - **Error codes**:
+    - `ERROR_CODE_1`: [error type 1 description, e.g.: network connection failed]
+    - `ERROR_CODE_2`: [error type 2 description, e.g.: insufficient permissions]
+  - **Error properties**:
+    - `errorCode` (String): [error code]
+    - `errorDescription` (String): [error description]
+<!-- Example: END -->
 
-## 断言检测（如适用）
+## Assertion Checks (if applicable)
 
-如果任务涉及**绝不应发生**的状态违反（非法状态转换、不变量被破坏、不可达分支），在此部分声明断言。断言不是错误处理——它是「代码 bug 的早期捕获器」。预期可能发生的失败走上面的「错误跟踪」section。
+If the task involves state violations that **should never occur** (illegal state transitions, broken invariants, unreachable branches), declare assertions in this section. An assertion is not error handling — it is an "early catcher for code bugs". Failures that may be expected to occur go in the "Error Tracking" section above.
 
-> **重要**：
-> - 使用 `Assert.that(condition) { message }` / `Assert.notNull(value) { message }` / `Assert.unreachable() { message }`，参见 `shared-services/assertion/docs/how_to.md`
-> - **debug 构建**：抛 `AssertionError` 终止进程（对齐 iOS Swift `assert(_:_:)` / Kotlin `assert(-ea)`）
-> - **release 构建**：退化为 `Logger.logError` 输出 `[ASSERT_FAILED]` 前缀日志后返回原值并继续
-> - 两条路径都会先 `Logger.logError`，确保消息文本在 iOS oslog / Android logcat 中可检索
-> - 单元测试用 `assertFailsWith<AssertionError>` 验证不变量
-> - 何时用断言：「如果这里失败，说明上游代码有 bug」。何时用错误日志：「这里可能失败，但不是 bug，需要上报或恢复」
+> **Important**:
+> - Use `Assert.that(condition) { message }` / `Assert.notNull(value) { message }` / `Assert.unreachable() { message }`, see `shared-services/assertion/docs/how_to.md`
+> - **debug build**: throws `AssertionError` to terminate the process (aligned with iOS Swift `assert(_:_:)` / Kotlin `assert(-ea)`)
+> - **release build**: degrades to `Logger.logError` outputting a log with the `[ASSERT_FAILED]` prefix, then returns the original value and continues
+> - Both paths first call `Logger.logError`, ensuring the message text is searchable in iOS oslog / Android logcat
+> - Unit tests use `assertFailsWith<AssertionError>` to verify invariants
+> - When to use an assertion: "if this fails here, it means upstream code has a bug". When to use an error log: "this may fail here, but it is not a bug; it needs reporting or recovery"
 
-<!-- 示例：开始 -->
-### 断言（Assert.that / Assert.notNull / Assert.unreachable）
+<!-- Example: BEGIN -->
+### Assertions (Assert.that / Assert.notNull / Assert.unreachable)
 
-- `Assert.that(condition, tag) { message }` — 返回 `Boolean`，条件为 false 时触发
-- `Assert.notNull(value, tag) { message }` — 返回 `T?`，value 为 null 时触发
-- `Assert.unreachable(tag) { message }: Nothing` — 用于分支永远不可达的场景，debug/release 都抛
+- `Assert.that(condition, tag) { message }` — returns `Boolean`, triggers when the condition is false
+- `Assert.notNull(value, tag) { message }` — returns `T?`, triggers when value is null
+- `Assert.unreachable(tag) { message }: Nothing` — for scenarios where a branch is never reachable, throws in both debug/release
 
 ```kotlin
-// 布尔条件断言：返回值可直接用于 early return
+// Boolean condition assertion: the return value can be used directly for early return
 if (!Assert.that(elements.isNotEmpty(), "EditorService") { "duplicateSelectedElements: empty selection" }) return
 
-// 非空断言：返回值可用于 ?: 链式操作
+// Non-null assertion: the return value can be used in a ?: chain
 val element = Assert.notNull(canvasState.getElementById(elementId), "EditorService") {
     "enterTextEditMode: elementId=$elementId not found"
 } ?: return
 
-// 不可达分支
+// Unreachable branch
 when (mode) {
     Mode.A -> handleA()
     Mode.B -> handleB()
-    // 若新增 Mode.C 但忘了在此处理，debug 构建立即崩
+    // If a new Mode.C is added but forgotten here, the debug build crashes immediately
     else -> Assert.unreachable("EditorService") { "unhandled mode=$mode" }
 }
 ```
 
-- **断言**：[断言描述]
-  - **条件**：[什么不变量被违反时触发]
-  - **消息**：`[具体消息，不必包含 [ASSERT_FAILED] 前缀，Assert.* 自动加]`
-  - **位置**：[在哪个文件/函数中检查]
-<!-- 示例：结束 -->
+- **Assertion**: [assertion description]
+  - **Condition**: [which invariant being violated triggers it]
+  - **Message**: `[specific message, no need to include the [ASSERT_FAILED] prefix, Assert.* adds it automatically]`
+  - **Location**: [in which file/function it is checked]
+<!-- Example: END -->
 
-## 实施步骤
-将计划分解为清晰、有序、可审查的步骤，以便开发者可以增量批准和提交。
+## Implementation Steps
+Break the plan down into clear, ordered, reviewable steps so the developer can approve and commit incrementally.
 
-> **重要**：
-> - 计划大小为 L 或 XL 时必须使用阶段，计划大小为 XS、S 或 M 时仅使用步骤；XXL 和 XXXL 必须使用多个阶段，每个阶段对应一个独立 PR，并在每个阶段结束后运行完整测试套件
-> - 一个阶段应该是它自己的 PR
-> - 一个步骤可以是一个 PR 中的一次提交
-> - **自动化优先**：AI 代理可以执行 shell 脚本和命令行工具（如 `ui-test/scripts/run_test.sh`、`pytest`、`gradle test` 等），因此运行脚本、执行测试、编译代码等操作**绝不应标记为手动步骤**。只有真正需要人类物理操作的步骤才应标记为 **(需要手动操作)**，例如：在浏览器中登录第三方服务、在 Web 控制台配置设置或验证数据是否到达、在 Xcode 中手动导入包、真实物理设备交互、需要人眼视觉判断的 UI 验收等。
-> - 手动操作步骤必须清晰详细，例如：访问哪个网站、点击哪个按钮、添加什么内容、在哪个菜单中找到什么选项等。
-> - 建议（非必须）开发者在每个步骤完成后修复所有编译错误、运行单元测试、提交并推送 (git commit, git push)。
-> - **注意**：AI 代理应在完成每个步骤时勾选对应的复选框（标记为 **(需要手动操作)** 的步骤除外，这些步骤由开发者完成并勾选）
-> - 计划执行只负责计划内要求的实现、测试和局部验证；全局 PR 收尾检查（覆盖率、单元测试、lint、架构文档同步、commit/push、PR 描述）由 `/pr` 统一负责。
+> **Important**:
+> - When the plan size is L or XL, phases must be used; when the plan size is XS, S, or M, only steps are used; XXL and XXXL must use multiple phases, each phase corresponding to a separate PR, and the full test suite must be run at the end of each phase
+> - A phase should be its own PR
+> - A step can be a single commit within a PR
+> - **Automation first**: AI agents can execute shell scripts and command-line tools (such as `ui-test/scripts/run_test.sh`, `pytest`, `gradle test`, etc.), so running scripts, executing tests, compiling code, etc. **should never be marked as manual steps**. Only steps that genuinely require physical human action should be marked as **(manual action required)**, for example: logging into a third-party service in a browser, configuring settings in a web console or verifying data arrival, manually importing a package in Xcode, real physical device interaction, UI acceptance requiring human visual judgment, etc.
+> - Manual action steps must be clear and detailed, e.g.: which website to visit, which button to click, what to add, what option to find in which menu, etc.
+> - It is recommended (not required) that the developer fix all compile errors, run unit tests, and commit and push (git commit, git push) after each step is complete.
+> - **Note**: The AI agent should check the corresponding checkbox as it completes each step (except for steps marked **(manual action required)**, which are completed and checked by the developer)
+> - Plan execution is only responsible for the implementation, testing, and local verification required by the plan; the global PR wrap-up checks (coverage, unit tests, lint, architecture doc sync, commit/push, PR description) are handled uniformly by `/pr`.
 
-<!-- 示例：开始 -->
-**阶段 1**：[阶段名称]（仅适用于 L 或 XL 大小的计划）
-- [ ] **步骤 1**：[步骤名称]
-  - 描述要执行的操作
-  - 预期结果
+<!-- Example: BEGIN -->
+**Phase 1**: [phase name] (only applicable to L or XL size plans)
+- [ ] **Step 1**: [step name]
+  - Describe the operation to perform
+  - Expected result
 
-- [ ] **步骤 2**：[步骤名称]
-  - 描述要执行的操作
-  - 预期结果
+- [ ] **Step 2**: [step name]
+  - Describe the operation to perform
+  - Expected result
 
-- [ ] **步骤 3**：[步骤名称] **(需要手动操作)**
-  - 描述需要手动操作的内容（例如：在浏览器中配置、在 Xcode 中导入包、真实设备交互等）
-  - 预期结果
+- [ ] **Step 3**: [step name] **(manual action required)**
+  - Describe the content that requires manual action (e.g.: configure in a browser, import a package in Xcode, real device interaction, etc.)
+  - Expected result
 
-- [ ] **步骤 N**：[步骤名称]
-  - 描述要执行的操作
-  - 预期结果
+- [ ] **Step N**: [step name]
+  - Describe the operation to perform
+  - Expected result
 
-**阶段 2**：[阶段名称]（仅适用于 L 或 XL 大小的计划）
-- [ ] **步骤 1**：[步骤名称]
-  - 描述要执行的操作
-  - 预期结果
-<!-- 示例：结束 -->
+**Phase 2**: [phase name] (only applicable to L or XL size plans)
+- [ ] **Step 1**: [step name]
+  - Describe the operation to perform
+  - Expected result
+<!-- Example: END -->
 
-## 测试计划
-定义测试策略和方法，以确保实现的功能符合预期并正确处理各种场景。**优先使用自动化测试**（单元测试、UI 自动化测试脚本），手动测试仅作为最后手段。
+## Test Plan
+Define the testing strategy and approach to ensure the implemented functionality works as expected and handles various scenarios correctly. **Prefer automated tests** (unit tests, UI automation scripts); manual testing is a last resort only.
 
-> **重要**：
-> - **自动化测试优先**：AI 代理可以直接运行测试脚本（如 `ui-test/scripts/run_test.sh`、`pytest`、`gradle test` 等），因此所有可以通过脚本执行的测试都应作为自动化步骤，由 AI 代理在实施步骤中直接执行，**不应归类为手动测试**。
-> - **手动测试仅限于最后手段**：只有在以下情况下才使用手动测试：需要人眼视觉判断的 UI 验收、需要真实物理设备交互、需要人类主观评估（如动画流畅度、视觉美观度）等。运行脚本、执行命令行工具、查看日志输出等操作不属于手动测试。
+> **Important**:
+> - **Automated tests first**: AI agents can directly run test scripts (such as `ui-test/scripts/run_test.sh`, `pytest`, `gradle test`, etc.), so all tests that can be executed via script should be automated steps executed directly by the AI agent in the implementation steps, and **should not be classified as manual testing**.
+> - **Manual testing is a last resort only**: manual testing is used only in the following cases: UI acceptance requiring human visual judgment, real physical device interaction required, human subjective evaluation required (such as animation smoothness, visual aesthetics), etc. Running scripts, executing command-line tools, viewing log output, etc. are not manual testing.
 
-### 单元测试
-编写自动化测试用例来验证各个代码单元的功能正确性，确保代码在隔离环境中按预期工作。
+### Unit Tests
+Write automated test cases to verify the functional correctness of individual code units, ensuring the code works as expected in an isolated environment.
 
-**重要**
-对于服务层的代码，编写单元测试并达到 95%+ 的测试覆盖率。测试应覆盖以下路径：
-- **成功路径**：正常操作流程
-- **回退路径**：当主要方案不可用时的备用处理
-- **错误路径**：错误处理和异常情况
+**Important**
+For service-layer code, write unit tests and reach 95%+ test coverage. Tests should cover the following paths:
+- **Success path**: normal operation flow
+- **Fallback path**: backup handling when the primary approach is unavailable
+- **Error path**: error handling and exceptional cases
 
-对于无法在单元测试中使用的依赖项，创建模拟对象（mock objects）用于测试目的。
+For dependencies that cannot be used in unit tests, create mock objects for testing purposes.
 
-如果计划包含 **ViewModel** 单元测试，必须遵循 `unit-test/docs/how_to_write_stable_unit_test.md`，并在测试计划中明确：
-- 测试目标是什么
-- 复用哪个现有稳定测试文件/fixture 作为参考
-- 默认 dispatcher / harness 是什么
-- 是否使用真实 Service fixture
-- timed case 如何隔离
+If the plan includes **ViewModel** unit tests, you must follow `unit-test/docs/how_to_write_stable_unit_test.md`, and specify clearly in the test plan:
+- What the test target is
+- Which existing stable test file/fixture to reuse as a reference
+- What the default dispatcher / harness is
+- Whether to use a real Service fixture
+- How timed cases are isolated
 
-<!-- 示例：开始 -->
-#### 测试类：[测试类名称]
+<!-- Example: BEGIN -->
+#### Test class: [test class name]
 
 ```kotlin
 internal class NewServiceTest : UnitTest() {
     @Test
     fun `create with valid input returns expected result`() {
-        // 测试成功路径
+        // Test success path
     }
 
     @Test
     fun `create with unavailable dependency falls back to default`() {
-        // 测试回退路径
+        // Test fallback path
     }
 
     @Test
     fun `create with invalid input throws IllegalArgumentException`() {
-        // 测试错误路径
+        // Test error path
     }
 }
 ```
 
-<!-- 示例：结束 -->
-### 手动测试（仅在无法自动化时使用）
-提供详细的步骤说明，指导测试人员通过实际运行应用程序来验证功能的正确性和用户体验。
+<!-- Example: END -->
+### Manual Testing (only when automation is not possible)
+Provide detailed step-by-step instructions to guide testers in verifying the correctness and user experience of the functionality by actually running the application.
 
-**重要**
-- **大多数计划不需要此部分**。如果所有测试都可以通过单元测试和 UI 自动化测试脚本覆盖，应删除此部分。
-- 仅在确实需要人类物理操作或主观判断时才保留此部分。
-- 提供**逐步测试说明**，使用清晰、有序的要点。
-- 对于每个步骤，说明**测试者应该看到什么**或**正确的结果是什么**
-- **注意**：开发者应在完成每个测试步骤时勾选对应的复选框
+**Important**
+- **Most plans do not need this section**. If all tests can be covered by unit tests and UI automation scripts, this section should be deleted.
+- Keep this section only when human physical action or subjective judgment is genuinely required.
+- Provide **step-by-step test instructions** using clear, ordered bullet points.
+- For each step, state **what the tester should see** or **what the correct result is**
+- **Note**: The developer should check the corresponding checkbox as they complete each test step
 
-<!-- 示例：开始 -->
-#### 场景 1：需要人眼验收的 UI 变更
+<!-- Example: BEGIN -->
+#### Scenario 1: UI change requiring human acceptance
 
-- [ ] **步骤 1**：[操作描述]
-  - **预期结果**：[应该看到什么或发生什么]
+- [ ] **Step 1**: [action description]
+  - **Expected result**: [what should be seen or happen]
 
-- [ ] **步骤 2**：[操作描述]
-  - **预期结果**：[应该看到什么或发生什么]
-<!-- 示例：结束 -->
+- [ ] **Step 2**: [action description]
+  - **Expected result**: [what should be seen or happen]
+<!-- Example: END -->
 
 ---
 
-## 规则优先级
-> **⚠️ 不可修改**：以下规则部分必须包含在每个计划文档中，AI 和开发者不得修改此部分.
+## Rule Priority
+> **⚠️ Immutable**: The following rule section must be included in every plan document, and AI and developers must not modify this section.
 
-<!-- 规则优先级：开始 - 此部分不可修改 -->
-- 计划生成规则和计划执行规则优先于模型的隐式行为
-- 当任务指令与计划生成规则或计划执行规则冲突时，必须遵循这些规则
-- 如果由于任务约束无法遵循计划生成规则或计划执行规则中的某条规则，应暂停并请求澄清，而不是猜测
-- 如需覆盖这些规则，应更新计划模板文档，而不是在单个计划文档中覆盖
+<!-- Rule Priority: BEGIN - immutable -->
+- Plan Generation Rules and Plan Execution Rules take precedence over the model's implicit behavior
+- When task instructions conflict with the Plan Generation Rules or Plan Execution Rules, these rules must be followed
+- If a rule in the Plan Generation Rules or Plan Execution Rules cannot be followed due to task constraints, pause and ask for clarification rather than guessing
+- To override these rules, the plan template document should be updated rather than overriding within an individual plan document
 
-<!-- 规则优先级：结束 -->
+<!-- Rule Priority: END -->
 
-## 计划生成规则
-> **⚠️ 不可修改**：以下规则部分必须包含在每个计划文档中，AI 和开发者不得修改此部分.
+## Plan Generation Rules
+> **⚠️ Immutable**: The following rule section must be included in every plan document, and AI and developers must not modify this section.
 
-<!-- 计划生成规则：开始 - 此部分不可修改 -->
-- **作者**字段必须填写 GitHub 用户名（通过 `gh api user -q .login` 获取），不得使用 "claude_code"、"AI" 等非人类标识符。此字段用于追踪计划质量归属
-- AI 生成的计划文档必须包含计划模板中的所有部分，标记为"（如适用）"的部分是可选的，开发者可以选择主动删除
-- 开发者可以根据需要添加或删除部分
-- 所有 "**重要**：" 部分必须从模板中复制，不得修改或省略
-- **当前计划完整程度**初始应留空，AI 不得自动填写百分比。随着开发者做出决策并解决"需要决策的事项"部分中的问题，AI 应更新此百分比
-- **大小**, **实施步骤**, **埋点事件分析**, **错误跟踪**, **需要修改/添加的文件**, 和**测试计划**部分初始应留空，仅当以下条件全部满足后才生成和更新内容：
-  - 参考资料部分（参考资料）已完整
-  - 需要决策的事项部分（需要决策的事项）中无未解决的问题
-  - 当前计划完整程度达到或超过 95%
-- 用户做出决策后：
-  - 必须将决策保存到已归档的决策部分
-  - 如果**实施步骤**, **埋点事件分析**, **错误跟踪**, **需要修改/添加的文件**, 和**测试计划**部分不为空，必须更新这些部分以反映新的决策
-- 当以下条件全部满足时，AI 必须自动将**当前计划完整程度**更新为 100%：
-  - **需要决策的事项**部分中没有未解决的问题（所有决策已归档）
-  - **需要修改/添加的文件**部分中所有文件的复选框都已勾选（已审查）
-<!-- 计划生成规则：结束 -->
+<!-- Plan Generation Rules: BEGIN - immutable -->
+- The **Author** field must be filled with the GitHub username (obtained via `gh api user -q .login`), and must not use non-human identifiers like "claude_code", "AI", etc. This field is used to track plan quality attribution
+- The plan document generated by the AI must include all sections from the plan template; sections marked "(if applicable)" are optional and the developer may choose to delete them proactively
+- The developer may add or delete sections as needed
+- All "**Important**:" sections must be copied from the template and must not be modified or omitted
+- **Current Plan Completeness** should initially be left blank; the AI must not auto-fill the percentage. As the developer makes decisions and resolves the questions in the "Decisions Needed" section, the AI should update this percentage
+- The **Size**, **Implementation Steps**, **Analytics Events**, **Error Tracking**, **Files to Change**, and **Test Plan** sections should initially be left blank, and their content should be generated and updated only after all of the following conditions are met:
+  - The References section (References) is complete
+  - There are no unresolved questions in the Decisions Needed section (Decisions Needed)
+  - The Current Plan Completeness reaches or exceeds 95%
+- After the user makes a decision:
+  - The decision must be saved to the Archived Decisions section
+  - If the **Implementation Steps**, **Analytics Events**, **Error Tracking**, **Files to Change**, and **Test Plan** sections are not empty, these sections must be updated to reflect the new decision
+- The AI must automatically update **Current Plan Completeness** to 100% when all of the following conditions are met:
+  - There are no unresolved questions in the **Decisions Needed** section (all decisions archived)
+  - All file checkboxes in the **Files to Change** section are checked (reviewed)
+<!-- Plan Generation Rules: END -->
 
-## 计划执行规则
-> **⚠️ 不可修改**：以下规则部分必须包含在每个计划文档中，AI 和开发者不得修改此部分.
+## Plan Execution Rules
+> **⚠️ Immutable**: The following rule section must be included in every plan document, and AI and developers must not modify this section.
 
-<!-- 计划执行规则：开始 - 此部分不可修改 -->
-- 除非以下条件全部满足，否则 AI 必须拒绝执行计划，不得有任何例外：
-  - 计划完整程度达到或超过 95%
-  - 需要修改/添加的文件部分中的所有新增和修改文件都已标记为已审查
-- **最小变更原则**：
-  - 仅修改任务直接要求的代码
-  - 除非明确要求，否则不得重写、重新排序或重构不相关的文件或模块
-  - 除非必要，否则不得修改空白字符（不删除空行、不添加空行、不更改缩进或格式）
-  - 保留所有现有的命名、风格、模式和架构
-  - 不确定是否需要额外的自定义逻辑、抽象或新结构时，应停止并请求人工确认，而不是发明新机制
-- **注释质量原则**：
-  - 不要生成重复代码内容的注释
-  - 不要描述函数名、参数名、返回类型或基本逻辑（循环、空值检查、简单条件判断）
-  - 仅在解释**为什么**时添加注释，而非解释**是什么**
-  - 允许的注释内容：非显而易见的逻辑或行为、关键假设或约束、平台特定问题、副作用或生命周期交互、代码中不明显的重要推理
-  - 宁愿**不添加注释**，也不要添加无意义或冗余的注释
-  - 所有注释必须使用**简体中文**编写
-- **禁止 TODO 原则**：
-  - 不得编写 TODO、FIXME、XXX 或占位符注释
-  - 不得留下存根实现、空代码块或未实现的函数
-  - 生成的每段代码必须完整、具体且可在上下文中运行
-  - 如果无法完全实现某项功能，应停止并请求澄清，而不是猜测或留下占位符
-- **任务范围原则**：
-  - XS/S/M/L/XL 计划的代码生成应一次性完成，不分阶段
-  - XXL/XXXL 计划适用于由 AI Agent 主导执行的大型任务，必须分阶段完成，每个阶段结束后运行完整单元测试和 UI 测试以确保质量
-  - 无需考虑渐进式迁移策略，应直接完整实现所需功能
-<!-- 计划执行规则：结束 -->
+<!-- Plan Execution Rules: BEGIN - immutable -->
+- Unless all of the following conditions are met, the AI must refuse to execute the plan, without exception:
+  - Plan completeness reaches or exceeds 95%
+  - All newly added and modified files in the Files to Change section are marked as reviewed
+- **Minimal change principle**:
+  - Modify only the code directly required by the task
+  - Unless explicitly required, do not rewrite, reorder, or refactor unrelated files or modules
+  - Unless necessary, do not modify whitespace (do not remove blank lines, add blank lines, or change indentation or formatting)
+  - Preserve all existing naming, style, patterns, and architecture
+  - When unsure whether additional custom logic, abstractions, or new structures are needed, stop and ask for human confirmation rather than inventing a new mechanism
+- **Comment quality principle**:
+  - Do not generate comments that duplicate the code content
+  - Do not describe function names, parameter names, return types, or basic logic (loops, null checks, simple conditionals)
+  - Add comments only to explain **why**, not **what**
+  - Allowed comment content: non-obvious logic or behavior, key assumptions or constraints, platform-specific issues, side effects or lifecycle interactions, important reasoning not evident in the code
+  - Prefer **no comment** over a meaningless or redundant one
+  - All comments must be written in **English**
+- **No-TODO principle**:
+  - Do not write TODO, FIXME, XXX, or placeholder comments
+  - Do not leave stub implementations, empty code blocks, or unimplemented functions
+  - Every piece of generated code must be complete, concrete, and runnable in context
+  - If a feature cannot be fully implemented, stop and ask for clarification rather than guessing or leaving a placeholder
+- **Task scope principle**:
+  - Code generation for XS/S/M/L/XL plans should be completed in one pass, not in phases
+  - XXL/XXXL plans are for large tasks driven by an AI Agent and must be completed in phases, running the full unit tests and UI tests at the end of each phase to ensure quality
+  - No need to consider incremental migration strategies; implement the required functionality completely and directly
+<!-- Plan Execution Rules: END -->

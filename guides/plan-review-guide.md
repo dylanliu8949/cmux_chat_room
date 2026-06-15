@@ -1,319 +1,319 @@
-# 计划文档审查指南
+# Plan Document Review Guide
 
-计划文档记录的是**架构层面的决策**，不是实现层面的代码规格。它的作用是让执行 agent 清楚地了解：做什么（功能边界）、在哪里做（模块和层次划分）、为什么这么做（决策背景和约束）。至于怎么做——函数签名的具体参数、控制流的细节实现、代码片段的精确写法——执行 agent 有能力自行判断，不需要计划来指定。
+A plan document records **architecture-level decisions**, not implementation-level code specifications. Its purpose is to give the executing agent a clear understanding of: what to do (feature boundary), where to do it (module and layer assignment), and why (decision context and constraints). The how — specific parameter signatures, control-flow implementation details, precise code fragment syntax — is something the executing agent can determine on its own; the plan does not need to specify it.
 
-**计划不是字面意义上可直接编译的蓝图。** 执行 agent 在实现过程中会读取代码库、理解上下文、自主处理实现细节。计划的价值在于把架构决策固化下来，防止 agent 在关键分叉点做出错误的方向选择——而不是替代 agent 的工程判断。
+**A plan is not a literally compilable blueprint.** The executing agent reads the codebase, understands the context, and handles implementation details autonomously. The plan's value is in locking down architectural decisions so the agent does not make a wrong directional choice at a critical fork — not in replacing the agent's engineering judgment.
 
-**审查的目标因此是**：架构决策是否清晰、模块边界是否明确、关键的「做什么」是否无歧义——而不是检查每个代码片段是否精确到参数类型。计划中的代码片段是意图的说明，不是要求逐字复制的模板。如果一段伪代码能让 agent 理解意图，它就已经足够了。
-计划审查只做 **macro 级别** 判断（架构、模块、边界、决策），不做函数级/代码风格级 nit。
+**The review goal is therefore**: whether architectural decisions are clear, whether module boundaries are explicit, whether the key "what to do" is unambiguous — not whether every code fragment is precise to the parameter type. Code fragments in the plan are illustrations of intent, not templates to copy verbatim. If a pseudocode snippet lets the agent understand the intent, it is sufficient.
+Plan review operates only at the **macro level** (architecture, module, boundaries, decisions); it does not address function-level or code-style nitpicks.
 
-**决策质量审查**：审查**必须评估** `已归档的决策` 中的设计选择是否合理。决策是计划的基础——如果决策本身与现有架构冲突、违反 Clean Architecture 原则、或存在明显更优的替代方案，计划即使结构完美也不应通过。
+**Decision quality review**: the review **must evaluate** whether the design choices in `Archived Decisions` are sound. Decisions are the foundation of the plan — if a decision conflicts with the existing architecture, violates Clean Architecture principles, or has an obviously better alternative, the plan should not pass even if its structure is perfect.
 
-审查决策时的评估维度：
-- **架构一致性**：决策是否与代码库中已有的架构模式和模块边界一致？必须读取相关的 `architecture.md` 文件确认
-- **Clean Architecture 合规性**：决策是否符合本指南 Clean Architecture 原则部分的要求？（关注点分离、依赖方向、单一职责等）
-- **简洁性**：是否存在更简单的替代方案？（KISS、YAGNI）
-- **一致性**：代码库中类似的问题是如何解决的？决策是否遵循了已有模式？
-- **重复性**：决策是否引入了与现有机制重复的实现？（DRY）
-- **技术选型**：决策引入的框架、库或平台 API 是否满足三个支柱——**最新**（平台推荐的现代方案）、**最流行**（高社区采用率、维护活跃）、**最有文档**（官方文档完善、社区覆盖广）？三个支柱共同指向的技术栈也是 AI agent 生成高质量代码最稳定的基础。
+Evaluation dimensions when reviewing decisions:
+- **Architectural consistency**: does the decision align with the architectural patterns and module boundaries already in the codebase? Relevant `architecture.md` files must be read to confirm.
+- **Clean Architecture compliance**: does the decision meet the requirements in the Clean Architecture Principles section of this guide? (Separation of concerns, dependency direction, single responsibility, etc.)
+- **Simplicity**: does a simpler alternative exist? (KISS, YAGNI)
+- **Consistency**: how are similar problems solved in the codebase? Does the decision follow established patterns?
+- **Duplication**: does the decision introduce an implementation that duplicates an existing mechanism? (DRY)
+- **Technology selection**: do frameworks, libraries, or platform APIs introduced by the decision satisfy the three pillars — **Latest & Greatest** (platform-recommended modern approach), **Most Popular** (high community adoption, active maintenance), **Most Documented** (solid official docs, broad community coverage)? The tech stack all three pillars point to is also the most stable foundation for AI agents generating high-quality code.
 
-`已归档的决策` 评估结果映射到新的 `状态` 枚举（详见 `templates/plan-template.md` 头部「状态说明」表格）：
-- `已归档的决策` 违反架构原则且无法局部修复 → **`abandoned`**
-- `已归档的决策` 存在更优替代方案，或方向正确但有模糊/遗漏 → 退回到 **`create-plan-complete`**（向开发者提出替代选项，由开发者决策后更新计划）
-- `已归档的决策` 合理 → **`review-plan-complete`**（可直接 `/execute-plan`）
+Evaluation results for `Archived Decisions` map to the new `Status` enum (see the "Status description" table at the top of `templates/plan-template.md`):
+- `Archived Decisions` violate architectural principles and cannot be locally repaired → **`abandoned`**
+- `Archived Decisions` have a better alternative, or the direction is right but something is vague/missing → revert to **`create-plan-complete`** (present alternatives to the developer; developer updates the plan after deciding)
+- `Archived Decisions` are sound → **`review-plan-complete`** (ready for `/execute-plan`)
 
-注意：审查不对纯风格偏好（命名风格、代码组织方式等）做出判断，只关注架构层面的合理性。如果多个方案在架构上都合理且差异不大，不应仅因主观偏好而要求修改。
+Note: the review does not judge pure style preferences (naming style, code organization, etc.) — only architectural soundness. If multiple approaches are architecturally equivalent and the difference is minor, do not require changes based on subjective preference.
 
-## 审查结论的四种情形
+## The Four Outcomes of a Plan Review
 
-| 情形 | 含义 | 写入的状态 | 后续动作 |
-|------|------|-----------|----------|
-| **前提不满足** | 计划未满足审查的前提条件（模板结构不全、仍有未解决决策项等） | 不进入审查，保持 `create-plan-in-progress` | 开发者继续完善计划，然后重新提交审查 |
-| **废弃** | 计划已审查，存在根本性问题，无法通过局部修复挽救 | `abandoned` | 废弃当前计划，从头重新生成 |
-| **需要完善** | 计划已审查，方向正确，但存在模糊、遗漏或冲突 | 退回 `create-plan-complete` | 向开发者提出选择题，开发者决策后更新计划，重新走 `/review-plan` |
-| **可执行** | 计划已审查，无歧义、无冲突、无遗漏 | `review-plan-complete` | 可直接执行 `/execute-plan` |
+| Outcome | Meaning | Status Written | Next Action |
+|---------|---------|----------------|-------------|
+| **Prerequisites not met** | The plan does not satisfy the prerequisites for review (template structure incomplete, unresolved decision items remain, etc.) | Do not enter review; keep `create-plan-in-progress` | Developer continues refining the plan, then resubmits for review |
+| **Abandon** | Plan has been reviewed; there are fundamental problems that cannot be salvaged by local fixes | `abandoned` | Discard the current plan and start fresh |
+| **Needs Refinement** | Plan has been reviewed; the direction is right, but there are ambiguities, omissions, or conflicts | Revert to `create-plan-complete` | Present choices to the developer; developer decides and updates the plan, then re-runs `/review-plan` |
+| **Executable** | Plan has been reviewed; no ambiguities, no conflicts, no omissions | `review-plan-complete` | Can proceed directly with `/execute-plan` |
 
-**前提不满足**与其他三种情形的区别：前提不满足是进入审查的前置检查，不是审查结果。计划不符合模板结构、或仍有未解决的决策项时，审查流程不会启动，状态保持 `create-plan-in-progress`。
+**The distinction between "prerequisites not met" and the other three outcomes**: "prerequisites not met" is a precondition check before entering the review, not a review result. When the plan does not conform to the template structure, or there are unresolved decision items, the review process does not start and the status stays `create-plan-in-progress`.
 
-**不要把文件审查复选框当作计划审查门槛**：`需要修改/添加的文件` 中的复选框表示开发者是否已经人工 review 过这些文件清单，可以在 agent 计划审查之前或之后完成。计划审查只判断文件清单本身是否完整、路径是否真实、职责是否合理；复选框未勾选不应导致 `Not Ready`、`Needs Refinement` 或任何 finding。执行阶段若有独立规则要求勾选，由执行工具自己检查，计划 reviewer 不用代替执行 gate 判定。
+**Do not treat file review checkboxes as a plan review gate**: the checkboxes in `Files to Change` indicate whether the developer has manually reviewed those file listings; this can be done before or after the agent plan review. The plan review only judges whether the file listing itself is complete, whether paths are real, and whether responsibilities are reasonable. Unchecked boxes must not cause a `Not Ready`, `Needs Refinement`, or any finding. If a separate rule during the execution phase requires checkboxes to be checked, the execution tool enforces that itself — the plan reviewer must not enforce it on the execution gate's behalf.
 
-## Clean Architecture 原则
+## Clean Architecture Principles
 
-审查计划时，以下原则是判断架构合理性的基准。计划中的模块设计、职责划分、API 设计都应当符合这些原则。
+The following principles are the benchmark for evaluating architectural soundness when reviewing a plan. Module design, responsibility assignment, and API design in the plan should conform to these principles.
 
-在计划阶段发现问题的修复成本远低于代码阶段。计划中的一个多余抽象，到了代码中就是散布在多个文件里的接口、实现类和注册代码——改动面大，回退困难。因此审查时应当对过度设计和重复保持高度警觉。
+The cost of fixing problems at the planning stage is far lower than at the coding stage. One redundant abstraction in the plan becomes an interface, implementation class, and registration code scattered across multiple files in the code — large change surface, hard to revert. Therefore, vigilance against over-engineering and duplication is essential during review.
 
-### 关注点分离
+### Separation of Concerns
 
-每一层只做自己该做的事：
+Each layer only does what it should:
 
-- **Service 层**：承载所有业务逻辑，是代码的核心。不依赖 UI 框架，不依赖渲染引擎，不依赖平台 API。必须可独立单元测试。
-- **ViewModel 层**：优先只管理 view state、用户交互编排和状态转换，不应成为业务逻辑的主要承载点。除非某段逻辑天然属于 UI/页面工作流，否则应优先下沉到 Service 层或其他专门模块。
-- **View 层**：只负责 UI 渲染和用户交互事件转发。根据状态控制显示/隐藏是 View 的职责，但计算状态本身不是。
-- **Renderer / Infrastructure 层**：提供平台能力（渲染、网络、存储等）。通过接口抽象与业务逻辑解耦。
+- **Service layer**: carries all business logic; the core of the code. No dependency on UI frameworks, rendering engines, or platform APIs. Must be independently unit-testable.
+- **ViewModel layer**: primarily manages view state, user interaction orchestration, and state transitions; should not be the primary carrier of business logic. Unless a piece of logic is inherently tied to UI/page workflow, it should preferably be pushed down to the Service layer or a dedicated module.
+- **View layer**: only responsible for UI rendering and forwarding user interaction events. Controlling show/hide based on state is the View's job, but computing the state itself is not.
+- **Renderer / Infrastructure layer**: provides platform capabilities (rendering, networking, storage, etc.). Decoupled from business logic through interface abstractions.
 
-这里的边界约束针对的是**生产代码职责**，不是要求测试也必须只测“自己这一层”。例如 ViewModel 单元测试可以使用真实 Service fixture 做小型端到端验证；关键在于生产代码不要把可复用业务逻辑塞进 ViewModel。
+These boundary constraints apply to **production code responsibilities**, not a requirement that tests must also only test "their own layer." For example, ViewModel unit tests may use real Service fixtures for small end-to-end verification; the key is that production code must not stuff reusable business logic into the ViewModel.
 
-层与层之间的通信通过明确定义的接口或数据流（如 StateFlow），而非直接调用内部实现。
+Communication between layers happens through explicitly defined interfaces or data flows (e.g., StateFlow), not through direct calls to internal implementations.
 
-审查时应主动问一个问题：这段新逻辑如果未来要被第二个调用方复用（例如另一处 UI、自动化入口、agent/MCP 接口），它是否仍然应该放在 ViewModel？如果答案是否定的，说明它更可能属于 Service 层或通用模块，而不是 ViewModel。
+During review, proactively ask this question: if this new logic needs to be reused by a second caller in the future (e.g., another UI location, an automation entry point, an agent/MCP interface), should it still live in the ViewModel? If the answer is no, it more likely belongs in the Service layer or a shared module, not the ViewModel.
 
-### 单一职责
+### Single Responsibility
 
-一个函数做一件事。一个文件围绕一个主题。一个模块承担一个职责。
+One function does one thing. One file centers on one theme. One module owns one responsibility.
 
-如果无法用一句话描述某个函数/文件/模块的职责，它需要被拆分。如果一个计划中新增的类同时处理数据持久化和 UI 状态管理，说明职责划分有问题。
+If a function/file/module's responsibility cannot be described in one sentence, it needs to be split. If a new class in the plan simultaneously handles data persistence and UI state management, that indicates a problem with the responsibility assignment.
 
-### 最小公开 API
+### Minimal Public API
 
-模块对外暴露的 API 应当尽可能少。只有真正需要被外部调用的方法和类型才标记为 `public`，其余全部 `internal` 或 `private`。
+A module's external-facing API should be as small as possible. Only methods and types that genuinely need to be called externally are marked `public`; everything else is `internal` or `private`.
 
-公开 API 是模块间的契约——一旦公开就难以收回。审查计划时，检查新增的公开 API 是否都是必要的，是否有可以改为 `internal` 的。
+A public API is a contract between modules — once published, it is hard to retract. When reviewing a plan, check whether all new public APIs are necessary and whether any could be `internal`.
 
-### 依赖方向
+### Dependency Direction
 
-依赖只能从上层指向下层，从具体指向抽象：
+Dependencies can only flow from higher layers to lower layers, from concrete to abstract:
 
-- UI → Service → Models（合理）
-- Service → UI（违规：业务逻辑不应知道 UI 的存在）
-- Models → Service（违规：数据模型不应依赖业务逻辑）
+- UI → Service → Models (valid)
+- Service → UI (violation: business logic should not know about the UI)
+- Models → Service (violation: data models should not depend on business logic)
 
-高层模块定义接口，低层模块实现接口。这是依赖反转原则的核心。
+Higher-level modules define interfaces; lower-level modules implement them. This is the core of the Dependency Inversion Principle.
 
-### 依赖注入的适用场景
+### Appropriate Use of Dependency Injection
 
-不是所有依赖都需要通过 DI 框架注入。DI 适用于需要在多个不相关的地方共享同一实例的场景（如 AppCoordinator 需要在首页和编辑器中都可用）。
+Not all dependencies need to be injected through a DI framework. DI is appropriate when the same instance needs to be shared across multiple unrelated locations (e.g., AppCoordinator needs to be available in both the home screen and the editor).
 
-如果一个依赖只在一个地方使用，直接创建即可，不需要走 DI。过度使用 DI 会模糊对象的所有权和生命周期，增加理解成本。
+If a dependency is only used in one place, create it directly — no need for DI. Over-using DI obscures object ownership and lifetime, increasing cognitive load.
 
-### 接口隔离
+### Interface Segregation
 
-不要创建大而全的接口。如果一个接口有 10 个方法但大多数调用者只用其中 2 个，说明接口需要拆分。每个接口应当面向一个具体的使用场景，而非试图覆盖所有可能。
+Do not create large, catch-all interfaces. If an interface has 10 methods but most callers only use 2, the interface needs to be split. Each interface should serve a specific use scenario, not try to cover all possibilities.
 
-### 通过数据流通信，不暴露内部状态
+### Communicate via Data Flows, Don't Expose Internal State
 
-模块之间通过共享数据类型和响应式数据流（StateFlow）通信，而非直接调用对方的内部方法。状态的生产者只负责发射状态，消费者自行决定如何响应。
+Modules communicate through shared data types and reactive data flows (StateFlow), not by directly calling each other's internal methods. State producers only emit state; consumers decide how to respond.
 
-暴露给其他模块的应当是只读接口或数据快照，而非可变引用。如果消费者只需要读取视口信息，给它一个 `ViewportProvider`（只读接口），而非 `ViewportManager`（可变实现）。如果 UI 层只需要知道选中元素的类型，给它一个 `SelectedElementType` 枚举，而非完整的 `CanvasElement` 对象。
+What is exposed to other modules should be a read-only interface or data snapshot, not a mutable reference. If a consumer only needs to read viewport information, give it a `ViewportProvider` (read-only interface), not a `ViewportManager` (mutable implementation). If the UI layer only needs to know the type of the selected element, give it a `SelectedElementType` enum, not a full `CanvasElement` object.
 
-### 面向扩展，封闭修改
+### Open for Extension, Closed for Modification
 
-新功能应当通过扩展现有结构实现（新增类、新增扩展函数、实现已有接口），而非修改已有的稳定代码。如果一个计划为了添加新功能需要修改核心模型的 sealed interface 定义或更改已有方法的签名，需要额外审视这种修改是否真的必要。
+New features should be implemented by extending existing structures (adding classes, adding extension functions, implementing existing interfaces), not by modifying stable existing code. If a plan needs to modify a core model's sealed interface definition or change an existing method signature in order to add a new feature, scrutinize whether that modification is truly necessary.
 
-### KISS — 保持简单
+### KISS — Keep It Simple
 
-最简单的方案就是最好的方案。计划中每引入一个抽象层、一个配置项、一个间接调用，都应当有明确的理由。如果当前需求只需要一个函数，就不要设计一个接口 + 实现类 + 工厂。如果一个 `when` 分支能解决问题，就不要引入策略模式。
+The simplest solution is the best solution. Every abstraction layer, configuration item, or indirection introduced in a plan should have a clear justification. If the current need only requires a function, do not design an interface + implementation class + factory. If a `when` branch solves the problem, do not introduce the strategy pattern.
 
-审查时问：去掉这个抽象/这层间接，功能是否仍然正确？如果是，这个抽象就不应该存在。
+During review, ask: if this abstraction/layer of indirection were removed, would the feature still be correct? If yes, that abstraction should not exist.
 
-对“组件化”和“数据结构化”的过度设计要特别严格。不要因为某个概念听起来像领域名词，就自动创建 `Locator`、`Descriptor`、`Context`、`Result`、sealed wrapper 或新的 model 文件。先问调用方实际需要什么数据：
+Be especially strict about over-engineering through "componentization" and "data structure modeling." Do not automatically create `Locator`, `Descriptor`, `Context`, `Result`, sealed wrapper, or new model files just because a concept sounds like a domain noun. First ask what data the caller actually needs:
 
-- 如果调用方只需要 `(elementId, contentId)`，不要设计 `EmbeddedContentLocator`。
-- 如果一个 hit-test 只有一个调用方，且调用方只需要 `contentId`，不要让 `getXAt()` 返回包含 kind、bounds、index、localPoint 的复杂 hit 结构。
-- 如果某个字段只是为了让调用方少做一次已有数据扫描，且扫描范围小、已有不变量足够支撑，就优先返回最小数据并在需要处解析。
-- 如果一个 public/shared data class 只是包住已有 domain type，再附带 1-2 个字段（例如 `FooWithBounds(content, width, height)`），默认不要引入。先判断这些字段是否是该 domain type 的真实不变量：如果是，应考虑把字段加入既有类型或提供既有类型上的派生函数；如果不是，调用方应在需要处计算或传递，不应制造一层对外 wrapper。
-- 例外：函数或类内部的 private/internal pipeline carrier 可以合理存在，例如 worker → drain、parser 多阶段、batch validation 这类流程中需要把多个中间值一起传给下一阶段。前提是它表达真实阶段边界、不泄漏出模块 API、不被当作未来扩展点。
-- 如果新增类型只有一个生产者和一个消费者，且没有稳定跨模块契约价值，优先使用现有类型或简单返回值。
+- If the caller only needs `(elementId, contentId)`, do not design `EmbeddedContentLocator`.
+- If a hit-test has only one caller and that caller only needs `contentId`, do not make `getXAt()` return a complex hit structure containing kind, bounds, index, and localPoint.
+- If a field only exists to save the caller from doing one scan of existing data, and the scan range is small with sufficient existing invariants, prefer returning the minimal data and letting the caller parse it where needed.
+- If a public/shared data class only wraps an existing domain type with 1–2 extra fields (e.g., `FooWithBounds(content, width, height)`), do not introduce it by default. First determine whether those fields are true invariants of that domain type: if yes, consider adding them to the existing type or providing derived functions on the existing type; if not, the caller should compute or pass them at the point of need — do not create an external wrapper layer.
+- Exception: private/internal pipeline carriers can legitimately exist — for example, when multiple intermediate values need to be passed together to the next stage in a worker → drain, multi-stage parser, or batch validation flow. The prerequisite is that they express a real stage boundary, do not leak into the module's external API, and are not used as future extension points.
+- If a new type has only one producer and one consumer, and has no stable cross-module contract value, prefer using existing types or simple return values.
 
-计划审查应要求新增抽象证明自己的必要性，而不是让简单方案证明自己为什么够用。复杂返回对象、专用 locator、组件协议、helper interface 的默认结论应是“不要加”，除非它们确实减少了当前复杂度、保护了真实不变量，或已有多个独立调用方需要同一契约。
+Plan review should require new abstractions to justify their necessity, rather than requiring simple solutions to prove why they are sufficient. Complex return objects, dedicated locators, component protocols, and helper interfaces should default to "don't add it" unless they genuinely reduce current complexity, protect real invariants, or already have multiple independent callers needing the same contract.
 
-### DRY — 不要重复自己
+### DRY — Don't Repeat Yourself
 
-同一逻辑只应存在于一处。如果计划在两个文件中写了相似的验证逻辑、相似的状态检查、相似的数据转换，应当提取为共享函数。重复的代码意味着未来修 bug 时需要记住同步修改所有副本——而人总会忘。
+The same logic should exist in only one place. If a plan has similar validation logic, similar state checks, or similar data transformations in two files, extract them into a shared function. Duplicated code means remembering to sync all copies when fixing a bug in the future — and people always forget.
 
-但注意区分真正的重复和表面相似。两段代码现在长得一样，不代表它们在语义上是同一件事。如果它们的变更理由不同，强行合并反而制造耦合。
+But be careful to distinguish genuine duplication from surface similarity. Two pieces of code that look alike now doesn't mean they are the same thing semantically. If their reasons for change differ, forcibly merging them creates coupling.
 
-### YAGNI — 你不会需要它
+### YAGNI — You Aren't Gonna Need It
 
-不要为假想的未来需求编写代码。如果当前需求是"锁定元素不可移动"，就不要同时设计一个"可配置的锁定策略框架"。计划中出现"未来可能需要"、"预留扩展点"、"为后续功能铺路"等措辞时，审视这些扩展是否有确定的需求支撑。没有的就砍掉。
+Do not write code for imagined future needs. If the current requirement is "lock elements so they cannot be moved," do not simultaneously design a "configurable locking strategy framework." When a plan contains phrasing like "might be needed in the future," "reserving an extension point," or "paving the way for later features," scrutinize whether those extensions have confirmed requirement backing. Those without backing should be cut.
 
-提前设计的抽象几乎总是错的，因为在真正的需求出现之前，你无法知道正确的抽象应该长什么样。
+Pre-designed abstractions are almost always wrong, because before the real need appears, you cannot know what the right abstraction should look like.
 
-新增 wrapper 数据类型也适用 YAGNI：不要为了“返回值看起来更完整”而创建 `ImportedX`、`ResolvedX`、`XResult` 这类只包装现有类型的对外结构。额外字段若必要且表达稳定领域事实，应优先合入既有领域类型或成为其明确派生 API；若只是当前调用点的临时计算结果，就不要进入共享 API。private/internal 的中间结果类型不按这个规则一刀切，但审查时要确认它只服务当前流程，并且没有扩大公开契约。
+YAGNI also applies to new wrapper data types: do not create `ImportedX`, `ResolvedX`, or `XResult` types that only wrap existing types "to make the return value look more complete." If extra fields are necessary and express stable domain facts, they should preferably be merged into existing domain types or become explicit derived APIs; if they are only temporary computation results for the current call site, do not put them in a shared API. Private/internal intermediate result types are not cut-and-dried on this rule, but confirm during review that they only serve the current flow and have not expanded the public contract.
 
-### 最小变更面
+### Minimal Change Surface
 
-计划应当以最少的文件变更和最少的代码行数实现需求。变更面越大，引入 bug 的概率越高，审查和测试的成本越高。
+A plan should implement requirements with the minimum number of file changes and minimum lines of code. The larger the change surface, the higher the probability of introducing bugs, and the higher the cost of review and testing.
 
-如果一个功能可以通过修改 2 个文件实现，但计划涉及 6 个文件，审视多出来的 4 个文件是否真的必要。常见的变更膨胀来源：不必要的重构夹带在功能变更中、过度的类型抽象、把本可以内聚在一处的逻辑分散到多处。
+If a feature can be implemented by modifying 2 files but the plan touches 6 files, scrutinize whether the extra 4 files are truly necessary. Common sources of change surface bloat: unnecessary refactoring bundled with the feature change, excessive type abstractions, scattering logic across many locations that could be cohesive in one place.
 
-### 遵循现有模式
+### Follow Existing Patterns
 
-代码库中已有的模式就是最好的参考。新增代码应当与相邻代码保持一致的风格、结构和惯例。如果现有的上下文菜单按钮都通过 `_tap_context_menu_button` 实现，新按钮也应当用同样的方式。如果现有的 HistoryCommand 都遵循 execute/undo 对称结构，新命令也应当如此。
+Patterns already in the codebase are the best reference. New code should maintain consistent style, structure, and conventions with adjacent code. If existing context menu buttons are all implemented via `_tap_context_menu_button`, new buttons should use the same approach. If existing HistoryCommands all follow the execute/undo symmetric structure, new commands should do the same.
 
-发明新模式的门槛应当很高：只有当现有模式确实无法满足需求时，才考虑引入新方式。在计划中引入新模式时，必须说明为什么现有模式不够用。
+The bar for inventing a new pattern should be high: only when the existing pattern genuinely cannot meet the need should a new approach be introduced. When a plan introduces a new pattern, it must explain why the existing pattern is insufficient.
 
-### Factory 模式例外
+### Factory Pattern Exception
 
-`*Factory.kt` / `*Factory.swift` 文件不受 DRY、YAGNI、KISS、最小变更面约束。详见 `guides/factory-pattern-guide.md`。
+`*Factory.kt` / `*Factory.swift` files are exempt from DRY, YAGNI, KISS, and minimal change surface constraints. See `guides/factory-pattern-guide.md`.
 
-## 护栏
+## Guardrails
 
-1. **必须先读代码再下结论** — 不要仅凭计划文档中的描述判断准确性。计划说"方法 A 接受参数 X"，必须 Read 源文件确认
-2. **不要猜测** — 如果无法确认某个事实（方法是否存在、参数类型是否正确），Read 源文件确认
+1. **Must read the code before concluding** — do not judge accuracy based solely on the plan document's description. If the plan says "method A accepts parameter X," Read the source file to confirm.
+2. **Don't guess** — if a fact cannot be confirmed (whether a method exists, whether a parameter type is correct), Read the source file to confirm.
 
-## 阻断 vs 自动修复
+## Blocking vs. Auto-Fix
 
-发现问题时，先问一个问题：**「这个问题会让执行 agent 做出无法回头的架构错误，还是会让它做出测试能发现的次优实现选择？」**
+When a problem is found, first ask: **"Would this problem cause the executing agent to make an irreversible architectural error, or would it cause a suboptimal implementation choice that tests could catch?"**
 
-- **架构错误或不良决策** → 需要完善或废弃
-- **实现细节** → 直接在计划中修复，然后通过
-- **吞吐优先**：在不引入架构风险的前提下，优先自动修复并放行，避免把 plan-review 变成高拒绝率 gate
+- **Architectural error or poor decision** → Needs Refinement or Abandon
+- **Implementation detail** → fix directly in the plan and pass
+- **Throughput priority**: given no architectural risk, prefer auto-fixing and passing; avoid turning plan-review into a high-rejection-rate gate
 
-### 直接修复并通过的例子
+### Examples of Direct Fix and Pass
 
-- 省略号遮盖了具体公式或条件 → 补充合理的实现细节
-- 代码片段的控制流写法有歧义（如 lambda 内 return 语义不清） → 改为明确写法
-- 批量操作的错误处理语义不清晰 → 选一个合理的处理方式写进计划
-- 方法可见性描述与实际用法不符但不跨模块 → 更正可见性
+- An ellipsis obscures a specific formula or condition → fill in a reasonable implementation detail
+- A code fragment's control flow is ambiguous (e.g., return semantics inside a lambda are unclear) → rewrite with unambiguous syntax
+- The error-handling semantics of a batch operation are unclear → choose a reasonable handling approach and write it into the plan
+- A method's described visibility doesn't match its actual use but does not cross module boundaries → correct the visibility
 
-### 必须阻断的例子
+### Examples of Must Block
 
-- UI 层直接引用 editor-models 类型，违反已归档的模块依赖约束
-- Service 层调用 ViewModel，依赖方向反转
-- 计划依赖一个不存在的公开 API，且添加该 API 需要跨模块变更
-- 新功能需要修改另一个模块的 sealed interface，但计划未包含那个模块
-- `已归档的决策` 选择了一个违反 Clean Architecture 原则的方案（如将业务逻辑放在 ViewModel 中），而存在明显更合理的替代方案
-- `已归档的决策` 引入了与代码库现有机制重复的新抽象
+- UI layer directly references editor-models types, violating an archived module dependency constraint
+- Service layer calls ViewModel; dependency direction is reversed
+- The plan depends on a non-existent public API, and adding that API requires cross-module changes
+- The new feature requires modifying another module's sealed interface, but that module is not in the plan
+- `Archived Decisions` chose an approach that violates Clean Architecture principles (e.g., placing business logic in the ViewModel) when an obviously more reasonable alternative exists
+- `Archived Decisions` introduce a new abstraction that duplicates an existing mechanism in the codebase
 
-## 什么会导致「需要完善」
+## What Causes "Needs Refinement"
 
-### 1. 歧义
+### 1. Ambiguity
 
-计划是规格书。执行 agent 在遇到不确定的地方时只有两个选择：猜测或停下来。两者都浪费资源。
+A plan is a specification. When the executing agent encounters uncertainty, it has only two options: guess or stop. Both waste resources.
 
-常见歧义形式：
+Common forms of ambiguity:
 
-- **代码片段中的省略号**：`...` 或 `// 现有逻辑` 本身不是问题——计划的代码片段是意图说明，不是逐字模板。问题在于：省略的部分是否涉及**架构级决策**（新逻辑插入哪一层、调用哪个接口、走哪条数据流）而计划又没有在其他地方说明。如果架构意图已在其他章节清晰表达，省略号只是省略了 agent 能自行推导的实现细节，则完全可接受
-- **模糊的实施步骤**：步骤仅描述目标（"添加锁定检查"）而未说明具体在哪个方法、哪个位置、用什么条件
-- **未定义的组件**：步骤引用了一个组件，但 `需要修改/添加的文件` 中没有该组件的结构定义或代码片段
-- **未明确的交互**：新增组件 A 调用组件 B，但 B 的接口未定义；数据从模块 A 产生，但未说明如何传递到模块 C
+- **Ellipsis in code fragments**: `...` or `// existing logic` is not inherently a problem — code fragments in the plan are illustrations of intent, not templates to copy verbatim. The problem arises when the omitted portion involves an **architecture-level decision** (which layer to insert new logic into, which interface to call, which data flow to follow) and the plan does not explain it elsewhere. If the architectural intent is clearly expressed in other sections and the ellipsis only omits implementation details the agent can infer on its own, it is completely acceptable.
+- **Vague Implementation Steps**: a step only describes the goal ("add lock check") without specifying which method, which location, or what condition
+- **Undefined components**: a step references a component, but `Files to Change` has no structural definition or code fragment for that component
+- **Unspecified interactions**: new component A calls component B, but B's interface is not defined; data originates in module A but there is no description of how it gets to module C
 
-### 2. 遗漏
+### 2. Omissions
 
-- **前文功能必须落到文件与步骤**：如果计划在 `需要修改/添加的文件` 和 `实施步骤` 之前的章节中提到某个功能、行为、状态、组件、服务、API、测试目标或用户可见能力，且没有明确写成"未来工作"、"本计划不做"、"out of scope" 或等价表述，那么 reviewer 必须要求它同时出现在：
-  - `需要修改/添加的文件`：列出承载该能力的新增/修改文件，并说明文件职责
-  - `实施步骤`：列出实现该能力的具体步骤，说明数据/控制流落在哪一层
-  否则视为 under-specified omission。不能接受"目标章节说了，执行 agent 自己会补"这种计划；前文提出的 in-scope 能力必须被执行清单承接，避免实现时只交付 scaffolding 或 placeholder。
-- 某个文件在 `实施步骤` 中被引用，但 `需要修改/添加的文件` 中没有列出
-- 新增的公开 API 在 `测试计划` 中没有对应的测试
-- 计划假设某个方法或类存在，但未在 `参考资料` 中列出也未在代码片段中确认
-- `大小` 估算与实际文件数和变更量明显不一致
+- **Earlier-mentioned features must appear in Files and Steps**: if the plan mentions a feature, behavior, state, component, service, API, test target, or user-visible capability in any section before `Files to Change` and `Implementation Steps`, and it is not explicitly marked as "future work," "this plan won't do it," "out of scope," or equivalent, the reviewer must require it to also appear in:
+  - `Files to Change`: listing the new/modified files that carry the capability and describing each file's responsibility
+  - `Implementation Steps`: listing the concrete steps to implement the capability, describing which layer the data/control flow lands in
+  Otherwise this is treated as an under-specified omission. "The goal section mentioned it; the executing agent will fill it in" is not acceptable; capabilities that are in-scope must be picked up by the execution checklist to prevent only scaffolding or placeholders being delivered.
+- A file is referenced in `Implementation Steps` but not listed in `Files to Change`
+- A new public API has no corresponding test in `Test Plan`
+- The plan assumes a method or class exists but neither lists it in `References` nor confirms it in a code fragment
+- The `Size` estimate is obviously inconsistent with the actual file count and change volume
 
-#### 单元测试覆盖
+#### Unit Test Coverage
 
-计划审查关注的是**行为场景覆盖**，不是行覆盖率数字。`scripts/check_unit_test_coverage.py` 会检查覆盖率门槛；reviewer 不应把计划审查变成"是否写了 95%/100% 覆盖率"的文字检查。计划里的测试计划必须证明：新增行为的主要使用路径、替代路径、边界条件和失败路径都有明确测试。
+Plan review focuses on **behavior scenario coverage**, not line coverage numbers. `scripts/check_unit_test_coverage.py` checks coverage thresholds; reviewers must not turn plan review into a textual check of "does this say 95%/100% coverage." The test plan must demonstrate that the main use path, alternative paths, boundary conditions, and failure paths of new behavior all have explicit tests.
 
-- Service 层或 ViewModel 层每个新增的 public 方法，在测试计划中必须有至少一个对应的单元测试用例
-- 每个新增用户可见能力或核心 service 能力，都必须按真实用例列出场景测试，而不是只写一个 happy path。例如命中检测要覆盖命中目标、命中空白、边界外、重叠/多目标、坐标变换、对齐/偏移、旋转/缩放等会影响结果的场景
-- 测试计划应覆盖所有已归档决策会改变行为的分支：选择了 Strict vs Nearest、scope-locked vs 跨层多选、硬切签名、carrier-aware 写回等，就要有对应测试证明这些决策落地
-- 边界条件应优先来自真实风险，而不是机械枚举。常见高价值边界包括：空集合、单元素、多个同类元素、首尾位置、越界输入、id 不匹配、重复 id、不存在的目标、坐标落在视觉边缘、状态切换中途的 pending edit / undo / redo
-- 如果某个逻辑依赖几何、时间、排序、序列化或跨模块状态，测试计划必须覆盖这些维度中会改变结果的代表场景；不能只测试最简单坐标、默认时间、默认顺序或 round-trip happy path
-- 涉及状态转换的逻辑（A → B → C），每个转换必须有独立测试，不能只测试最终状态
-- 代码中显式的条件分支（如 `if (isLocked) return`）必须有覆盖该分支的测试用例
-- 如果计划中新增了接口抽象用于 mock 注入，测试计划中必须体现对 mock 的使用
-- 如果计划为 ViewModel 新增单元测试，必须明确：
-  - 默认 dispatcher / test harness 是什么
-  - 是否复用现有稳定测试文件的模式
-  - 是否使用真实 Service fixture 还是 mock/fake
-  - 哪些断言属于 ViewModel 的 UI-facing state，哪些断言是有意保留的跨层结果验证
-- 如果计划中的新 ViewModel 测试需要 `advanceTimeBy()`、动画完成或延迟状态切换，计划应明确说明这些测试会被隔离，而不是顺手改写整份已有测试文件的共享 harness
-- 更完整的 ViewModel / Service 单元测试规范应参考 `unit-test/docs/how_to_write_stable_unit_test.md`；审查时应检查计划是否已将该文档加入 `参考资料`
+- Each new public method in the Service layer or ViewModel layer must have at least one corresponding unit test case in the test plan
+- Each new user-visible capability or core service capability must list scenario tests based on real use cases, not just a single happy path. For example, hit-testing must cover hitting a target, hitting a blank area, outside the boundary, overlapping/multiple targets, coordinate transforms, aligned/offset, rotated/scaled, and other scenarios that affect the result
+- The test plan should cover all branches where Archived Decisions change behavior: if Strict vs Nearest was chosen, if scope-locked vs cross-layer multi-select was chosen, if a hard-cut signature was chosen, if carrier-aware write-back was chosen, there must be corresponding tests proving these decisions land
+- Boundary conditions should come from real risks first, not mechanical enumeration. Common high-value boundaries: empty collection, single element, multiple elements of the same type, first/last position, out-of-bounds input, ID mismatch, duplicate IDs, non-existent target, coordinates at the visual edge, pending edit/undo/redo mid state-transition
+- If logic depends on geometry, time, ordering, serialization, or cross-module state, the test plan must cover the representative scenarios in those dimensions that change the result; it cannot only test the simplest coordinates, default time, default order, or round-trip happy path
+- For state-transition logic (A → B → C), each transition must have an independent test; testing only the final state is insufficient
+- Explicit conditional branches in code (e.g., `if (isLocked) return`) must have test cases covering that branch
+- If the plan adds interface abstractions for mock injection, the test plan must reflect the use of those mocks
+- If the plan adds unit tests for a ViewModel, it must specify:
+  - What the default dispatcher / test harness is
+  - Whether it reuses patterns from existing stable test files in the same module
+  - Whether it uses real Service fixtures or mocks/fakes
+  - Which assertions belong to the ViewModel's UI-facing state and which are intentionally kept as cross-layer result validations
+- If new ViewModel tests in the plan need `advanceTimeBy()`, animation completion, or delayed state transitions, the plan should explicitly state that these tests will be isolated, rather than casually rewriting the shared harness of an entire existing test file
+- For more complete ViewModel / Service unit testing conventions, see `unit-test/docs/how_to_write_stable_unit_test.md`; during review, check whether the plan has added that document to `References`
 
-### 3. 内部冲突
+### 3. Internal Conflicts
 
-当开发者在计划迭代过程中改变需求或添加约束时，冲突最容易出现：
+Conflicts most often appear when the developer changes requirements or adds constraints during plan iteration:
 
-- `已归档的决策` 选了方案 A，但代码片段仍按方案 B 编写
-- 某个文件在 `需要修改/添加的文件` 中被删除，但 `实施步骤` 仍引用它
-- 新增需求反映在了部分章节中，但其他章节未同步更新
-- `实施步骤` 描述的操作与 `需要修改/添加的文件` 中的代码片段矛盾
+- `Archived Decisions` chose approach A, but code fragments are still written in approach B
+- A file was deleted in `Files to Change`, but `Implementation Steps` still references it
+- New requirements are reflected in some sections but other sections were not updated to match
+- The operations described in `Implementation Steps` contradict the code fragments in `Files to Change`
 
-### 4. 代码与实际代码库不一致
+### 4. Code Inconsistent with the Actual Codebase
 
-- 计划中描述的类名、方法签名、参数类型与实际源文件不符
-- 代码片段要插入的位置在源文件中不存在（上下文代码已变更）
-- 代码片段引用的依赖（类、接口、函数）在代码库中不存在
+- Class names, method signatures, and parameter types described in the plan do not match the actual source files
+- The insertion point for a code fragment does not exist in the source file (context code has changed)
+- Dependencies (classes, interfaces, functions) referenced in code fragments do not exist in the codebase
 
-### 5. `已归档的决策` 质量问题
+### 5. `Archived Decisions` Quality Issues
 
-`已归档的决策` 存在更优替代方案时，应标记为「需要完善」并向开发者提出替代选项：
+When `Archived Decisions` has a better alternative, mark it as "Needs Refinement" and present alternatives to the developer:
 
-- `已归档的决策` 选择的方案虽然可行，但存在明显更简单的替代方案（KISS）
-- `已归档的决策` 引入了当前不需要的抽象或扩展点（YAGNI）
-- `已归档的决策` 的方案与代码库中解决类似问题的现有模式不一致，但未说明原因
-- `已归档的决策` 将逻辑放在了次优的架构层（如可复用的业务逻辑放在 ViewModel 而非 Service），但尚未到废弃的程度
-- 计划中存在隐式决策（某个架构选择被默默做出，没有出现在 `已归档的决策` 中），应要求开发者将其显式化并加入 `已归档的决策`
-- `已归档的决策` 引入了冷门第三方库，而平台原生方案或主流库已能满足需求（违反「最流行」支柱）
-- `已归档的决策` 选择了已被平台官方取代的旧方案（如 CocoaPods 而非 SPM、RxSwift 而非 Combine/async-await、RxJava 而非 Kotlin Coroutines/Flow）——此类选型一经发现直接判定为废弃，不作为「需要完善」处理
-- `已归档的决策` 引入了与代码库现有技术栈不一致的技术（如项目用 Coroutines，计划引入 RxJava），但不属于上述零容忍类别
+- `Archived Decisions` chose an approach that works but has an obviously simpler alternative (KISS)
+- `Archived Decisions` introduce abstractions or extension points not currently needed (YAGNI)
+- `Archived Decisions`' approach is inconsistent with the existing pattern in the codebase for solving similar problems, without explanation
+- `Archived Decisions` place logic in a suboptimal architectural layer (e.g., reusable business logic in ViewModel instead of Service), but not severe enough for Abandon
+- The plan contains an implicit decision (an architectural choice was quietly made without appearing in `Archived Decisions`) — require the developer to make it explicit and add it to `Archived Decisions`
+- `Archived Decisions` introduce an obscure third-party library when a platform-native solution or mainstream library would suffice (violates the "Most Popular" pillar)
+- `Archived Decisions` chose an approach officially superseded by the platform (e.g., CocoaPods instead of SPM, RxSwift instead of Combine/async-await, RxJava instead of Kotlin Coroutines/Flow) — these are immediately judged as Abandon, not "Needs Refinement"
+- `Archived Decisions` introduce a technology inconsistent with the codebase's existing tech stack (e.g., project uses Coroutines, plan introduces RxJava), but not in the zero-tolerance category above
 
-向开发者呈现 `已归档的决策` 质量问题时，必须：
-- 引用 `已归档的决策` 中具体的决策项和选择
-- 说明为什么现有选择存在问题（引用本指南中的具体原则）
-- 提出具体的替代方案，带有优缺点分析
-- 读取代码库中的实际代码来支撑论点，而非仅凭推测
+When presenting `Archived Decisions` quality issues to the developer, you must:
+- Reference the specific decision item and choice from `Archived Decisions`
+- Explain why the current choice is problematic (citing specific principles from this guide)
+- Propose a specific alternative with a pros/cons analysis
+- Read actual code from the codebase to support the argument, rather than relying on speculation alone
 
-## 什么会导致「废弃」
+## What Causes "Abandon"
 
-废弃意味着计划的基础有问题，无法通过局部修补挽救。以下任一条件成立即判定为废弃：
+Abandon means the plan's foundation is broken and cannot be salvaged by local patches. The following conditions, any one of which is true, warrants Abandon:
 
-### 1. 多目的计划
+### 1. Multi-Purpose Plan
 
-计划试图同时做多件事。例如：先重构模块结构，然后在重构后的基础上添加新功能。这是两个计划伪装成一个。重构和新功能有各自的决策空间、风险和验证标准，混在一起意味着两者都无法被干净地审查或执行。
+The plan tries to do multiple things simultaneously. For example: first refactor the module structure, then add new features on top of the refactored foundation. That is two plans disguised as one. Refactoring and new features have their own decision spaces, risks, and validation criteria — mixing them means neither can be cleanly reviewed or executed.
 
-### 2. 破坏现有模块边界或架构决策
+### 2. Breaks Existing Module Boundaries or Architectural Decisions
 
-计划为了实现新功能而破坏已有的模块边界或违反之前计划中归档的架构决策。模块的职责和边界应当保持相对稳定，除非有专门的重构计划来改变它们。新功能必须在现有架构约束内实现，而不是为了方便而绕过或打破这些约束。
+The plan breaks existing module boundaries or violates architectural decisions archived in prior plans in order to implement the new feature. Module responsibilities and boundaries should remain relatively stable unless a dedicated refactoring plan changes them. New features must be implemented within the existing architectural constraints, not by bypassing or breaking those constraints for convenience.
 
-例如：`editor-service` 已通过 `plans/editor-module-split.md` 移除了对 `editor-renderer` 的依赖。如果一个新功能计划重新引入 `editor-service → editor-renderer` 的依赖，这个计划应当被废弃。
+Example: `editor-service` has had its dependency on `editor-renderer` removed through `plans/editor-module-split.md`. If a new feature plan re-introduces the `editor-service → editor-renderer` dependency, that plan should be Abandoned.
 
-### 3. 重复造轮子
+### 3. Reinventing the Wheel
 
-代码库中已有服务或机制能满足需求，但计划创建了一个新的并行机制来做同样的事。这会导致同一问题在代码库中有多种解决方式，增加维护成本，制造混乱。
+A service or mechanism already in the codebase can meet the need, but the plan creates a new parallel mechanism to do the same thing. This results in multiple approaches to the same problem in the codebase, increasing maintenance cost and creating confusion.
 
-例如：`SessionManager` 已经管理每会话状态，如果计划创建一个独立的 `LockStateManager` 来并行管理锁定状态（而非复用 `SessionManager`），这个计划应当被废弃。
+Example: `SessionManager` already manages per-session state. If a plan creates an independent `LockStateManager` to manage lock state in parallel (rather than reusing `SessionManager`), that plan should be Abandoned.
 
-### 4. 引入循环依赖
+### 4. Introduces Circular Dependencies
 
-计划的模块设计导致 A → B → A 的循环依赖。这不是移动几个方法就能修复的问题——说明整个职责分解是错误的。
+The plan's module design results in a circular dependency A → B → A. This is not a problem fixable by moving a few methods — it means the entire responsibility decomposition is wrong.
 
-### 5. 业务逻辑放错层
+### 5. Business Logic in the Wrong Layer
 
-计划将业务逻辑放在了错误的架构层。我们遵循 Clean Architecture：Service 层承载业务逻辑，ViewModel 层尽量只保留 view state 和 workflow 编排，View 层只负责渲染和事件转发。View / ViewModel 层根据状态控制 UI 显示（如按钮的显示/隐藏）是正常的，但如果计划将本属于 Service 层或其他专门模块的逻辑塞进 UI 或 ViewModel，说明架构设计有根本问题。
+The plan places business logic in the wrong architectural layer. We follow Clean Architecture: the Service layer carries business logic; the ViewModel layer should primarily hold view state and workflow orchestration; the View layer is responsible only for rendering and event forwarding. The View/ViewModel layer controlling UI visibility based on state (e.g., show/hide a button) is normal, but if the plan stuffs logic that belongs in the Service layer or other dedicated modules into the UI or ViewModel, the architectural design has a fundamental problem.
 
-例如：字体测量逻辑属于 `editor-renderer` 的 `FontManager`。如果计划将字体测量逻辑写在 `editor-phone-ui` 的 UI 组件中，这个计划应当被废弃。
+Example: font measurement logic belongs in `FontManager` inside `editor-renderer`. If a plan writes font measurement logic in a UI component inside `editor-phone-ui`, that plan should be Abandoned.
 
-另一个常见反例：某个功能的核心规则、批量数据变换、几何计算、可复用查询逻辑，本来可以作为通用 Service API 暴露给多个调用方，但计划却把它们写成某个 ViewModel 私有方法的一部分，只因为当前按钮正好要用到。这类计划即使短期可运行，也会让 ViewModel 持续膨胀，并阻碍未来复用。
+Another common anti-pattern: the core rules of a feature, bulk data transformations, geometric computations, or reusable query logic that could be exposed as a general Service API for multiple callers are instead written as private methods of a ViewModel, simply because the current button happens to use them. Plans like this are runnable in the short term but cause the ViewModel to continuously bloat and block future reuse.
 
-### 6. 技术选型使用已淘汰方案
+### 6. Technology Selection Uses a Deprecated Approach
 
-`已归档的决策` 选择了已被平台官方废弃或社区明确淘汰的技术，零容忍，直接废弃：
+`Archived Decisions` chose a technology that has been officially deprecated by the platform or clearly abandoned by the community — zero tolerance, immediate Abandon:
 
-- **包管理器**：CocoaPods（应使用 SPM）
-- **响应式框架**：RxSwift、ReactiveSwift（iOS 应使用 Combine 或 async/await）；RxJava（Android 应使用 Kotlin Coroutines / Flow）
-- 任何已被平台官方废弃的 API 或框架
+- **Package managers**: CocoaPods (SPM should be used instead)
+- **Reactive frameworks**: RxSwift, ReactiveSwift (iOS should use Combine or async/await); RxJava (Android should use Kotlin Coroutines / Flow)
+- Any API or framework officially deprecated by the platform
 
-这类问题不应等到代码审查时才发现——在计划阶段拦截成本最低。
+These problems should not wait until the code review to be discovered — intercepting them at the planning stage has the lowest cost.
 
-### 7. `已归档的决策` 导致架构性损害
+### 7. `Archived Decisions` Cause Architectural Damage
 
-`已归档的决策` 本身就违反了架构原则，且影响范围太大无法通过局部调整修复。与上述 1-5 条不同，这里的问题不在于计划的实现方式，而在于开发者在 `已归档的决策` 中选择的方向本身就是错的。
+`Archived Decisions` themselves violate architectural principles, and the scope of impact is too large to fix with local adjustments. Unlike conditions 1–5 above, the problem here is not how the plan is implemented, but the direction the developer chose in `Archived Decisions` itself is wrong.
 
-例如：
-- `已归档的决策` 选择了一个需要破坏现有模块边界才能实现的方案，而存在不破坏边界的替代方案
-- `已归档的决策` 选择了"创建新的状态管理机制"而非复用现有的 `SessionManager`，导致状态管理的双轨并行
-- `已归档的决策` 选择了在 View 层实现复杂的业务规则，而这些规则明显属于 Service 层
+Examples:
+- `Archived Decisions` chose an approach that requires breaking existing module boundaries to implement, while alternatives exist that don't break boundaries
+- `Archived Decisions` chose "create a new state management mechanism" instead of reusing the existing `SessionManager`, resulting in dual-track state management
+- `Archived Decisions` chose to implement complex business rules in the View layer, while those rules clearly belong in the Service layer
 
-## 「需要完善」时的输出规范
+## Output Specification for "Needs Refinement"
 
-对每个发现的问题，向开发者呈现：
+For each issue found, present to the developer:
 
-1. **问题是什么** — 在计划的哪个位置、具体是什么问题
-2. **影响是什么** — 如果不解决，agent 执行时会发生什么
-3. **选项** — 提供具体的修复选项供开发者选择
+1. **What the problem is** — where in the plan it is, what specifically is wrong
+2. **What the impact is** — what will happen when the agent executes if this is not resolved
+3. **Options** — provide specific fix options for the developer to choose from
 
-开发者做出选择后：
-1. 将选择记录到计划的 `已归档的决策`
-2. 更新计划中所有受影响的部分（代码片段、实施步骤、测试计划等），确保全文一致
-3. 重新检查一致性，确认更新后无新矛盾
+After the developer makes a choice:
+1. Record the choice in the plan's `Archived Decisions`
+2. Update all affected parts of the plan (code fragments, Implementation Steps, Test Plan, etc.) to ensure consistency throughout
+3. Re-check consistency to confirm that the updates introduce no new contradictions
